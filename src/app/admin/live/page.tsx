@@ -1,14 +1,12 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { adminFetch } from '@/lib/adminAuth';
 import { audioManager } from '@/lib/celebrationSounds';
-import { TvVerticalCarousel } from './TvVerticalCarousel';
-import { AmRacePodium } from './AmRacePodium';
-import { BatchTargetAreaBadges } from '@/components/admin/BatchTargetAreaBadges';
+import { bouwSlides, huidigeIndex, leesDuur, leesVasteSlide, onderwerpen, paginaVan, stapIndex, STANDAARD_DUUR_SEC, type SlideId } from '@/lib/liveSlides';
 import { ExclamationTriangleIcon, SignalSlashIcon } from '@heroicons/react/24/outline';
 
 /** Langzamer pollen = minder Supabase-load bij open Live-tab (Pro of niet). */
@@ -79,19 +77,6 @@ interface BatchInfo {
   notes: string | null;
   targetAreaLabels?: string[];
 }
-interface UnpaidBatchFeedItem {
-  id: string;
-  product: 'leads' | 'appointments';
-  customer: string;
-  branch: string;
-  batchSize: number;
-  totalPrice: number;
-  unitPrice: number | null;
-  status: string;
-  createdAt: string;
-  targetAreaLabels?: string[];
-  accountManagerName?: string | null;
-}
 interface CostMetrics { monthAdSpend: number; brutoCpl: number; effectieveCpl: number; avgAssignments: number; distributionAssignmentTotal?: number; netDistributionAssignmentTotal?: number; approvedReclamationsInWindow?: number; batchRevenue: number; bulkRevenue: number; bulkAssignmentCount: number; totalProfit: number; }
 interface PaidBatch { id: string; batchId: string; customer: string; branch: string; amount: number; paidAt: string; amId: string | null; amName: string | null; amAvatarUrl?: string | null; celebrationVideoUrl: string | null; videoStart?: number | null; videoEnd?: number | null; }
 interface AMLeaderboardEntry { id: string; name: string; revenue: number; bulkRevenue: number; batches: number; celebrationVideoUrl: string | null; avatarUrl?: string | null; }
@@ -112,9 +97,7 @@ interface LiveData {
   activeBatches: BatchInfo[];
   completedBatchCount: number;
   totalRevenue: number;
-  unpaidBatches: UnpaidBatchFeedItem[];
   periodStats: Record<string, PeriodStat>;
-  provinceBreakdown: Record<string, number>;
   branchBreakdown: Record<string, number>;
   phoneQuality: { total: number; invalid: number; validPct: number };
   aiSpend?: AiSpendSummaryUI;
@@ -123,107 +106,6 @@ interface LiveData {
   amLeaderboard?: AMLeaderboardEntry[];
   timestamp: string;
 }
-
-// ─── Province SVG paths (from real CBS/Simplemaps geographic data) ────
-// Dutch provinces: derived from simplemaps.com SVG, scaled to viewBox
-const NL_PROVINCES: Record<string, { d: string; cx: number; cy: number }> = {
-  'Groningen': {
-    d: 'M194.7,57.8 L188,47.3 L178.1,38.3 L173,39 L168.1,32.8 L162.3,33.8 L158.2,40.2 L150.5,37.1 L156.1,24.4 L150.8,20.4 L151.1,17 L177.9,13.5 L183.8,14.6 L186.3,21.3 L200.7,29 L200.2,48.9 L194.7,57.8 Z',
-    cx: 177.6, cy: 25.8,
-  },
-  'Friesland': {
-    d: 'M151.1,17 L150.8,20.4 L156.1,24.4 L150.5,37.1 L159.4,41.9 L163.3,48.7 L161.7,51.3 L155,51.8 L143.5,59.2 L139.9,57.8 L131.4,60.5 L126.2,58.1 L120.2,61.3 L111,61.5 L101.6,45.9 L111.4,39.5 L114.7,30.7 L121.8,24.8 L136.6,19 L151.1,17 Z',
-    cx: 133.1, cy: 40.2,
-  },
-  'Drenthe': {
-    d: 'M157.2,39.9 L165,31.9 L168.1,32.8 L173,39 L178.1,38.3 L188,47.3 L194.7,57.8 L192.1,73.1 L177.3,73 L172,69.8 L167.6,74.1 L161,73.6 L157.9,70.1 L151,69.2 L148.4,64.4 L152.1,61 L148.3,56.9 L163.3,48.7 L157.2,39.9 Z',
-    cx: 174.2, cy: 54.6,
-  },
-  'Overijssel': {
-    d: 'M177.3,73 L176.1,83.7 L186.2,86.8 L189.8,85.4 L193.5,91.5 L192.4,100.9 L182.8,109.1 L166.3,104.6 L162.2,99.9 L149.5,101.2 L145.3,94.5 L148.6,88.7 L146.6,84.2 L143.4,81.2 L138.6,83.3 L133.7,75.9 L142.9,72.2 L131.4,60.5 L148.3,56.9 L152.1,61 L148.4,64.4 L151,69.2 L157.9,70.1 L161,73.6 L167.6,74.1 L172,69.8 L177.3,73 Z',
-    cx: 162.8, cy: 87,
-  },
-  'Flevoland': {
-    d: 'M131.4,60.5 L142.9,72.2 L134.2,74.6 L132.8,86.1 L122.3,92 L118.9,97.7 L113.7,98.6 L97.9,91.6 L102.3,87 L97.4,76.2 L107.9,67.9 L110.4,68.6 L110.9,61.4 L120.2,61.3 L126.2,58.1 L131.4,60.5 Z',
-    cx: 120.3, cy: 76.2,
-  },
-  'Gelderland': {
-    d: 'M135.4,80.4 L139,83.4 L143.4,81.2 L146.6,84.2 L148.6,88.7 L145.3,94.5 L149.1,100.9 L162.2,99.9 L166.3,104.6 L174.8,105.5 L174.5,108.1 L179.9,109.4 L175.1,114.6 L181.9,118.9 L177.2,124 L160.6,126.8 L158.9,129.5 L148.2,124.2 L149.6,128 L138.6,129.9 L139.1,134.7 L117.4,128.5 L111.5,130.1 L108.4,134.6 L99.4,135.5 L92.9,127.4 L98.7,125.6 L104.5,118.6 L115.5,117.9 L123,120.6 L119.9,109.7 L115.8,111.3 L118,107.5 L113.6,104.8 L112.8,98.3 L118.9,97.7 L122.3,92 L132.8,86.1 L135.4,80.4 Z',
-    cx: 135.8, cy: 109.5,
-  },
-  'Utrecht': {
-    d: 'M112.9,98.3 L113.6,104.8 L118,107.5 L115.8,111.3 L119.9,109.7 L123,120.6 L115.5,117.9 L101.2,119.3 L97.9,116.8 L87.2,121.1 L82.9,115.4 L86.7,112 L82.4,108.7 L86,105.3 L81.3,101.5 L96,97.5 L94.9,105.3 L102.7,103.9 L105.9,97.6 L112.9,98.3 Z',
-    cx: 107, cy: 110.1,
-  },
-  'Noord-Holland': {
-    d: 'M81.3,101.5 L70.5,101.6 L73.5,95.1 L68.1,94.2 L79.6,49.4 L83.7,48.8 L84.5,52.8 L88.4,53.2 L101.6,45.9 L110.9,61.4 L110.4,68.6 L107.9,67.9 L97.4,76.2 L102.3,87 L97.9,91.6 L110.8,97.2 L105.7,97.7 L101.7,104.5 L94.9,105.3 L96,97.5 L81.3,101.5 Z',
-    cx: 85.7, cy: 79.3,
-  },
-  'Zuid-Holland': {
-    d: 'M101.7,119.3 L93.2,129.2 L82.4,130.7 L76.8,136.5 L63.3,137.3 L53.2,142.2 L49,141.5 L52.2,138.9 L47,136.7 L44,131.1 L37.2,131.8 L36.7,129.8 L47.3,127.9 L44.3,117.9 L50.5,116.6 L68.5,93.5 L73.5,95.1 L70.5,101.6 L78.5,100.6 L86,105.3 L82.4,108.7 L86.7,112 L82.9,115.4 L87.2,121.1 L97.9,116.8 L101.7,119.3 Z',
-    cx: 68.4, cy: 120.5,
-  },
-  'Zeeland': {
-    d: 'M57.3,160.7 L55,157.3 L49,158.1 L41.4,154.7 L35,159.2 L28.2,154.9 L20.6,154.5 L16.3,148.5 L21.9,145.2 L36.2,144.1 L37.2,148.3 L44.3,149.6 L48.7,155.4 L56.5,155.5 L57.3,160.7 Z',
-    cx: 32.1, cy: 150.8,
-  },
-  'Noord-Brabant': {
-    d: 'M93.2,129.2 L99.4,135.5 L108.4,134.6 L111.5,130.1 L117.4,128.5 L140,137 L144.4,147.1 L133.9,147.1 L138.7,159.6 L126,164.3 L122.7,170.5 L119.8,171.2 L117,166.4 L103.3,168.3 L96.1,160.3 L94.1,153.3 L88.3,159.1 L81,157.7 L84,157.6 L81.8,152 L74.5,157.3 L70.1,157.2 L67.3,153.5 L62.1,155.6 L63.8,161.6 L57.3,160.7 L58.1,153.7 L53.2,142.2 L63.3,137.3 L76.8,136.5 L82.4,130.7 L93.2,129.2 Z',
-    cx: 109.7, cy: 151.1,
-  },
-  'Limburg': {
-    d: 'M139.3,134.7 L146.8,141.7 L152.1,154.6 L151.5,162.4 L144.7,171.5 L144.9,174.3 L148.5,173.4 L149.2,175.6 L138.9,183.9 L134.7,183.1 L135.8,188.4 L142.1,187.8 L145.1,192.3 L140.4,200 L141.7,203 L126.6,202.3 L123.3,196 L130.3,188.8 L134.1,176.5 L119.8,171.2 L126,164.3 L138.7,159.6 L133.9,147.1 L144.4,147.1 L140,137 L135.2,133.8 L139.3,134.7 Z',
-    cx: 138.3, cy: 169.9,
-  },
-};
-
-// Belgian provinces: derived from official GeoJSON data (WGS84), projected & simplified
-const BE_PROVINCES: Record<string, { d: string; cx: number; cy: number }> = {
-  'Brussel': {
-    d: 'M90.8,283 L94.3,285.8 L99,283.3 L95.3,273.3 L89.9,275.3 L87.5,281.2 L90.8,283 Z',
-    cx: 92.5, cy: 280.7,
-  },
-  'Antwerpen': {
-    d: 'M136.2,244.2 L136.4,240.5 L131.1,239.6 L128,233.1 L129.6,229.9 L126.1,225.2 L120.6,233.1 L118.8,231.2 L113.3,231.3 L113.2,230 L116.1,230.6 L116.7,226 L113.4,223.8 L106.9,230.7 L101.7,230.6 L102.4,226.4 L98.8,226 L94.4,228.4 L96.2,235.5 L86.2,234.7 L91.1,241.9 L89.8,244.3 L91.7,253 L91.1,255.3 L85.9,255.9 L84,257.9 L84.7,262.1 L93.8,263.7 L94.8,266 L99,266.8 L99.6,265.3 L104.3,266.6 L114.2,262.8 L115.2,265.1 L123.6,263.1 L125,259.9 L137.4,253.6 L135,247.6 L136.2,244.2 Z',
-    cx: 109.8, cy: 244.3,
-  },
-  'Vlaams-Brabant': {
-    d: 'M129.6,290.4 L129.7,284.5 L133.7,274.2 L127.1,272.7 L130.1,264.4 L132.3,264 L128.7,261.9 L127.4,264.8 L122.9,262.2 L115.2,265.1 L114.2,262.8 L104.3,266.6 L99.6,265.3 L99,266.8 L94.8,266 L93.8,263.7 L87.3,263 L86.5,266.6 L83.1,267.2 L83.5,271.7 L79.9,272.2 L78.2,283.8 L72.6,285.1 L73.1,288.5 L70.4,288.4 L70.1,290.1 L71.2,291.9 L75.1,292.2 L83.2,288.7 L89.7,291.7 L91.8,288.3 L93.8,289.8 L98.2,286.6 L101.2,288.9 L104.3,286 L107,287.3 L107.2,283.6 L112.7,282.2 L119.9,287 L124.7,285.6 L127.7,290.3 L129.6,290.4 Z',
-    cx: 102.5, cy: 278.2,
-  },
-  'Brabant wallon': {
-    d: 'M125.5,286.9 L123.6,285.3 L121.5,287.2 L119.6,285.4 L116.6,285.9 L112.1,282.2 L107.2,283.6 L107,287.3 L104.3,286 L101.2,288.9 L98.2,286.6 L93.8,289.8 L91.8,288.3 L89.7,291.7 L83.2,288.7 L80.1,290.9 L80.2,295.2 L82,297.1 L84.2,294.2 L92.1,304.2 L93,302.7 L98.5,303 L98.2,305.1 L100.6,305.8 L105,302.1 L108,302.5 L108.5,298.9 L111.5,298.6 L112.2,300.4 L123.7,296 L125.5,286.9 Z',
-    cx: 103.2, cy: 293.1,
-  },
-  'West-Vlaanderen': {
-    d: 'M49,285.7 L52.1,282.3 L48.8,277.5 L49.8,274.8 L46.9,274 L48.9,271.3 L46.8,269.5 L48.3,268.8 L48.4,262.1 L42.7,257.8 L46.4,252.7 L44.4,249.6 L46.1,246.2 L44.3,234.8 L39,236.9 L35.6,235.7 L33.9,238.7 L4,258.2 L8.4,270.8 L6.4,272.8 L6.9,278.4 L8.6,281.7 L13.1,282 L17.2,289.7 L19.8,290.5 L18.8,286.9 L22.7,286.4 L26.5,281.9 L27.4,285 L33.8,283.6 L35.2,286.5 L41.5,286.6 L44.2,290.4 L49,285.7 Z',
-    cx: 34, cy: 271,
-  },
-  'Oost-Vlaanderen': {
-    d: 'M87.4,236.4 L78.6,245.3 L69.9,249.3 L70.1,247.4 L65.3,248.1 L65.5,244.6 L55.5,240.6 L51.8,242 L52.4,245.4 L48.5,245.8 L45.2,243.1 L46.1,246.2 L44.4,249.6 L46.4,252.7 L42.7,257.8 L48.4,262.1 L48.3,268.8 L46.8,269.5 L48.9,271.3 L46.9,274 L49.8,274.8 L48.8,277.5 L52.1,282.3 L49,285.7 L52.6,285.7 L53,288.3 L57.9,289.3 L59.9,285.1 L62.9,284.9 L64.5,287.1 L70,287.1 L71.5,288.8 L73.1,288.5 L73.4,284.5 L74.8,285.6 L78.2,283.8 L79.9,272.2 L82.3,272.8 L83.1,267.2 L87,265.8 L87.3,263 L84.7,262.1 L84,257.9 L91.4,254.8 L89.8,244.3 L91.1,241.9 L87.4,236.4 Z',
-    cx: 64.9, cy: 264.6,
-  },
-  'Henegouwen': {
-    d: 'M35.2,286.5 L35.9,289.1 L39.3,291 L38.3,294.6 L40.6,305.7 L45,308.7 L49.7,305.1 L51.9,305.8 L51,309 L56.3,308.1 L59,311.6 L59.1,320.7 L61.3,324.4 L63.1,320.4 L67.6,320.1 L70,322.3 L76.4,319.9 L81.5,324.8 L82.2,328.3 L83.5,325.6 L85.9,327.2 L82.9,332 L82,338.7 L85.1,338.5 L86.8,343.6 L82.2,348 L82.6,351.8 L96.7,354.6 L93.2,335.5 L95,334.2 L95.1,330.3 L92.4,330.7 L89.5,328.4 L99.2,322.2 L104.6,322.4 L103.8,304.4 L100.6,305.8 L95.7,302.5 L92.1,304.2 L84.2,294.2 L82,297.1 L80.5,296.3 L79.7,290.2 L71.2,291.9 L70,287.1 L64.5,287.1 L62.9,284.9 L59.9,285.1 L57.9,289.3 L53,288.3 L52.6,285.7 L49,285.7 L44.2,290.4 L41.5,286.6 L35.2,286.5 Z',
-    cx: 70.6, cy: 311,
-  },
-  'Luik': {
-    d: 'M143.8,318 L145.2,313.7 L147.5,315.5 L149.6,314.2 L150.9,317 L153.6,316.4 L157.3,319.9 L159.1,319.5 L159.5,323.8 L161.1,324.5 L160,327.9 L167.2,327.3 L166.9,320.8 L172.4,322.4 L174.2,323.8 L175.1,336.1 L178.5,335.5 L179.9,338.9 L180.7,334.9 L182.7,334.8 L182.2,330 L187,327.5 L189.1,323.1 L191.9,323.5 L193.5,321.7 L190.3,317.9 L191.7,311.6 L189.8,308.6 L184.8,308.1 L183.2,305.4 L186.6,296.1 L182.6,296.1 L183.1,294.3 L179.1,289.3 L175.5,289.6 L174.2,286.5 L168.2,286.5 L167.8,290.3 L164.3,289.9 L163,287.3 L158.2,286.8 L158.2,281.8 L145.1,289.6 L143.6,287.1 L137,289.9 L132.9,289.5 L132.6,291.5 L127.7,290.3 L125.5,286.9 L124.2,289 L125.3,291 L123.6,298.1 L126.9,302.8 L126.3,305.3 L131.5,306.9 L132.2,310.2 L134.5,310.1 L135.4,314.8 L138.6,316.7 L139.1,319.2 L143.8,318 Z',
-    cx: 159.6, cy: 308.9,
-  },
-  'Limburg': {
-    d: 'M158.2,281.8 L156,279.6 L156.4,276.5 L161.6,270.2 L159.8,269.2 L166.4,253.9 L152,247.4 L149.8,241.3 L145,244.1 L136.2,244.2 L135,247.6 L137.4,253.6 L125,259.9 L123.6,263.1 L127.4,264.8 L128.7,261.9 L130.4,262 L132.3,264 L130.1,264.4 L130.6,266.2 L126.5,270.9 L129,273.7 L131.1,272.7 L133.7,274.2 L129.7,284.5 L129.6,290.4 L132.6,291.5 L132.9,289.5 L137,289.9 L143.6,287.1 L145.1,289.6 L148.6,288.8 L158.2,281.8 Z',
-    cx: 140, cy: 269.7,
-  },
-  'Luxemburg': {
-    d: 'M123,366.4 L129.2,369.8 L132.7,375.5 L138.3,375.8 L140.8,378.8 L139.8,382.3 L141.5,380.6 L144,381.9 L146.9,386 L147.7,391.9 L151.8,389.2 L154.4,391.1 L157.1,387.2 L160.7,388.4 L162.4,386.3 L165.8,387.1 L168.7,377.9 L166.9,376.9 L167.4,373.1 L165,372.9 L163,366.8 L161.5,367.2 L160.8,363.3 L162.9,359.9 L160.6,358.4 L162.5,353 L165.6,351.2 L164.6,348.7 L166.6,347.3 L168.4,340.4 L171.6,338.8 L171.7,335.4 L174.7,334.5 L174.2,323.8 L166.9,320.8 L167.2,327.3 L160,327.9 L159.9,320 L157.3,319.9 L153.6,316.4 L150.9,317 L149.6,314.2 L147.5,315.5 L144.4,314.1 L145.4,316.3 L143.6,321.8 L141.3,323.3 L143.8,323.8 L143.9,325.5 L134.7,331.7 L138.4,336.8 L136.4,338.5 L137.7,340.4 L127.4,341.1 L126.5,345.3 L124.3,346.1 L124.8,351.2 L127.5,351.1 L130,356.5 L124,362.1 L123,366.4 Z',
-    cx: 150.2, cy: 352.1,
-  },
-  'Namen': {
-    d: 'M96.7,354.6 L109.1,350 L109.9,341.8 L115.9,336.3 L118.4,336.9 L119.5,338.2 L115.7,344.2 L116.7,346.6 L114.2,353 L119.1,357.3 L117.5,367.2 L121.1,367.6 L126.8,358.4 L130,356.5 L127.5,351.1 L124.8,351.2 L124.3,346.1 L126.5,345.3 L127.4,341.1 L137.7,340.4 L136.4,338.5 L138.4,336.8 L134.7,331.7 L143.9,325.5 L143.8,323.8 L141.3,323.3 L144.2,318.5 L141.7,317.3 L139.1,319.2 L138.6,316.7 L136.1,316 L134.5,310.1 L132.2,310.2 L131.5,306.9 L126.3,305.3 L126.9,302.8 L122.8,295.5 L112.2,300.4 L111.5,298.6 L108.5,298.9 L108,302.5 L103.7,302.8 L104.6,322.4 L99.2,322.2 L89.5,328.4 L92.4,330.7 L95.1,330.3 L95,334.2 L93.2,335.5 L96.7,354.6 Z',
-    cx: 120.4, cy: 330.9,
-  },
-};
 
 // ─── Celebration Effects ──────────────────────────────────────────────
 type CelebrationVariant = 'confetti' | 'goldenRain' | 'megaBurst';
@@ -697,106 +579,19 @@ function CountUpAmount({ value, className = '', style }: { value: number; classN
   return <span className={className} style={style}>&euro;{display.toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>;
 }
 
-function TrendArrow({ current, previous }: { current: number; previous: number }) {
+function TrendArrow({ current, previous, groot = false }: { current: number; previous: number; groot?: boolean }) {
+  const maat = groot ? 'text-[40px]' : 'text-[22px]';
   if (previous === 0 && current === 0) return null;
-  if (previous === 0) return <span className="text-[22px] font-bold text-emerald-400">nieuw</span>;
+  if (previous === 0) return <span className={`${maat} font-bold text-emerald-400`}>nieuw</span>;
   const pct = Math.round(((current - previous) / previous) * 100);
   const up = pct >= 0;
   return (
-    <span className={`inline-flex items-center gap-0.5 text-[22px] font-bold ${up ? 'text-emerald-400' : 'text-red-400'}`}>
-      <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none">
+    <span className={`inline-flex items-center gap-1 ${maat} font-bold ${up ? 'text-emerald-400' : 'text-red-400'}`}>
+      <svg className={groot ? 'h-7 w-7' : 'h-3 w-3'} viewBox="0 0 12 12" fill="none">
         <path d={up ? 'M6 2L10 7H2L6 2Z' : 'M6 10L2 5H10L6 10Z'} fill="currentColor" />
       </svg>
       {up ? '+' : ''}{pct}%
     </span>
-  );
-}
-
-function timeAgo(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const secs = Math.floor(diff / 1000);
-  if (secs < 60) return `${secs}s`;
-  const mins = Math.floor(secs / 60);
-  if (mins < 60) return `${mins}m`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}u`;
-  return `${Math.floor(hrs / 24)}d`;
-}
-
-// ─── Province Heatmap Component ──────────────────────────────────────
-function ProvinceMap({ data }: { data: Record<string, number> }) {
-  const maxCount = Math.max(1, ...Object.values(data));
-  const [hovered, setHovered] = useState<{ label: string; key: string } | null>(null);
-
-  function dataKey(name: string, country: 'NL' | 'BE'): string {
-    if (name === 'Limburg') return country === 'BE' ? 'Limburg (BE)' : 'Limburg';
-    return name;
-  }
-
-  function opacity(key: string): number {
-    const count = data[key] || 0;
-    if (count === 0) return 0.08;
-    return 0.15 + (count / maxCount) * 0.85;
-  }
-
-  return (
-    <div className="relative h-full">
-      <svg viewBox="-2 -2 210 410" className="h-full w-full" preserveAspectRatio="xMidYMid meet">
-        {Object.entries(NL_PROVINCES).map(([name, p]) => {
-          const key = dataKey(name, 'NL');
-          return (
-          <g key={name} onMouseEnter={() => setHovered({ label: name, key })} onMouseLeave={() => setHovered(null)}>
-            <path
-              d={p.d}
-              fill={`rgba(139, 92, 246, ${opacity(key)})`}
-              stroke="rgba(255,255,255,0.12)"
-              strokeWidth="0.6"
-              strokeLinejoin="round"
-              className="transition-all duration-300 hover:brightness-150"
-            />
-            {(data[key] || 0) > 0 && (
-              <circle cx={p.cx} cy={p.cy} r={Math.max(2, Math.min(5, (data[key] / maxCount) * 5))}
-                fill="#a855f7" opacity="0.8" className="animate-pulse" />
-            )}
-          </g>
-          );
-        })}
-        <line x1="0" y1="226" x2="195" y2="226" stroke="rgba(255,255,255,0.06)" strokeWidth="0.4" strokeDasharray="3,2" />
-        <text x="97" y="222" textAnchor="middle" fill="rgba(255,255,255,0.12)" fontSize="5" fontWeight="bold">BELGIË</text>
-        {Object.entries(BE_PROVINCES).map(([name, p]) => {
-          const key = dataKey(name, 'BE');
-          return (
-          <g key={name} onMouseEnter={() => setHovered({ label: name, key })} onMouseLeave={() => setHovered(null)}>
-            <path
-              d={p.d}
-              fill={`rgba(236, 72, 153, ${opacity(key)})`}
-              stroke="rgba(255,255,255,0.08)"
-              strokeWidth="0.6"
-              strokeLinejoin="round"
-              className="transition-all duration-300 hover:brightness-150"
-            />
-            {(data[key] || 0) > 0 && (
-              <circle cx={p.cx} cy={p.cy} r={Math.max(2, Math.min(5, (data[key] / maxCount) * 5))}
-                fill="#ec4899" opacity="0.8" className="animate-pulse" />
-            )}
-          </g>
-          );
-        })}
-      </svg>
-      <AnimatePresence>
-        {hovered && (
-          <motion.div
-            initial={{ opacity: 0, y: 5 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            className="absolute left-1/2 top-0 z-20 -translate-x-1/2 rounded-lg border border-white/10 bg-[#1a1d2e] px-3 py-1.5 text-center shadow-xl"
-          >
-            <p className="text-[18px] font-bold text-white/80">{hovered.label}</p>
-            <p className="text-[18px] tabular-nums text-white/40">{(data[hovered.key] || 0).toLocaleString('nl-NL')} leads</p>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
   );
 }
 
@@ -824,6 +619,360 @@ const TARGET_TYPE_LABELS: Record<string, string> = {
   leads_delivered: 'Leads',
 };
 
+// ─── Slides ──────────────────────────────────────────────────────────
+
+/**
+ * Het balkje onder het huidige onderwerp. Houdt zelf de tijd bij, zodat
+ * alleen dit balkje tien keer per seconde ververst en niet het hele scherm.
+ * Een JS-klok en geen CSS-animatie: bij "minder beweging" zet globals.css
+ * elke animatie op 0,01ms, en dan zou de slideshow doorrazen.
+ */
+function SlideVoortgang({ duurMs, stil, onKlaar }: { duurMs: number; stil: boolean; onKlaar: () => void }) {
+  const [verstreken, setVerstreken] = useState(0);
+  const klaarRef = useRef(onKlaar);
+  klaarRef.current = onKlaar;
+  const gemeld = useRef(false);
+
+  useEffect(() => {
+    if (stil) return;
+    let vorige = Date.now();
+    const iv = setInterval(() => {
+      const nu = Date.now();
+      const stap = nu - vorige;
+      vorige = nu;
+      setVerstreken(v => v + stap);
+    }, 100);
+    return () => clearInterval(iv);
+  }, [stil]);
+
+  useEffect(() => {
+    if (verstreken >= duurMs && !gemeld.current) {
+      gemeld.current = true;
+      klaarRef.current();
+    }
+  }, [verstreken, duurMs]);
+
+  return (
+    <div
+      className={`h-full rounded-full ${stil ? 'bg-white/40' : 'bg-gradient-to-r from-brand-purple to-brand-pink'}`}
+      style={{ width: `${Math.min(100, (verstreken / duurMs) * 100)}%` }}
+    />
+  );
+}
+
+function SlideKop({ titel, rechts }: { titel: string; rechts?: React.ReactNode }) {
+  return (
+    <div className="mb-5 flex shrink-0 items-end justify-between gap-6">
+      <h2 className={`${TYPE.primary} font-black tracking-tight text-white/90`}>{titel}</h2>
+      {rechts}
+    </div>
+  );
+}
+
+const euro = (n: number, decimalen = 0) =>
+  `€${n.toLocaleString('nl-NL', { minimumFractionDigits: decimalen, maximumFractionDigits: decimalen })}`;
+
+function SlideVandaag({ data }: { data: LiveData }) {
+  const dag = data.periodStats.day;
+  const cm = data.costMetrics;
+  const kpis: { label: string; waarde: React.ReactNode; sub: string; trend?: React.ReactNode }[] = [
+    {
+      label: 'Leads laatste 24 uur',
+      waarde: <AnimatedNumber value={dag?.leads || 0} />,
+      sub: `${dag?.assigned || 0} uitgedeeld`,
+      trend: dag ? <TrendArrow current={dag.leads} previous={dag.prevLeads} /> : null,
+    },
+    {
+      label: 'Winst',
+      waarde: <AnimatedNumber value={Math.round(cm?.totalProfit || 0)} prefix="€" />,
+      sub: `omzet totaal ${euro(Math.round(data.totalRevenue))}`,
+    },
+    {
+      label: 'Effectieve CPL',
+      waarde: euro(cm?.effectieveCpl || 0, 2),
+      sub: `${cm?.avgAssignments || 0}x uitgedeeld`,
+    },
+    {
+      label: 'Leads totaal',
+      waarde: <AnimatedNumber value={data.totalLeads} />,
+      sub: `${data.activeCustomers} klanten actief`,
+    },
+  ];
+
+  return (
+    <div className="flex h-full flex-col gap-5">
+      <div className="relative flex min-h-0 flex-1 flex-col justify-center overflow-hidden rounded-3xl border border-white/[0.08] bg-gradient-to-br from-brand-purple/25 to-brand-pink/10 px-16">
+        <p className={`${TYPE.secondary} font-semibold uppercase tracking-wider text-white/55`}>Omzet laatste 24 uur</p>
+        <div className="mt-4 flex items-end gap-8">
+          <AnimatedNumber
+            value={Math.round(dag?.revenue || 0)}
+            prefix="€"
+            className="text-[220px] font-black leading-[0.9] tracking-tight tabular-nums text-white"
+          />
+          {dag && (
+            <span className="mb-5">
+              <TrendArrow current={dag.revenue} previous={dag.prevRevenue} groot />
+            </span>
+          )}
+        </div>
+        <p className={`${TYPE.secondary} mt-6 tabular-nums text-white/45`}>
+          vorige 24 uur: {euro(Math.round(dag?.prevRevenue || 0))}
+        </p>
+      </div>
+
+      <div className="grid h-[290px] shrink-0 grid-cols-4 gap-5">
+        {kpis.map(k => (
+          <div key={k.label} className="flex min-w-0 flex-col justify-center rounded-3xl border border-white/[0.06] bg-white/[0.03] px-8">
+            <p className={`${TYPE.label} font-semibold uppercase tracking-wide text-white/45`}>{k.label}</p>
+            <div className="mt-3 flex items-baseline gap-4">
+              <span className="text-[72px] font-black leading-none tracking-tight tabular-nums text-white">{k.waarde}</span>
+              {k.trend}
+            </div>
+            <p className={`${TYPE.label} mt-3 truncate tabular-nums text-white/40`}>{k.sub}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SlideBatches({
+  batches, pagina, paginas, aantalActief, aantalVoltooid, geleverd, totaal, totaalPct, celebratingId,
+}: {
+  batches: BatchInfo[];
+  pagina: number;
+  paginas: number;
+  aantalActief: number;
+  aantalVoltooid: number;
+  geleverd: number;
+  totaal: number;
+  totaalPct: number;
+  celebratingId: string | null;
+}) {
+  return (
+    <div className="flex h-full flex-col">
+      <SlideKop
+        titel={paginas > 1 ? `Actieve batches ${pagina}/${paginas}` : 'Actieve batches'}
+        rechts={
+          <div className="w-[560px] shrink-0">
+            <div className={`${TYPE.label} flex items-baseline justify-between tabular-nums text-white/50`}>
+              <span>{aantalActief} actief · {aantalVoltooid} voltooid</span>
+              <span className="font-bold text-white/75">{geleverd.toLocaleString('nl-NL')} / {totaal.toLocaleString('nl-NL')} ({totaalPct}%)</span>
+            </div>
+            <div className="mt-2 h-3 overflow-hidden rounded-full bg-white/[0.06]">
+              <div className="h-full rounded-full bg-gradient-to-r from-brand-purple to-brand-pink" style={{ width: `${totaalPct}%` }} />
+            </div>
+          </div>
+        }
+      />
+      <div className="grid min-h-0 flex-1 grid-cols-2 grid-rows-4 gap-4">
+        {batches.map(b => {
+          const pct = b.batchSize > 0 ? Math.min(100, Math.round((b.delivered / b.batchSize) * 100)) : 0;
+          const bc = BRANCH_COLORS[b.branch] || DEFAULT_BRANCH;
+          const viert = celebratingId === b.id;
+          const tempo = b.leadsPerDay ? `${b.leadsPerDay}/dag` : b.leadsPerWeek ? `${b.leadsPerWeek}/week` : null;
+          const gebied = (b.targetAreaLabels ?? []).join(' · ');
+          return (
+            <div
+              key={b.id}
+              className={`flex min-h-0 flex-col justify-center rounded-2xl border px-6 ${
+                viert ? 'border-emerald-500/40 bg-emerald-500/[0.08] shadow-lg shadow-emerald-500/20' : 'border-white/[0.05] bg-white/[0.03]'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className={`${TYPE.secondary} truncate font-bold text-white/90`}>{b.customer}</span>
+                  <span className={`shrink-0 rounded-full px-3 py-0.5 text-[20px] font-bold ${bc.badge}`}>{b.branch}</span>
+                  {viert && <span className="text-[30px]">🎉</span>}
+                </div>
+                <div className="flex shrink-0 items-baseline gap-2">
+                  <span className={`${TYPE.primary} font-black tabular-nums text-white`}>{b.delivered}</span>
+                  <span className={`${TYPE.label} tabular-nums text-white/35`}>/ {b.batchSize}</span>
+                </div>
+              </div>
+              <div className="relative mt-3 h-4 overflow-hidden rounded-full bg-white/[0.06]">
+                <div className={`absolute inset-y-0 left-0 rounded-full bg-gradient-to-r ${bc.bar} shadow-lg ${bc.glow}`} style={{ width: `${pct}%` }} />
+              </div>
+              <div className={`${TYPE.meta} mt-2.5 flex items-center justify-between gap-4 tabular-nums text-white/40`}>
+                <span className="min-w-0 truncate">
+                  {[b.pricePerLead ? `€${b.pricePerLead}/lead` : null, tempo, gebied || null].filter(Boolean).join(' · ')}
+                </span>
+                <span className="shrink-0 font-bold text-white/60">{pct}%</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function SlideGeld({ data, costMetrics: cm }: { data: LiveData; costMetrics: CostMetrics }) {
+  const ai = data.aiSpend;
+  const tegels: { label: string; waarde: string; kleur: string; sub?: string; uitleg?: string }[] = [
+    { label: 'Ad spend deze maand', waarde: euro(cm.monthAdSpend), kleur: 'text-white' },
+    { label: 'Bruto CPL', waarde: euro(cm.brutoCpl, 2), kleur: 'text-white' },
+    {
+      label: 'Effectieve CPL',
+      waarde: euro(cm.effectieveCpl, 2),
+      kleur: 'text-emerald-400',
+      sub: `${cm.avgAssignments}x uitgedeeld${cm.approvedReclamationsInWindow ? ` · −${cm.approvedReclamationsInWindow} reclamaties` : ''}`,
+      uitleg: 'Spend gedeeld door netto-toewijzingen (goedgekeurde reclamaties tellen niet als levering, kosten blijven volledig staan).',
+    },
+    {
+      label: 'Omzet',
+      waarde: euro(data.totalRevenue),
+      kleur: 'text-white',
+      sub: cm.bulkRevenue > 0 ? `${euro(cm.batchRevenue)} batch + ${euro(cm.bulkRevenue)} bulk` : undefined,
+    },
+    {
+      label: 'Winst',
+      waarde: `${cm.totalProfit >= 0 ? '+' : ''}${euro(cm.totalProfit)}`,
+      kleur: cm.totalProfit >= 0 ? 'text-emerald-400' : 'text-red-400',
+    },
+    {
+      label: 'AI spend vandaag',
+      waarde: euro((ai?.todayCents || 0) / 100, 2),
+      kleur: ai?.enabled ? 'text-purple-300' : 'text-white/30',
+      sub: ai?.enabled ? `${ai.activeExperiments} live · maand ${euro((ai.monthCents || 0) / 100)}` : 'AI uit',
+    },
+  ];
+
+  return (
+    <div className="flex h-full flex-col">
+      <SlideKop titel="Geld" />
+      <div className="grid min-h-0 flex-1 grid-cols-3 grid-rows-2 gap-5">
+        {tegels.map(t => (
+          <div
+            key={t.label}
+            title={t.uitleg}
+            className="flex min-w-0 flex-col justify-center rounded-3xl border border-emerald-500/10 bg-emerald-500/[0.04] px-10"
+          >
+            <p className={`${TYPE.label} font-bold uppercase tracking-widest text-emerald-400/60`}>{t.label}</p>
+            <p className={`mt-4 text-[84px] font-black leading-none tracking-tight tabular-nums ${t.kleur}`}>{t.waarde}</p>
+            <p className={`${TYPE.label} mt-4 truncate tabular-nums text-white/40`}>{t.sub ?? '\u00a0'}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const MAX_TARGETS = 6;
+const MAX_LEADERBOARD = 8;
+
+function SlideTeam({ targets, leaderboard }: { targets: AMTargetLive[]; leaderboard: AMLeaderboardEntry[] }) {
+  const gesorteerd = [...targets].sort((a, b) => b.progress_pct - a.progress_pct);
+  const beide = targets.length > 0 && leaderboard.length > 0;
+  const bedrag = (t: AMTargetLive, n: number) => (t.target_type === 'revenue' ? euro(n) : n.toLocaleString('nl-NL'));
+
+  return (
+    <div className="flex h-full flex-col">
+      <SlideKop titel="Team" />
+      <div className={`grid min-h-0 flex-1 gap-5 ${beide ? 'grid-cols-2' : 'grid-cols-1'}`}>
+        {targets.length > 0 && (
+          <div className="flex min-h-0 flex-col overflow-hidden rounded-3xl border border-amber-500/10 bg-amber-500/[0.04] p-6">
+            <h3 className={`${TYPE.secondary} mb-4 font-bold text-white/75`}>Targets</h3>
+            <div className="flex min-h-0 flex-1 flex-col gap-3">
+              {gesorteerd.slice(0, MAX_TARGETS).map(t => {
+                const klaar = t.progress_pct >= 100;
+                const kleur = klaar ? 'bg-emerald-400' : t.progress_pct >= 75 ? 'bg-amber-400' : t.progress_pct >= 50 ? 'bg-orange-400' : 'bg-red-400';
+                const rest = Math.max(0, t.target_value - t.current_value);
+                const dagen = Math.max(0, Math.ceil((new Date(t.period_end + 'T23:59:59').getTime() - Date.now()) / 86400000));
+                return (
+                  <div
+                    key={t.id}
+                    className={`rounded-2xl border px-5 py-3 ${klaar ? 'border-emerald-500/25 bg-emerald-500/[0.07]' : 'border-white/[0.05] bg-white/[0.02]'}`}
+                  >
+                    <div className="flex items-baseline justify-between gap-4">
+                      <p className={`${TYPE.secondary} min-w-0 flex-1 truncate font-bold text-white/85`}>
+                        {t.am_name}
+                        <span className={`${TYPE.meta} ml-3 font-medium text-white/35`}>{t.label || TARGET_TYPE_LABELS[t.target_type] || t.target_type}</span>
+                      </p>
+                      <span className={`${TYPE.secondary} shrink-0 font-black tabular-nums text-white`}>
+                        {klaar ? '🎉 ' : ''}{Math.round(t.progress_pct)}%
+                      </span>
+                    </div>
+                    <div className="mt-2 h-3 overflow-hidden rounded-full bg-white/[0.07]">
+                      <div className={`h-full rounded-full ${kleur}`} style={{ width: `${Math.min(100, t.progress_pct)}%` }} />
+                    </div>
+                    <p className={`${TYPE.meta} mt-1.5 flex justify-between gap-4 tabular-nums text-white/40`}>
+                      <span className="truncate">
+                        {bedrag(t, t.current_value)} van {bedrag(t, t.target_value)}
+                        {!klaar && rest > 0 ? ` · nog ${bedrag(t, rest)} · ${dagen}d over` : ''}
+                      </span>
+                      {t.bonus_amount > 0 && (
+                        <span className={`shrink-0 ${klaar ? 'font-bold text-emerald-400/80' : 'text-amber-400/70'}`}>
+                          {euro(t.bonus_amount)} bonus
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                );
+              })}
+              {targets.length > MAX_TARGETS && (
+                <p className={`${TYPE.meta} text-center tabular-nums text-white/35`}>+{targets.length - MAX_TARGETS} niet getoond</p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {leaderboard.length > 0 && (
+          <div className="flex min-h-0 flex-col overflow-hidden rounded-3xl border border-brand-purple/10 bg-brand-purple/[0.04] p-6">
+            <div className="mb-4 flex items-baseline justify-between">
+              <h3 className={`${TYPE.secondary} font-bold text-white/75`}>Leaderboard</h3>
+              <span className={`${TYPE.label} text-white/35`}>
+                {new Date().toLocaleDateString('nl-NL', { month: 'long', year: 'numeric' })}
+              </span>
+            </div>
+            <div className="flex min-h-0 flex-1 flex-col gap-3">
+              {leaderboard.slice(0, MAX_LEADERBOARD).map((am, rank) => {
+                const eerste = rank === 0;
+                const medaille = ['from-amber-400 to-amber-600', 'from-slate-300 to-slate-400', 'from-amber-600 to-amber-800'][rank];
+                return (
+                  <div
+                    key={am.id}
+                    className={`flex items-center gap-4 rounded-2xl border px-5 py-2.5 ${
+                      eerste ? 'border-amber-500/20 bg-amber-500/[0.06]' : 'border-white/[0.04] bg-white/[0.02]'
+                    }`}
+                  >
+                    <span
+                      className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-[26px] font-black ${
+                        medaille ? `bg-gradient-to-br ${medaille} text-white` : 'bg-white/[0.06] text-white/40'
+                      }`}
+                    >
+                      {rank + 1}
+                    </span>
+                    {am.avatarUrl && (
+                      <Image src={am.avatarUrl} alt={am.name} width={48} height={48} className="h-12 w-12 shrink-0 rounded-full object-cover" />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className={`${TYPE.secondary} truncate font-bold ${eerste ? 'text-amber-300' : 'text-white/80'}`}>
+                        {am.name}{eerste ? ' 👑' : ''}
+                      </p>
+                      <p className={`${TYPE.meta} truncate tabular-nums text-white/35`}>
+                        {am.batches} {am.batches === 1 ? 'batch' : 'batches'}
+                        {am.bulkRevenue > 0 ? ` · ${euro(am.bulkRevenue)} bulk` : ''}
+                      </p>
+                    </div>
+                    <span className={`${TYPE.secondary} shrink-0 font-black tabular-nums text-emerald-400`}>
+                      {euro(am.revenue + am.bulkRevenue)}
+                    </span>
+                  </div>
+                );
+              })}
+              {leaderboard.length > MAX_LEADERBOARD && (
+                <p className={`${TYPE.meta} text-center tabular-nums text-white/35`}>+{leaderboard.length - MAX_LEADERBOARD} niet getoond</p>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
 export default function LiveDashboard() {
   const [data, setData] = useState<LiveData | null>(null);
   const [clock, setClock] = useState(new Date());
@@ -833,7 +982,6 @@ export default function LiveDashboard() {
      onderscheiden van een werkend scherm. */
   const [lastOkAt, setLastOkAt] = useState<number | null>(null);
   const [failedAttempts, setFailedAttempts] = useState(0);
-  const [newUnpaidBatchIds, setNewUnpaidBatchIds] = useState<Set<string>>(new Set());
   const [celebratingBatch, setCelebratingBatch] = useState<{ id: string; customer?: string; branch?: string; batchSize?: number } | null>(null);
   const [amTargets, setAmTargets] = useState<AMTargetLive[]>([]);
   const [salesToasts, setSalesToasts] = useState<PaidBatch[]>([]);
@@ -851,22 +999,19 @@ export default function LiveDashboard() {
   const prevBatchPcts = useRef<Record<string, number>>({});
   const seenPaidIds = useRef<Set<string>>(new Set());
   const processedCelebrationIds = useRef<Set<string>>(new Set());
+  /* Slideshow: welke slide staat er, en staat hij stil. De instellingen uit
+     de URL (?slide=batches, ?duur=20) lezen we pas na het laden in, zodat
+     server en browser hetzelfde eerste beeld hebben. */
+  const [slideKey, setSlideKey] = useState<string | null>(null);
+  const [gepauzeerd, setGepauzeerd] = useState(false);
+  const [slideInstelling, setSlideInstelling] = useState<{ duurSec: number; vast: SlideId | null }>({ duurSec: STANDAARD_DUUR_SEC, vast: null });
 
   const fetchData = useCallback(async () => {
     try {
       const res = await adminFetch('/api/admin/live-stats');
       if (res.ok) {
         const d: LiveData = await res.json();
-        setData(prev => {
-          if (prev) {
-            const oldIds = new Set(prev.unpaidBatches.map(b => b.id));
-            const fresh = (d.unpaidBatches || []).filter(b => !oldIds.has(b.id)).map(b => b.id);
-            if (fresh.length > 0) {
-              setNewUnpaidBatchIds(new Set(fresh));
-              setTimeout(() => setNewUnpaidBatchIds(new Set()), 3000);
-            }
-          }
-
+        setData(() => {
           for (const batch of d.activeBatches) {
             const prevPct = prevBatchPcts.current[batch.id] || 0;
             const newPct = batch.batchSize > 0 ? (batch.delivered / batch.batchSize) * 100 : 0;
@@ -1120,6 +1265,53 @@ export default function LiveDashboard() {
   }, [fetchData, fetchAMTargets]);
   useEffect(() => { const iv = setInterval(() => { setClock(new Date()); setRefreshIn(r => Math.max(0, r - 1)); }, 1000); return () => clearInterval(iv); }, []);
 
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    setSlideInstelling({ duurSec: leesDuur(q.get('duur')), vast: leesVasteSlide(q.get('slide')) });
+  }, []);
+
+  const cm = data?.costMetrics;
+  const slides = useMemo(
+    () =>
+      bouwSlides(
+        {
+          batches: data?.activeBatches.length ?? 0,
+          heeftGeld: !!cm && (cm.monthAdSpend > 0 || cm.effectieveCpl > 0),
+          heeftTeam: amTargets.length > 0 || (data?.amLeaderboard?.length ?? 0) > 0,
+        },
+        slideInstelling,
+      ),
+    [data?.activeBatches.length, cm, amTargets.length, data?.amLeaderboard?.length, slideInstelling],
+  );
+  const slideIndex = huidigeIndex(slides, slideKey);
+  const slide = slides[slideIndex];
+  const slideOnderwerpen = useMemo(() => onderwerpen(slides), [slides]);
+  /* Tijdens een viering staat de slideshow even stil, daarna loopt hij verder. */
+  const viering = !!(celebratingBatch || celebrationVideo || targetHitOverlay);
+  const slideshowStil = gepauzeerd || viering || slides.length <= 1;
+
+  const gaNaar = useCallback((i: number) => setSlideKey(slides[i]?.key ?? null), [slides]);
+  const stapSlide = useCallback(
+    (stap: 1 | -1) => setSlideKey(k => slides[stapIndex(huidigeIndex(slides, k), slides.length, stap)]?.key ?? null),
+    [slides],
+  );
+  const volgendeSlide = useCallback(() => stapSlide(1), [stapSlide]);
+
+  /* Pijltjes bladeren, spatie pauzeert. */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === 'ArrowRight') stapSlide(1);
+      else if (e.key === 'ArrowLeft') stapSlide(-1);
+      else if (e.key === ' ' || e.code === 'Space') {
+        e.preventDefault();
+        setGepauzeerd(p => !p);
+      } else return;
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [stapSlide]);
+
   if (!data) {
     /* Blijft de eerste ophaling mislukken, dan zegt het scherm dat ook. Een
        spinner die eindeloos doordraait ziet er hetzelfde uit als een scherm
@@ -1159,35 +1351,9 @@ export default function LiveDashboard() {
   const dataAgeMs = lastOkAt ? clock.getTime() - lastOkAt : null;
   const isStale = failedAttempts > 0 || (dataAgeMs !== null && dataAgeMs > STALE_AFTER_MS);
 
-  const ps = data.periodStats;
   const batchDelivered = data.activeBatches.reduce((s, b) => s + b.delivered, 0);
   const batchTotal = data.activeBatches.reduce((s, b) => s + b.batchSize, 0);
   const overallPct = batchTotal > 0 ? Math.round((batchDelivered / batchTotal) * 100) : 0;
-
-  const unpaidList = data.unpaidBatches || [];
-  const sortedUnpaid = [...unpaidList].sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-  );
-  const lastUnpaidTime = sortedUnpaid[0]?.createdAt;
-  const lastUnpaidAgo = lastUnpaidTime ? timeAgo(lastUnpaidTime) : '-';
-
-  let avgUnpaidInterval = '-';
-  if (sortedUnpaid.length >= 2) {
-    const todayUnpaid = sortedUnpaid.filter(b => {
-      const d = new Date(b.createdAt);
-      const now = new Date();
-      return d.getDate() === now.getDate() && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-    });
-    if (todayUnpaid.length >= 2) {
-      const newest = new Date(todayUnpaid[0].createdAt).getTime();
-      const oldest = new Date(todayUnpaid[todayUnpaid.length - 1].createdAt).getTime();
-      const totalMinutes = (newest - oldest) / 60000;
-      const avg = totalMinutes / (todayUnpaid.length - 1);
-      if (avg < 1) avgUnpaidInterval = `${Math.round(avg * 60)}s`;
-      else if (avg < 60) avgUnpaidInterval = `${Math.round(avg)}m`;
-      else avgUnpaidInterval = `${Math.round(avg / 60)}u`;
-    }
-  }
 
   const phoneQuality = data.phoneQuality;
   const phoneColor = phoneQuality.validPct >= 90 ? 'text-emerald-400' : phoneQuality.validPct >= 70 ? 'text-amber-400' : 'text-red-400';
@@ -1691,83 +1857,60 @@ export default function LiveDashboard() {
       </div>
 
       <div className="relative z-10 flex h-full flex-col overflow-hidden p-5">
-        {/* Top bar */}
-        <div className="mb-3 flex shrink-0 items-center justify-between lg:mb-2">
+        {/* Bovenbalk: blijft staan terwijl de slides wisselen */}
+        <div className="mb-4 flex h-[64px] shrink-0 items-center justify-between">
           <Link href="/admin" className="group flex items-center gap-3">
-            <Image src="/logo-wit.png" alt="WarmeLeads" width={140} height={42} className="h-8 w-auto opacity-80 transition group-hover:opacity-100" />
+            <Image src="/logo-wit.png" alt="WarmeLeads" width={140} height={42} className="h-9 w-auto opacity-80 transition group-hover:opacity-100" />
             <span className="rounded-full bg-white/[0.06] px-2.5 py-1 text-[18px] font-bold uppercase tracking-widest text-white/30">Live</span>
           </Link>
-          <div className="flex items-center gap-3 sm:gap-5">
-            {/* Speed metrics */}
-            <div className="hidden items-center gap-4 lg:flex">
-              <div className="text-right">
-                <p className="text-[18px] font-bold uppercase tracking-wider text-white/25">Openstaand</p>
-                <p className="text-[22px] font-black tabular-nums text-amber-300/90">
-                  {unpaidList.length} batch{unpaidList.length === 1 ? '' : 'es'}
+          <div className="flex items-center gap-5">
+            {/* Telefoonkwaliteit: de ring is de indicator, het getal staat ernaast. */}
+            <div className="flex items-center gap-2.5">
+              <svg className="h-10 w-10 shrink-0 -rotate-90" viewBox="0 0 36 36">
+                <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="4" />
+                <circle
+                  cx="18"
+                  cy="18"
+                  r="14"
+                  fill="none"
+                  stroke={phoneQuality.validPct >= 90 ? '#34d399' : phoneQuality.validPct >= 70 ? '#fbbf24' : '#f87171'}
+                  strokeWidth="4"
+                  strokeDasharray={`${(phoneRingPct / 100) * 88} 88`}
+                  strokeLinecap="round"
+                  className="transition-all duration-1000"
+                />
+              </svg>
+              <div className="leading-tight">
+                <p className="text-[18px] font-bold uppercase tracking-wider text-white/30">Tel. kwaliteit</p>
+                <p className={`text-[22px] font-black tabular-nums ${phoneColor}`}>
+                  {phoneQuality.validPct}%
+                  <span className="ml-2 text-[18px] font-semibold text-white/35">
+                    {phoneQuality.invalid > 0 ? `${phoneQuality.invalid} verdacht` : 'alles geldig'}
+                  </span>
                 </p>
-              </div>
-              <div className="h-6 w-px bg-white/[0.06]" />
-              <div className="text-right">
-                <p className="text-[18px] font-bold uppercase tracking-wider text-white/25">Laatste (onbetaald)</p>
-                <p className="text-[22px] font-black tabular-nums text-white/70">{lastUnpaidAgo === '-' ? '—' : `${lastUnpaidAgo} geleden`}</p>
-              </div>
-              <div className="h-6 w-px bg-white/[0.06]" />
-              <div className="text-right">
-                <p className="text-[18px] font-bold uppercase tracking-wider text-white/25">Tempo vandaag</p>
-                <p className="text-[22px] font-black tabular-nums text-white/70">{avgUnpaidInterval === '-' ? '—' : `elke ${avgUnpaidInterval}`}</p>
-              </div>
-              <div className="h-6 w-px bg-white/[0.06]" />
-              {/* Telefoonkwaliteit. Het percentage stond eerst IN de ring van
-                  36px; "100%" op 18px is breder dan die cirkel en liep er dus
-                  overheen. De ring is nu puur de indicator, het getal staat
-                  ernaast waar het ruimte heeft. */}
-              <div className="flex items-center gap-2.5">
-                <svg className="h-10 w-10 shrink-0 -rotate-90" viewBox="0 0 36 36">
-                  <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="4" />
-                  <circle
-                    cx="18"
-                    cy="18"
-                    r="14"
-                    fill="none"
-                    stroke={phoneQuality.validPct >= 90 ? '#34d399' : phoneQuality.validPct >= 70 ? '#fbbf24' : '#f87171'}
-                    strokeWidth="4"
-                    strokeDasharray={`${(phoneRingPct / 100) * 88} 88`}
-                    strokeLinecap="round"
-                    className="transition-all duration-1000"
-                  />
-                </svg>
-                <div className="leading-tight">
-                  <p className="text-[18px] font-bold uppercase tracking-wider text-white/30">Tel. kwaliteit</p>
-                  <p className={`text-[22px] font-black tabular-nums ${phoneColor}`}>
-                    {phoneQuality.validPct}%
-                    <span className="ml-2 text-[18px] font-semibold text-white/35">
-                      {phoneQuality.invalid > 0 ? `${phoneQuality.invalid} verdacht` : 'alles geldig'}
-                    </span>
-                  </p>
-                </div>
               </div>
             </div>
 
-            <div className="h-6 w-px bg-white/[0.06] lg:block hidden" />
+            <div className="h-6 w-px bg-white/[0.06]" />
 
-            {/* Sound toggle */}
+            {/* Geluid aan/uit */}
             <button
               onClick={() => {
                 const next = audioManager.toggle();
                 setSoundEnabled(next);
                 if (next) audioManager.ensureContext();
               }}
-              className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/[0.06] text-white/40 transition hover:bg-white/[0.1] hover:text-white/70"
+              className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/[0.06] text-white/40 transition hover:bg-white/[0.1] hover:text-white/70"
               title={soundEnabled ? 'Geluid uit' : 'Geluid aan'}
             >
               {soundEnabled ? (
-                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
                   <path d="M15.54 8.46a5 5 0 010 7.07" />
                   <path d="M19.07 4.93a10 10 0 010 14.14" />
                 </svg>
               ) : (
-                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
                   <line x1="23" y1="9" x2="17" y2="15" />
                   <line x1="17" y1="9" x2="23" y2="15" />
@@ -1801,690 +1944,86 @@ export default function LiveDashboard() {
               )}
             </div>
 
-            {/* Clock */}
+            {/* Klok */}
             <div className="text-right">
               <p className="text-[26px] font-bold tabular-nums text-white/80">
                 {clock.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
               </p>
-              <p className="hidden text-[18px] text-white/25 sm:block">
+              <p className="text-[18px] text-white/25">
                 {clock.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
               </p>
-              <p className="text-[18px] text-white/25 sm:hidden">
-                {clock.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}
-              </p>
             </div>
           </div>
         </div>
 
-        {/* Hero: één cijfer dat je vanaf de deur leest, met vier ondersteunende
-            waarden eromheen. Vijf gelijkwaardige kaarten vroegen allemaal
-            evenveel aandacht en gaven daarmee geen enkele richting. */}
-        <div className="mb-3 grid h-[268px] shrink-0 grid-cols-1 gap-3 lg:grid-cols-12">
-          <motion.div
-            initial={reducedMotion ? false : { opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="relative flex h-full flex-col justify-center overflow-hidden rounded-3xl border border-white/[0.08] bg-gradient-to-br from-brand-purple/25 to-brand-pink/10 px-7 py-4 lg:col-span-5"
-          >
-            <p className={`${TYPE.label} font-semibold uppercase tracking-wider text-white/55`}>
-              Omzet laatste 24 uur
-            </p>
-            <div className="mt-2 flex items-end gap-4">
-              <AnimatedNumber
-                value={Math.round(ps.day?.revenue || 0)}
-                prefix="€"
-                className={`${TYPE.hero} font-black tracking-tight tabular-nums text-white`}
-              />
-              {ps.day && <TrendArrow current={ps.day.revenue} previous={ps.day.prevRevenue} />}
-            </div>
-            <p className={`${TYPE.meta} mt-3 tabular-nums text-white/50`}>
-              vorige 24 uur: €{Math.round(ps.day?.prevRevenue || 0).toLocaleString('nl-NL')}
-            </p>
-          </motion.div>
-
-          <div className="grid h-full grid-cols-2 gap-3 lg:col-span-7">
-            {[
-              {
-                label: 'Leads laatste 24 uur',
-                value: ps.day?.leads || 0,
-                sub: `${ps.day?.assigned || 0} uitgedeeld`,
-                trend: ps.day,
-              },
-              {
-                label: 'Winst',
-                value: Math.round(data.costMetrics?.totalProfit || 0),
-                prefix: '€',
-                sub: `omzet totaal €${Math.round(data.totalRevenue).toLocaleString('nl-NL')}`,
-              },
-              {
-                label: 'Effectieve CPL',
-                value: data.costMetrics?.effectieveCpl || 0,
-                prefix: '€',
-                decimals: 2,
-                sub: `${data.costMetrics?.avgAssignments || 0}x uitgedeeld`,
-              },
-              {
-                label: 'Leads totaal',
-                value: data.totalLeads,
-                sub: `${data.activeCustomers} klanten actief`,
-              },
-            ].map((kpi, i) => (
-              <motion.div
-                key={kpi.label}
-                initial={reducedMotion ? false : { opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: reducedMotion ? 0 : 0.05 + i * 0.05 }}
-                className="flex min-w-0 flex-col justify-center rounded-2xl border border-white/[0.06] bg-white/[0.03] px-5 py-3"
-              >
-                <p className={`${TYPE.meta} font-medium uppercase tracking-wide text-white/45`}>
-                  {kpi.label}
-                </p>
-                <div className="mt-1 flex items-baseline gap-3">
-                  {kpi.decimals ? (
-                    <span className={`${TYPE.primary} font-black tabular-nums tracking-tight text-white`}>
-                      {kpi.prefix}
-                      {kpi.value.toFixed(kpi.decimals)}
-                    </span>
-                  ) : (
-                    <AnimatedNumber
-                      value={kpi.value}
-                      prefix={kpi.prefix}
-                      className={`${TYPE.primary} font-black tabular-nums tracking-tight text-white`}
-                    />
-                  )}
-                  {kpi.trend && <TrendArrow current={kpi.trend.leads} previous={kpi.trend.prevLeads} />}
-                </div>
-                <p className={`${TYPE.meta} mt-1 truncate tabular-nums text-white/40`}>{kpi.sub}</p>
-              </motion.div>
-            ))}
-          </div>
+        {/* De slide in beeld. Eén onderwerp tegelijk op het volle scherm. */}
+        <div className="relative min-h-0 flex-1">
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={slide.key}
+              initial={reducedMotion ? { opacity: 1 } : { opacity: 0, x: 60 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={reducedMotion ? { opacity: 1 } : { opacity: 0, x: -60 }}
+              transition={{ duration: reducedMotion ? 0 : 0.45, ease: [0.25, 0.4, 0.25, 1] }}
+              className="absolute inset-0"
+            >
+              {slide.id === 'vandaag' && <SlideVandaag data={data} />}
+              {slide.id === 'batches' && (
+                <SlideBatches
+                  batches={paginaVan(data.activeBatches, slide.pagina)}
+                  pagina={slide.pagina}
+                  paginas={slide.paginas}
+                  aantalActief={data.activeBatches.length}
+                  aantalVoltooid={data.completedBatchCount}
+                  geleverd={batchDelivered}
+                  totaal={batchTotal}
+                  totaalPct={overallPct}
+                  celebratingId={celebratingBatch?.id ?? null}
+                />
+              )}
+              {slide.id === 'geld' && data.costMetrics && <SlideGeld data={data} costMetrics={data.costMetrics} />}
+              {slide.id === 'team' && <SlideTeam targets={amTargets} leaderboard={data.amLeaderboard ?? []} />}
+            </motion.div>
+          </AnimatePresence>
         </div>
 
-        {/* AM Race + Podium — full-width hero op de TV */}
-        {data.amLeaderboard && data.amLeaderboard.length > 0 && (
-          <AmRacePodium entries={data.amLeaderboard} reducedMotion={reducedMotion} />
-        )}
-
-        {/* Main content + AM sidebar wrapper */}
-        <div className="flex min-h-0 flex-1 gap-3">
-        {/* Main content column */}
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden lg:min-h-0 lg:overflow-hidden">
-        {/* Middle section: actieve batches + wacht op betaling + kaart — één max-h op lg zodat kolommen gelijk blijven en niets onder/achter elkaar doorloopt */}
-        <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-7 lg:grid-rows-1 lg:items-stretch lg:gap-3 lg:overflow-hidden lg:min-h-0">
-          {/* Active batches - 3 cols */}
-          <div className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 backdrop-blur-sm sm: lg:col-span-3 lg:h-full">
-            <div className="mb-2 flex shrink-0 items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className={`h-2.5 w-2.5 rounded-full bg-emerald-400 ${reducedMotion ? '' : 'animate-pulse'}`} />
-                <h2 className="text-[22px] font-bold text-white/70">Actieve batches</h2>
-              </div>
-              <div className="flex items-center gap-3 text-[18px] text-white/25">
-                <span>{data.activeBatches.length} actief</span>
-                <span>{data.completedBatchCount} voltooid</span>
-              </div>
-            </div>
-
-            {data.activeBatches.length === 0 ? (
-              <div className="flex flex-1 items-center justify-center py-6">
-                <p className="text-[22px] text-white/20">Geen actieve batches</p>
-              </div>
-            ) : (
-              <TvVerticalCarousel
-                reducedMotion={reducedMotion}
-                contentKey={data.activeBatches.map(b => `${b.id}:${b.delivered}:${b.batchSize}:${(b.targetAreaLabels || []).join(',')}`).join('|')}
-                gapClassName="space-y-2"
-              >
-                {(sk) => (
-                  <>
-                    {data.activeBatches.map((b, i) => {
-                      const pct = b.batchSize > 0 ? Math.min(100, Math.round((b.delivered / b.batchSize) * 100)) : 0;
-                      const bc = BRANCH_COLORS[b.branch] || DEFAULT_BRANCH;
-                      const isCelebrating = celebratingBatch?.id === b.id;
-                      return (
-                        <motion.div
-                          key={sk ? `${sk}-${b.id}` : b.id}
-                          initial={sk === 'a' ? { opacity: 0, x: -20 } : false}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={sk === 'a' ? { delay: i * 0.05 } : { duration: 0 }}
-                          className={`rounded-xl border p-3 transition-all ${
-                            isCelebrating
-                              ? 'border-emerald-500/40 bg-emerald-500/[0.08] shadow-lg shadow-emerald-500/20'
-                              : 'border-white/[0.04] bg-white/[0.02]'
-                          }`}
-                        >
-                          <div className="mb-2 flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="text-[22px] font-semibold text-white/80">{b.customer}</span>
-                              <span className={`rounded-full px-2 py-0.5 text-[18px] font-bold ${bc.badge}`}>{b.branch}</span>
-                              {isCelebrating && sk === 'a' && <span className="text-[22px]">🎉</span>}
-                            </div>
-                            <div className="flex items-baseline gap-1.5">
-                              <span className="text-[26px] font-black tabular-nums text-white/90">{b.delivered}</span>
-                              <span className="text-[22px] text-white/25">/ {b.batchSize}</span>
-                            </div>
-                          </div>
-                          <div className="relative h-3 overflow-hidden rounded-full bg-white/[0.06]">
-                            <motion.div
-                              initial={sk === 'a' ? { width: 0 } : false}
-                              animate={{ width: `${pct}%` }}
-                              transition={{ duration: sk === 'a' ? 1.5 : 0, ease: 'easeOut' }}
-                              className={`absolute inset-y-0 left-0 rounded-full bg-gradient-to-r ${bc.bar} shadow-lg ${bc.glow}`}
-                            />
-                          </div>
-                          <div className="mt-1.5 flex items-center justify-between text-[18px] text-white/25">
-                            <div className="flex gap-3">
-                              {b.pricePerLead && <span>€{b.pricePerLead}/lead</span>}
-                              {b.leadsPerWeek && <span>{b.leadsPerWeek}/week</span>}
-                            </div>
-                            <span className="font-bold text-white/40">{pct}%</span>
-                          </div>
-                          <div className="mt-1.5 border-t border-white/[0.04] pt-1.5">
-                            <BatchTargetAreaBadges presetLabels={b.targetAreaLabels ?? []} variant="dark" />
-                          </div>
-                        </motion.div>
-                      );
-                    })}
-
-                    <div
-                      key={sk ? `${sk}-totaal` : 'totaal'}
-                      className="mt-1 shrink-0 rounded-xl border border-white/[0.04] bg-white/[0.02] p-2"
-                    >
-                      <div className="mb-1 flex items-center justify-between text-[22px]">
-                        <span className="font-medium text-white/40">Totaal voortgang</span>
-                        <span className="font-bold tabular-nums text-white/60">{batchDelivered} / {batchTotal} ({overallPct}%)</span>
-                      </div>
-                      <div className="h-2 overflow-hidden rounded-full bg-white/[0.06]">
-                        <motion.div
-                          initial={sk === 'a' ? { width: 0 } : false}
-                          animate={{ width: `${overallPct}%` }}
-                          transition={{ duration: sk === 'a' ? 2 : 0, ease: 'easeOut' }}
-                          className="h-full rounded-full bg-gradient-to-r from-brand-purple to-brand-pink"
-                        />
-                      </div>
-                    </div>
-                  </>
-                )}
-              </TvVerticalCarousel>
-            )}
-          </div>
-
-          {/* Onbetaalde batches - 2 cols (zelfde flex-structuur als actieve batches zodat carousel een echte viewport-hoogte krijgt) */}
-          <div className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 backdrop-blur-sm sm: lg:col-span-2 lg:h-full">
-            <div className="mb-2 flex shrink-0 items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <div className="relative">
-                  <div className="h-2.5 w-2.5 rounded-full bg-amber-400" />
-                  <div className={`absolute inset-0 h-2.5 w-2.5 rounded-full bg-amber-400/50 ${reducedMotion ? '' : 'animate-ping'}`} />
-                </div>
-                <h2 className="text-[22px] font-bold text-white/70">Wacht op betaling</h2>
-              </div>
-              <span className="text-[18px] font-semibold tabular-nums text-amber-200/80">{unpaidList.length}</span>
-            </div>
-
-            {unpaidList.length === 0 ? (
-              <div className="flex min-h-[10rem] flex-1 flex-col items-center justify-center py-8 text-center">
-                <p className="text-[22px] text-white/25">Geen openstaande batches</p>
-                <p className="mt-1 text-[18px] text-white/15">Leads en afspraken met open factuur verschijnen hier</p>
-              </div>
-            ) : (
-              <TvVerticalCarousel
-                  reducedMotion={reducedMotion}
-                  contentKey={unpaidList.map(r => `${r.product}-${r.id}:${r.status}:${r.totalPrice}:${r.accountManagerName || ''}:${(r.targetAreaLabels || []).join(',')}`).join('|')}
-                  gapClassName="space-y-2"
+        {/* Voortgang onderaan: alle onderwerpen, het huidige loopt vol tot de volgende */}
+        <div className="mt-4 flex h-[64px] shrink-0 items-center gap-4">
+          <div className="flex min-w-0 flex-1 gap-3">
+            {slideOnderwerpen.map(o => {
+              const actief = o.id === slide.id;
+              return (
+                <button
+                  key={o.id}
+                  type="button"
+                  onClick={() => gaNaar(o.eersteIndex)}
+                  className={`min-w-0 flex-1 rounded-xl px-4 py-2 text-left transition ${
+                    actief ? 'bg-white/[0.07]' : 'bg-white/[0.02] hover:bg-white/[0.05]'
+                  }`}
                 >
-                  {(sk) => {
-                    const rows = unpaidList.map((row) => {
-                      const isNew = newUnpaidBatchIds.has(row.id);
-                      const bc = BRANCH_COLORS[row.branch] || DEFAULT_BRANCH;
-                      const productLabel = row.product === 'appointments' ? 'Afspraken' : 'Leads';
-                      const unitLabel = row.product === 'appointments' ? 'afspraak' : 'lead';
-                      const statusNl =
-                        row.status === 'pending_payment'
-                          ? 'Betaling open'
-                          : row.status === 'paused'
-                            ? 'Gepauzeerd'
-                            : row.status === 'active'
-                              ? 'Actief (onbetaald)'
-                              : row.status;
-                      return (
-                        <motion.div
-                          key={sk ? `${sk}-${row.product}-${row.id}` : `${row.product}-${row.id}`}
-                          layout={false}
-                          initial={sk === 'a' ? { opacity: 0, y: -20, scale: 0.95 } : false}
-                          animate={{ opacity: 1, y: 0, scale: 1 }}
-                          exit={sk === 'a' ? { opacity: 0, scale: 0.95 } : undefined}
-                          transition={{ duration: 0.3 }}
-                          className={`rounded-lg border p-3 transition-all ${
-                            isNew && sk === 'a'
-                              ? 'border-amber-500/35 bg-amber-500/[0.08] shadow-lg shadow-amber-500/10'
-                              : 'border-white/[0.04] bg-white/[0.02]'
-                          }`}
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0 flex-1">
-                              <div className="flex flex-wrap items-center gap-2">
-                                {isNew && sk === 'a' && (
-                                  <motion.span
-                                    initial={{ scale: 0 }}
-                                    animate={{ scale: 1 }}
-                                    className="shrink-0 rounded bg-amber-500 px-1.5 py-0.5 text-[18px] font-black uppercase text-slate-900"
-                                  >
-                                    Nieuw
-                                  </motion.span>
-                                )}
-                                <p className="truncate text-[22px] font-semibold text-white/90">{row.customer}</p>
-                              </div>
-                              {row.accountManagerName && (
-                                <p className="mt-0.5 truncate text-[18px] font-medium text-white/28" title={`Accountmanager: ${row.accountManagerName}`}>
-                                  AM · {row.accountManagerName}
-                                </p>
-                              )}
-                              <p className="mt-1 text-[18px] text-white/35">
-                                {row.batchSize} × {productLabel.toLowerCase()}
-                                {row.unitPrice != null && (
-                                  <> · €{row.unitPrice.toLocaleString('nl-NL', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}/{unitLabel}</>
-                                )}
-                              </p>
-                              <p className="mt-0.5 text-[18px] font-medium text-amber-200/70">{statusNl}</p>
-                              <div className="mt-1.5">
-                                <BatchTargetAreaBadges presetLabels={row.targetAreaLabels ?? []} variant="dark" />
-                              </div>
-                            </div>
-                            <div className="ml-1 flex shrink-0 flex-col items-end gap-1.5 text-right">
-                              <span className={`rounded px-1.5 py-0.5 text-[18px] font-bold ${bc.badge}`}>{row.branch}</span>
-                              <span className={`rounded px-1.5 py-0.5 text-[18px] font-bold ${row.product === 'appointments' ? 'bg-teal-500/25 text-teal-200' : 'bg-brand-purple/25 text-purple-200'}`}>
-                                {productLabel}
-                              </span>
-                              <span className="text-[18px] font-bold tabular-nums text-white/50">
-                                €{row.totalPrice.toLocaleString('nl-NL', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} excl.
-                              </span>
-                              <span className="text-[18px] tabular-nums text-white/20">{timeAgo(row.createdAt)}</span>
-                            </div>
-                          </div>
-                        </motion.div>
-                      );
-                    });
-                    if (sk === 'b') return <>{rows}</>;
-                    return <AnimatePresence initial={false}>{rows}</AnimatePresence>;
-                  }}
-              </TvVerticalCarousel>
-            )}
+                  <p className={`${TYPE.label} truncate font-bold ${actief ? 'text-white/90' : 'text-white/35'}`}>
+                    {o.titel}
+                    {actief && o.paginas > 1 && (
+                      <span className="ml-2 font-semibold tabular-nums text-white/45">
+                        {slide.pagina}/{o.paginas}
+                      </span>
+                    )}
+                  </p>
+                  <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/[0.08]">
+                    {actief && (
+                      <SlideVoortgang key={slide.key} duurMs={slide.duurMs} stil={slideshowStil} onKlaar={volgendeSlide} />
+                    )}
+                  </div>
+                </button>
+              );
+            })}
           </div>
-
-          {/* Right sidebar: Map + Branch donut - 2 cols */}
-          <div className="flex min-h-0 flex-col gap-3 overflow-hidden sm: lg:col-span-2 lg:h-full">
-            {/* Province heatmap */}
-            <div className="min-h-0 flex-1 overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02] p-3 backdrop-blur-sm">
-              <div className="mb-1 flex items-center gap-2">
-                <svg className="h-4 w-4 text-white/40" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd"/></svg>
-                <h2 className="text-[22px] font-bold text-white/70">Leads per provincie</h2>
-              </div>
-              <ProvinceMap data={data.provinceBreakdown} />
-            </div>
-
-            {/* Mobile: openstaande batches + telefoonkwaliteit */}
-            <div className="grid grid-cols-2 gap-3 lg:hidden">
-              <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 backdrop-blur-sm">
-                <p className="text-[18px] font-bold uppercase tracking-wider text-white/25">Openstaand</p>
-                <p className="mt-1 text-[26px] font-black tabular-nums text-amber-300/90">{unpaidList.length}</p>
-                <p className="text-[18px] text-white/25">onbetaalde batches</p>
-              </div>
-              <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 backdrop-blur-sm">
-                <p className="text-[18px] font-bold uppercase tracking-wider text-white/25">Laatste</p>
-                <p className="mt-1 text-[26px] font-black tabular-nums text-white/80">{lastUnpaidAgo === '-' ? '—' : lastUnpaidAgo}</p>
-                <p className="text-[18px] text-white/25">{avgUnpaidInterval === '-' ? '—' : `~${avgUnpaidInterval} vandaag`}</p>
-              </div>
-            </div>
-            <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 backdrop-blur-sm lg:hidden">
-              <p className="text-[18px] font-bold uppercase tracking-wider text-white/25">Tel. kwaliteit (vandaag)</p>
-              <p className={`mt-1 text-[26px] font-black ${phoneColor}`}>{phoneQuality.validPct}%</p>
-              <p className="text-[18px] text-white/25">{phoneQuality.invalid} verdacht</p>
-            </div>
-          </div>
+          {(gepauzeerd || viering) && slides.length > 1 && (
+            <p className={`${TYPE.meta} shrink-0 font-semibold text-amber-300/80`}>
+              {gepauzeerd ? 'Gepauzeerd · spatie om verder te gaan' : 'Even stil tijdens de viering'}
+            </p>
+          )}
         </div>
-
-        {/* Financial strip */}
-        {data.costMetrics && (data.costMetrics.monthAdSpend > 0 || data.costMetrics.effectieveCpl > 0) && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="h-[88px] shrink-0 rounded-2xl border border-emerald-500/10 bg-emerald-500/[0.04] p-3 backdrop-blur-sm"
-          >
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-6">
-              <div className="px-2">
-                <p className="text-[18px] font-bold uppercase tracking-widest text-emerald-400/50">Ad spend</p>
-                <p className="mt-0.5 text-[26px] font-black tabular-nums text-white/80">&euro;{data.costMetrics.monthAdSpend.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}</p>
-              </div>
-              <div className="px-2">
-                <p className="text-[18px] font-bold uppercase tracking-widest text-emerald-400/50">Bruto CPL</p>
-                <p className="mt-0.5 text-[26px] font-black tabular-nums text-white/80">&euro;{data.costMetrics.brutoCpl.toFixed(2)}</p>
-              </div>
-              <div className="px-2" title="Effectieve CPL: spend gedeeld door netto-toewijzingen (goedgekeurde reclamaties tellen niet als levering, kosten blijven volledig staan).">
-                <p className="text-[18px] font-bold uppercase tracking-widest text-emerald-400/50">Eff. CPL</p>
-                <p className="mt-0.5 text-[26px] font-black tabular-nums text-emerald-400">&euro;{data.costMetrics.effectieveCpl.toFixed(2)}</p>
-                <p className="text-[18px] text-white/25">
-                  {data.costMetrics.avgAssignments}x uitgedeeld
-                  {data.costMetrics.approvedReclamationsInWindow && data.costMetrics.approvedReclamationsInWindow > 0
-                    ? ` · −${data.costMetrics.approvedReclamationsInWindow} reclam.`
-                    : ''}
-                </p>
-              </div>
-              <div className="px-2">
-                <p className="text-[18px] font-bold uppercase tracking-widest text-emerald-400/50">Omzet</p>
-                <p className="mt-0.5 text-[26px] font-black tabular-nums text-white/80">&euro;{data.totalRevenue.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}</p>
-                {data.costMetrics.bulkRevenue > 0 && (
-                  <p className="text-[18px] text-white/25">&euro;{data.costMetrics.batchRevenue.toLocaleString('nl-NL', { maximumFractionDigits: 0 })} batch + &euro;{data.costMetrics.bulkRevenue.toLocaleString('nl-NL', { maximumFractionDigits: 0 })} bulk</p>
-                )}
-              </div>
-              <div className="px-2">
-                <p className="text-[18px] font-bold uppercase tracking-widest text-emerald-400/50">Winst</p>
-                <p className={`mt-0.5 text-[26px] font-black tabular-nums ${data.costMetrics.totalProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {data.costMetrics.totalProfit >= 0 ? '+' : ''}&euro;{data.costMetrics.totalProfit.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}
-                </p>
-              </div>
-              <div className="px-2">
-                <p className="text-[18px] font-bold uppercase tracking-widest text-purple-300/60">AI spend</p>
-                <p className={`mt-0.5 text-[26px] font-black tabular-nums ${data.aiSpend?.enabled ? 'text-purple-300' : 'text-white/30'}`}>
-                  &euro;{((data.aiSpend?.todayCents || 0) / 100).toLocaleString('nl-NL', { maximumFractionDigits: 2 })}
-                </p>
-                <p className="text-[18px] text-white/25">
-                  {data.aiSpend?.enabled ? `${data.aiSpend.activeExperiments} live · maand €${((data.aiSpend.monthCents || 0)/100).toLocaleString('nl-NL', { maximumFractionDigits: 0 })}` : 'AI uit'}
-                </p>
-              </div>
-            </div>
-          </motion.div>
-        )}
-
-        {/* AM Performance Section — inline on <xl */}
-        {amTargets.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.25 }}
-            className="shrink-0 rounded-2xl border border-amber-500/10 bg-amber-500/[0.04] p-3 backdrop-blur-sm xl:hidden"
-          >
-            <div className="mb-2 flex items-center gap-2">
-              <svg className="h-4 w-4 text-amber-400/60" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5 2a1 1 0 011 1v1h1a1 1 0 010 2H6v1a1 1 0 01-2 0V6H3a1 1 0 010-2h1V3a1 1 0 011-1zm0 10a1 1 0 011 1v1h1a1 1 0 110 2H6v1a1 1 0 11-2 0v-1H3a1 1 0 110-2h1v-1a1 1 0 011-1zM12 2a1 1 0 01.967.744L14.146 7.2 17.5 9.134a1 1 0 010 1.732l-3.354 1.935-1.18 4.455a1 1 0 01-1.933 0L9.854 12.8 6.5 10.866a1 1 0 010-1.732l3.354-1.935 1.18-4.455A1 1 0 0112 2z" clipRule="evenodd"/></svg>
-              <h2 className="text-[22px] font-bold text-white/70">AM Performance</h2>
-            </div>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
-              {amTargets.map(t => {
-                const r = 16;
-                const circ = 2 * Math.PI * r;
-                const filled = Math.min(t.progress_pct, 100);
-                const isComplete = t.progress_pct >= 100;
-                const isClose = t.progress_pct >= 75 && !isComplete;
-                const ringColor = isComplete ? '#34d399' : t.progress_pct >= 75 ? '#fbbf24' : t.progress_pct >= 50 ? '#f97316' : '#f87171';
-                const remaining = Math.max(0, t.target_value - (t as any).current_value || 0);
-                const daysLeft = Math.max(0, Math.ceil((new Date(t.period_end + 'T23:59:59').getTime() - Date.now()) / 86400000));
-
-                return (
-                  <motion.div
-                    key={t.id}
-                    /* Was een eeuwig pulserende schaduw. Een blijvende toestand
-                       hoort in kleur en vorm te zitten, niet in beweging die de
-                       hele dag doorloopt op een scherm waar mensen naast werken. */
-                    style={isClose ? { boxShadow: '0 0 0 2px rgba(251,191,36,0.45)' } : undefined}
-                    className={`rounded-xl border p-3 ${
-                      isComplete
-                        ? 'border-emerald-500/20 bg-emerald-500/[0.06]'
-                        : isClose
-                        ? 'border-amber-500/15 bg-amber-500/[0.04]'
-                        : 'border-white/[0.04] bg-white/[0.02]'
-                    }`}
-                  >
-                    <div className="mb-2 flex items-center gap-2">
-                      <div className="relative h-10 w-10 shrink-0">
-                        {(isClose || isComplete) && (
-                          <div className={`absolute inset-0 rounded-full blur-sm ${isComplete ? 'bg-emerald-400/20' : 'bg-amber-400/15'}`} />
-                        )}
-                        <svg className="-rotate-90 relative h-10 w-10" viewBox="0 0 40 40">
-                          <circle cx="20" cy="20" r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="3" />
-                          <circle cx="20" cy="20" r={r} fill="none"
-                            stroke={ringColor}
-                            strokeWidth="3"
-                            strokeLinecap="round"
-                            strokeDasharray={circ}
-                            strokeDashoffset={circ - (filled / 100) * circ}
-                            className="transition-all duration-1000"
-                            style={isClose ? { filter: `drop-shadow(0 0 3px ${ringColor})` } : undefined}
-                          />
-                        </svg>
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          {t.am_avatar_url ? (
-                            <Image src={t.am_avatar_url} alt={t.am_name} width={28} height={28} className="h-7 w-7 rounded-full object-cover" />
-                          ) : isComplete ? (
-                            <span className="text-[22px]">🎉</span>
-                          ) : (
-                            <span className="text-[18px] font-black text-white/70">{t.progress_pct}%</span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-[18px] font-bold text-white/70">{t.am_name}</p>
-                        <p className="truncate text-[18px] text-white/30">{t.label}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-baseline justify-between text-[18px]">
-                      <span className="font-bold tabular-nums text-white/60">
-                        {t.target_type === 'revenue'
-                          ? `€${t.current_value.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}`
-                          : t.current_value.toLocaleString('nl-NL')}
-                      </span>
-                      <span className="text-white/20">
-                        / {t.target_type === 'revenue'
-                          ? `€${t.target_value.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}`
-                          : t.target_value.toLocaleString('nl-NL')}
-                      </span>
-                    </div>
-                    {!isComplete && remaining > 0 && (
-                      <p className="mt-0.5 text-[18px] text-white/25">
-                        Nog {t.target_type === 'revenue' ? `€${remaining.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}` : remaining} · {daysLeft}d over
-                      </p>
-                    )}
-                    <div className="mt-1 flex items-center justify-between text-[18px] text-white/20">
-                      <span>{TARGET_TYPE_LABELS[t.target_type] || t.target_type}</span>
-                      {t.bonus_amount > 0 && (
-                        <span className={isComplete ? 'font-bold text-emerald-400/70' : 'text-amber-400/60'}>
-                          {isComplete ? '✓ ' : ''}€{t.bonus_amount.toLocaleString('nl-NL', { maximumFractionDigits: 0 })} bonus
-                        </span>
-                      )}
-                    </div>
-                  </motion.div>
-                );
-              })}
-            </div>
-          </motion.div>
-        )}
-
-        {/* AM Leaderboard — inline on <xl */}
-        {data.amLeaderboard && data.amLeaderboard.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.28 }}
-            className="shrink-0 rounded-2xl border border-brand-purple/10 bg-brand-purple/[0.04] p-3 backdrop-blur-sm xl:hidden"
-          >
-            <div className="mb-2 flex items-center gap-2">
-              <svg className="h-4 w-4 text-brand-purple/60" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" /></svg>
-              <h2 className="text-[22px] font-bold text-white/70">AM Leaderboard</h2>
-              <span className="ml-auto text-[18px] text-white/25">
-                {new Date().toLocaleDateString('nl-NL', { month: 'long', year: 'numeric' })}
-              </span>
-            </div>
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {data.amLeaderboard.map((am, rank) => {
-                const isFirst = rank === 0;
-                const medalColors = ['from-amber-400 to-amber-600', 'from-slate-300 to-slate-400', 'from-amber-600 to-amber-800'];
-                const medalBg = rank < 3 ? medalColors[rank] : '';
-                return (
-                  <motion.div
-                    key={am.id}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.3 + rank * 0.05 }}
-                    className={`flex items-center gap-3 rounded-xl border p-3 transition-all ${
-                      isFirst
-                        ? 'border-amber-500/20 bg-amber-500/[0.06] shadow-lg shadow-amber-500/5'
-                        : 'border-white/[0.04] bg-white/[0.02]'
-                    }`}
-                  >
-                    <div className="relative h-8 w-8 shrink-0">
-                      {am.avatarUrl ? (
-                        <Image src={am.avatarUrl} alt={am.name} width={32} height={32} className="h-8 w-8 rounded-full object-cover" />
-                      ) : (
-                        <div className={`flex h-8 w-8 items-center justify-center rounded-full text-[22px] font-black ${
-                          rank < 3 ? `bg-gradient-to-br ${medalBg} text-white shadow-md` : 'bg-white/[0.06] text-white/30'
-                        }`}>
-                          {am.name.charAt(0).toUpperCase()}
-                        </div>
-                      )}
-                      <span className={`absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full text-[18px] font-black ${
-                        rank < 3 ? `bg-gradient-to-br ${medalBg} text-white` : 'bg-white/10 text-white/40'
-                      }`}>
-                        {rank + 1}
-                      </span>
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className={`truncate text-[22px] font-bold ${isFirst ? 'text-amber-300' : 'text-white/70'}`}>{am.name}</p>
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[18px]">
-                        <span className="font-bold tabular-nums text-emerald-400">€{(am.revenue + am.bulkRevenue).toLocaleString('nl-NL', { maximumFractionDigits: 0 })}</span>
-                        <span className="text-white/20">·</span>
-                        <span className="text-white/30">{am.batches} {am.batches === 1 ? 'batch' : 'batches'}</span>
-                        {am.bulkRevenue > 0 && (<>
-                          <span className="text-white/20">·</span>
-                          <span className="text-sky-400/70">€{am.bulkRevenue.toLocaleString('nl-NL', { maximumFractionDigits: 0 })} bulk</span>
-                        </>)}
-                      </div>
-                    </div>
-                    {isFirst && (
-                      <span className="text-[26px]">👑</span>
-                    )}
-                  </motion.div>
-                );
-              })}
-            </div>
-          </motion.div>
-        )}
-
-        </div>{/* end main content column */}
-
-        {/* AM Sidebar — xl only */}
-        <div className="hidden min-h-0 xl:flex xl:w-[420px] xl:shrink-0 xl:flex-col xl:gap-3 xl:overflow-hidden 2xl:w-[460px]">
-          {/* AM Performance */}
-          {amTargets.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.2 }}
-              className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-amber-500/10 bg-amber-500/[0.04] p-3 backdrop-blur-sm"
-            >
-              <div className="mb-3 flex items-center gap-2">
-                <svg className="h-4 w-4 text-amber-400/60" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5 2a1 1 0 011 1v1h1a1 1 0 010 2H6v1a1 1 0 01-2 0V6H3a1 1 0 010-2h1V3a1 1 0 011-1zm0 10a1 1 0 011 1v1h1a1 1 0 110 2H6v1a1 1 0 11-2 0v-1H3a1 1 0 110-2h1v-1a1 1 0 011-1zM12 2a1 1 0 01.967.744L14.146 7.2 17.5 9.134a1 1 0 010 1.732l-3.354 1.935-1.18 4.455a1 1 0 01-1.933 0L9.854 12.8 6.5 10.866a1 1 0 010-1.732l3.354-1.935 1.18-4.455A1 1 0 0112 2z" clipRule="evenodd"/></svg>
-                <h2 className="text-[22px] font-bold text-white/70">AM Targets</h2>
-              </div>
-              <div className="space-y-2.5">
-                {[...amTargets].sort((a, b) => b.progress_pct - a.progress_pct).slice(0, 2).map((t) => {
-                  const pct = Math.min(t.progress_pct, 100);
-                  const isComplete = t.progress_pct >= 100;
-                  /* Compacte regel: naam, voortgang als balk, en de twee getallen
-                     die ertoe doen. De ring, de bonus en het aantal resterende
-                     dagen zijn detail die vanaf afstand toch wegvallen. */
-                  const kleur = isComplete
-                    ? 'bg-emerald-400'
-                    : t.progress_pct >= 75
-                      ? 'bg-amber-400'
-                      : t.progress_pct >= 50
-                        ? 'bg-orange-400'
-                        : 'bg-red-400';
-                  return (
-                    <div
-                      key={t.id}
-                      className={`rounded-xl border px-3 py-2 ${
-                        isComplete
-                          ? 'border-emerald-500/25 bg-emerald-500/[0.07]'
-                          : 'border-white/[0.05] bg-white/[0.02]'
-                      }`}
-                    >
-                      <div className="flex items-baseline justify-between gap-3">
-                        <p className="min-w-0 flex-1 truncate text-[22px] font-bold text-white/80">{t.am_name}</p>
-                        <span className="shrink-0 text-[22px] font-black tabular-nums text-white">
-                          {Math.round(t.progress_pct)}%
-                        </span>
-                      </div>
-                      <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-white/[0.07]">
-                        <div className={`h-full rounded-full ${kleur}`} style={{ width: `${pct}%` }} />
-                      </div>
-                      <p className="mt-1 text-[18px] tabular-nums text-white/40">
-                        {t.current_value.toLocaleString('nl-NL')} van {t.target_value.toLocaleString('nl-NL')}
-                      </p>
-                    </div>
-                  );
-                })}
-                {amTargets.length > 2 && (
-                  <p className={`${TYPE.meta} pt-1 text-center tabular-nums text-white/35`}>
-                    +{amTargets.length - 2} niet getoond
-                  </p>
-                )}
-              </div>
-            </motion.div>
-          )}
-
-          {/* AM Leaderboard */}
-          {data.amLeaderboard && data.amLeaderboard.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.3 }}
-              className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-brand-purple/10 bg-brand-purple/[0.04] p-3 backdrop-blur-sm"
-            >
-              <div className="mb-3 flex items-center gap-2">
-                <svg className="h-4 w-4 text-brand-purple/60" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" /></svg>
-                <h2 className="text-[22px] font-bold text-white/70">Leaderboard</h2>
-                <span className="ml-auto text-[18px] text-white/20">
-                  {new Date().toLocaleDateString('nl-NL', { month: 'short', year: 'numeric' })}
-                </span>
-              </div>
-              <div className="space-y-2.5">
-                {data.amLeaderboard.slice(0, 3).map((am, rank) => {
-                  const isFirst = rank === 0;
-                  const medal = ['from-amber-400 to-amber-600', 'from-slate-300 to-slate-400', 'from-amber-600 to-amber-800'][rank] || '';
-                  /* Eén compacte regel per persoon. Batches en bulk zijn detail
-                     die je vanaf vier meter toch niet leest, en die de rij zo
-                     hoog maakten dat er nog maar anderhalve in beeld paste. */
-                  return (
-                    <div
-                      key={am.id}
-                      className={`flex items-center gap-2.5 rounded-xl border px-3 py-1 ${
-                        isFirst ? 'border-amber-500/20 bg-amber-500/[0.06]' : 'border-white/[0.04] bg-white/[0.02]'
-                      }`}
-                    >
-                      <span
-                        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[20px] font-black ${
-                          rank < 3 ? `bg-gradient-to-br ${medal} text-white` : 'bg-white/[0.06] text-white/40'
-                        }`}
-                      >
-                        {rank + 1}
-                      </span>
-                      <p className={`min-w-0 flex-1 truncate text-[22px] font-bold ${isFirst ? 'text-amber-300' : 'text-white/75'}`}>
-                        {am.name}
-                      </p>
-                      <span className="shrink-0 text-[22px] font-black tabular-nums text-emerald-400">
-                        €{(am.revenue + am.bulkRevenue).toLocaleString('nl-NL', { maximumFractionDigits: 0 })}
-                      </span>
-                    </div>
-                  );
-                })}
-                {data.amLeaderboard.length > 3 && (
-                  <p className={`${TYPE.meta} pt-1 text-center tabular-nums text-white/35`}>
-                    +{data.amLeaderboard.length - 3} niet getoond
-                  </p>
-                )}
-              </div>
-            </motion.div>
-          )}
-        </div>{/* end AM sidebar */}
-        </div>{/* end main + sidebar wrapper */}
       </div>
       </div>{/* end vaste ontwerpmaat */}
     </div>
