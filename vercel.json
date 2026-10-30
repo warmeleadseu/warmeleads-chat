@@ -63,6 +63,10 @@
     {
       "path": "/api/cron/doorlopen",
       "schedule": "20 * * * *"
+    },
+    {
+      "path": "/api/cron/loten-actie",
+      "schedule": "*/10 * * * *"
     }
   ]
 }

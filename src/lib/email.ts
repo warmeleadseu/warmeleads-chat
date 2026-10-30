@@ -1014,3 +1014,41 @@ function getISOWeek(date: Date): number {
   const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
   return Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
 }
+
+/**
+ * Najaarsactie 2026: bevestiging van deelname na betaling van een batch,
+ * met de loten van deze batch, het totaal en de voorwaarden.
+ */
+export async function sendActieLotenEmail(
+  customer: Customer,
+  info: {
+    batchId: string; branche: string; batchSize: number; loten: number; totaalLoten: number;
+    prijsLeads: number; leadsPerLot: number; startLabel: string; eindLabel: string;
+  },
+): Promise<boolean> {
+  const greeting = customer.contact_person || customer.name;
+  const titel = `Je doet mee: kans op ${info.prijsLeads} gratis leads`;
+  const lot = (n: number) => `${n} ${n === 1 ? 'lot' : 'loten'}`;
+  const content = `
+    <p style="margin:0 0 20px">${statusBadge('JE DOET MEE', 'orange')}</p>
+    <p style="margin:0 0 16px;font-size:16px;font-weight:600;color:#0f172a">Hallo ${greeting},</p>
+    <p style="margin:0 0 12px">Bedankt voor je bestelling! Tot en met ${info.eindLabel} maakt elke batch kans op <strong style="color:#0f172a">${info.prijsLeads} gratis leads</strong>. Je batch van ${info.batchSize} ${info.branche}-leads levert je <strong style="color:#0f172a">${lot(info.loten)}</strong> op.</p>
+    ${dataTable(
+      row('Deze batch', `${info.batchSize} leads &middot; ${lot(info.loten)}`) +
+      row('Jouw loten in totaal', `<strong style="color:#0f172a">${lot(info.totaalLoten)}</strong>`) +
+      row('Trekking', `Na ${info.eindLabel}`),
+      'Jouw deelname',
+    )}
+    <p style="margin:0 0 12px">Zo werkt het:</p>
+    <ul style="margin:0 0 12px;padding-left:20px;color:#334155">
+      <li style="margin-bottom:6px">Per ${info.leadsPerLot} leads in een betaalde batch krijg je 1 lot.</li>
+      <li style="margin-bottom:6px">Bestel je in de actieperiode nog een batch, dan komen er loten bij. Hoe meer loten, hoe groter je kans.</li>
+      <li>Na ${info.eindLabel} trekken we één winnaar, die alle ${info.prijsLeads} leads gratis krijgt. Wint jouw lot, dan nemen we persoonlijk contact met je op.</li>
+    </ul>
+    <p style="margin:20px 0 0;font-size:12px;color:#94a3b8;line-height:1.6">Voorwaarden: de actie loopt van ${info.startLabel} tot en met ${info.eindLabel}. Alleen batches die in die periode betaald zijn tellen mee, 1 lot per volle ${info.leadsPerLot} leads. De winnaar ontvangt ${info.prijsLeads} gratis leads in de eigen branche en het eigen gebied. De prijs is niet inwisselbaar voor geld en niet overdraagbaar. Bij creditering of terugbetaling van een batch vervallen de loten van die batch. WarmeLeads mag de actie aanpassen als dat nodig is.</p>`;
+  return sendEmail(customer.email, titel, layout(titel, content), {
+    type: 'actie_loten',
+    toName: greeting,
+    metadata: { customer_id: customer.id, batch_id: info.batchId, loten: info.loten, totaal_loten: info.totaalLoten },
+  });
+}
