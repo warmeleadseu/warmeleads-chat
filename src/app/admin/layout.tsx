@@ -87,7 +87,7 @@ const NAV: {
   { label: 'Facturen', href: '/admin/invoices', icon: DocumentTextIcon, roles: ['superadmin', 'admin', 'accountmanager'] },
   { label: 'Winst en verlies', href: '/admin/winst', icon: CurrencyEuroIcon, roles: ['superadmin'] },
   { label: 'Direct leveren', href: '/admin/direct-leveren', icon: BoltIcon, roles: ['superadmin', 'admin'] },
-  { label: 'Actie: loten', href: '/admin/actie', icon: TicketIcon, roles: ['superadmin', 'admin'] },
+  { label: 'Acties met loten', href: '/admin/actie', icon: TicketIcon, roles: ['superadmin', 'admin'] },
   { label: 'Branches', href: '/admin/branches', icon: Squares2X2Icon, roles: ['superadmin', 'admin'] },
   { label: 'Plan-gesprekken', href: '/admin/agenda', icon: CalendarDaysIcon, roles: ['superadmin', 'admin', 'accountmanager'] },
   { label: 'Team-agenda', href: '/admin/team-agenda', icon: UserGroupIcon, roles: ['superadmin', 'admin', 'accountmanager'] },

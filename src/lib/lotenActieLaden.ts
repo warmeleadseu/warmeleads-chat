@@ -1,15 +1,19 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { ACTIE, beoordeelBatch, lotenVoorBulk, type Beoordeling, type FactuurRij } from '@/lib/lotenActie';
+import {
+  actieLabels, beoordeelBatch, kiesZichtbareActie, lotenVoorBulk, rijNaarActie,
+  type Actie, type ActieRij, type Beoordeling, type FactuurRij,
+} from '@/lib/lotenActie';
 
 /**
- * Laden voor de najaarsactie: welke batches tellen mee, hoeveel bulkleads
- * kreeg elke klant, en de stand per deelnemer. Gedeeld door de cron, de
- * beheerpagina en de trekking, zodat ze altijd hetzelfde tellen.
+ * Laden voor de acties met loten: de acties zelf, welke batches tellen mee,
+ * hoeveel bulkleads kreeg elke klant, en de stand per deelnemer. Altijd per
+ * actie. Gedeeld door de cron, de beheerpagina, het live-dashboard, het
+ * portaal en de trekking, zodat ze allemaal hetzelfde tellen.
  */
 
 const PAGINA = 1000;
 const STUK = 200;
-/** Zo ver terug kijken naar batches die in de actie betaald kunnen zijn. */
+/** Zo ver vóór de start kijken naar batches die in de actie betaald kunnen zijn. */
 const AANGEMAAKT_TERUG_DAGEN = 120;
 
 export class ActieLaadFout extends Error {}
@@ -43,9 +47,45 @@ function stukken<T>(lijst: T[], n = STUK): T[][] {
   return uit;
 }
 
+/** Alle acties, de nieuwste eerst. */
+export async function laadActies(supabase: SupabaseClient): Promise<Actie[]> {
+  const { data, error } = await supabase
+    .from('acties')
+    .select('code, naam, start_op, eind_op, prijs_leads, leads_per_lot, bulk_per_lot')
+    .order('start_op', { ascending: false });
+  if (error) throw new ActieLaadFout(`acties: ${error.message}`);
+  return ((data ?? []) as ActieRij[]).map(rijNaarActie);
+}
+
+export type TrekkingRij = {
+  actie: string; winnaar_customer_id: string; lotnummer: number; totaal_loten: number;
+  deelnemers: { customer_id: string; klant: string; loten: number }[];
+  getrokken_door_naam: string | null; getrokken_op: string;
+};
+
+/** De trekkingen per actie-code. */
+export async function laadTrekkingen(supabase: SupabaseClient): Promise<Map<string, TrekkingRij>> {
+  const { data, error } = await supabase
+    .from('actie_trekkingen')
+    .select('actie, winnaar_customer_id, lotnummer, totaal_loten, deelnemers, getrokken_door_naam, getrokken_op');
+  if (error) throw new ActieLaadFout(`trekkingen: ${error.message}`);
+  return new Map(((data ?? []) as TrekkingRij[]).map(t => [t.actie, t]));
+}
+
+/** De actie die nu op het dashboard en in het portaal hoort, met haar trekking. */
+export async function laadZichtbareActie(
+  supabase: SupabaseClient,
+  nu: Date = new Date(),
+): Promise<{ actie: Actie; trekking: TrekkingRij | null } | null> {
+  const [acties, trekkingen] = await Promise.all([laadActies(supabase), laadTrekkingen(supabase)]);
+  const getrokkenOp = new Map([...trekkingen.values()].map(t => [t.actie, t.getrokken_op]));
+  const actie = kiesZichtbareActie(acties, getrokkenOp, nu);
+  return actie ? { actie, trekking: trekkingen.get(actie.code) ?? null } : null;
+}
+
 /** Alle betaalde leadbatches die in de actie betaald kunnen zijn, met hun beoordeling. */
-export async function laadBatchStanden(supabase: SupabaseClient): Promise<BatchStand[]> {
-  const vanaf = new Date(Date.parse(ACTIE.start) - AANGEMAAKT_TERUG_DAGEN * 86_400_000).toISOString();
+export async function laadBatchStanden(supabase: SupabaseClient, actie: Actie): Promise<BatchStand[]> {
+  const vanaf = new Date(Date.parse(actie.start) - AANGEMAAKT_TERUG_DAGEN * 86_400_000).toISOString();
   type Rij = {
     id: string; customer_id: string; branch: string; batch_kind: string | null; batch_size: number | null; is_paid: boolean | null;
     created_at: string; total_price: number | string | null; price_per_lead: number | string | null; customers: Klant | Klant[] | null;
@@ -58,7 +98,7 @@ export async function laadBatchStanden(supabase: SupabaseClient): Promise<BatchS
       .eq('batch_kind', 'leads')
       .eq('is_paid', true)
       .gte('created_at', vanaf)
-      .lt('created_at', ACTIE.eind)
+      .lt('created_at', actie.eind)
       .order('created_at')
       .range(p * PAGINA, (p + 1) * PAGINA - 1);
     if (error) throw new ActieLaadFout(`batches: ${error.message}`);
@@ -98,13 +138,12 @@ export async function laadBatchStanden(supabase: SupabaseClient): Promise<BatchS
     const f = facturen.get(r.id) ?? [];
     return {
       id: r.id, customer_id: r.customer_id, branch: r.branch, batch_size: Number(r.batch_size) || 0, klant, facturen: f,
-      beoordeling: beoordeelBatch({ ...r, klant }, f),
+      beoordeling: beoordeelBatch(actie, { ...r, klant }, f),
     };
   });
 }
 
 async function alleKlantIds(
-  supabase: SupabaseClient,
   bouw: (van: number, tot: number) => PromiseLike<{ data: { customer_id: string | null }[] | null; error: { message: string } | null }>,
 ): Promise<string[]> {
   const uit: string[] = [];
@@ -122,18 +161,18 @@ async function alleKlantIds(
  * (bulk_assign zonder batch) en leveringen in een bulkbatch. Een
  * bulk_assign in een gewone leadbatch hoort bij die batch en telt hier niet.
  */
-export async function laadBulkPerKlant(supabase: SupabaseClient, nu: Date = new Date()): Promise<Map<string, number>> {
-  const tot = new Date(Math.min(nu.getTime(), Date.parse(ACTIE.eind))).toISOString();
+export async function laadBulkPerKlant(supabase: SupabaseClient, actie: Actie, nu: Date = new Date()): Promise<Map<string, number>> {
+  const tot = new Date(Math.min(nu.getTime(), Date.parse(actie.eind))).toISOString();
   const telling = new Map<string, number>();
-  if (Date.parse(tot) <= Date.parse(ACTIE.start)) return telling;
+  if (Date.parse(tot) <= Date.parse(actie.start)) return telling;
 
-  const los = await alleKlantIds(supabase, (van, totIdx) =>
+  const los = await alleKlantIds((van, totIdx) =>
     supabase
       .from('lead_assignments')
       .select('customer_id')
       .eq('source', 'bulk_assign')
       .is('batch_id', null)
-      .gte('assigned_at', ACTIE.start)
+      .gte('assigned_at', actie.start)
       .lt('assigned_at', tot)
       .order('id')
       .range(van, totIdx),
@@ -143,12 +182,12 @@ export async function laadBulkPerKlant(supabase: SupabaseClient, nu: Date = new 
   if (error) throw new ActieLaadFout(`bulkbatches: ${error.message}`);
   const inBatch: string[] = [];
   for (const ids of stukken((bulkBatches ?? []).map(b => b.id as string))) {
-    inBatch.push(...await alleKlantIds(supabase, (van, totIdx) =>
+    inBatch.push(...await alleKlantIds((van, totIdx) =>
       supabase
         .from('lead_assignments')
         .select('customer_id')
         .in('batch_id', ids)
-        .gte('assigned_at', ACTIE.start)
+        .gte('assigned_at', actie.start)
         .lt('assigned_at', tot)
         .order('id')
         .range(van, totIdx),
@@ -168,23 +207,24 @@ export async function laadBulkPerKlant(supabase: SupabaseClient, nu: Date = new 
   return telling;
 }
 
-export async function laadLotRijen(supabase: SupabaseClient): Promise<LotRij[]> {
+export async function laadLotRijen(supabase: SupabaseClient, actie: Actie): Promise<LotRij[]> {
   const { data, error } = await supabase
     .from('actie_loten')
     .select('id, customer_id, batch_id, batch_size, loten, betaald_op, mail_verstuurd_op, mail_pogingen, mail_fout, vervallen_op, vervallen_reden, created_at')
-    .eq('actie', ACTIE.code)
+    .eq('actie', actie.code)
     .order('betaald_op');
   if (error) throw new ActieLaadFout(`loten: ${error.message}`);
   return (data ?? []) as LotRij[];
 }
 
-/** De stand per deelnemer: geldige batchloten plus bulkloten. */
+/** De stand per deelnemer van één actie: geldige batchloten plus bulkloten. */
 export async function laadDeelnemers(
   supabase: SupabaseClient,
+  actie: Actie,
   opties: { lotRijen?: LotRij[]; bulk?: Map<string, number>; nu?: Date } = {},
 ): Promise<DeelnemerStand[]> {
-  const lotRijen = opties.lotRijen ?? await laadLotRijen(supabase);
-  const bulk = opties.bulk ?? await laadBulkPerKlant(supabase, opties.nu);
+  const lotRijen = opties.lotRijen ?? await laadLotRijen(supabase, actie);
+  const bulk = opties.bulk ?? await laadBulkPerKlant(supabase, actie, opties.nu);
 
   const stand = new Map<string, { batchLoten: number; batches: number; bulkLeads: number }>();
   for (const r of lotRijen) {
@@ -207,7 +247,7 @@ export async function laadDeelnemers(
 
   return [...stand.entries()]
     .map(([id, s]) => {
-      const bulkLoten = lotenVoorBulk(s.bulkLeads);
+      const bulkLoten = lotenVoorBulk(actie, s.bulkLeads);
       return {
         customer_id: id, klant: naam.get(id)?.naam ?? 'Onbekende klant', email: naam.get(id)?.email ?? null,
         batchLoten: s.batchLoten, batches: s.batches, bulkLeads: s.bulkLeads, bulkLoten, totaal: s.batchLoten + bulkLoten,
@@ -217,50 +257,26 @@ export async function laadDeelnemers(
     .sort((a, b) => b.totaal - a.totaal || a.klant.localeCompare(b.klant, 'nl'));
 }
 
-/** Hoe lang na de trekking de actie nog op het live-dashboard en in het portaal staat. */
-const ZICHTBAAR_NA_TREKKING_MS = 3 * 86_400_000;
-/** Zonder trekking: zo lang na afloop nog tonen ("trekking volgt"). */
-const ZICHTBAAR_NA_EIND_MS = 14 * 86_400_000;
-
-export type ActieTrekkingKort = { winnaar_customer_id: string; getrokken_op: string };
-
-export async function laadTrekking(supabase: SupabaseClient): Promise<ActieTrekkingKort | null> {
-  const { data, error } = await supabase
-    .from('actie_trekkingen')
-    .select('winnaar_customer_id, getrokken_op')
-    .eq('actie', ACTIE.code)
-    .maybeSingle();
-  if (error) throw new ActieLaadFout(`trekking: ${error.message}`);
-  return (data as ActieTrekkingKort | null) ?? null;
-}
-
-/** Hoort de actie nu in beeld (dashboard, portaal)? */
-export function actieZichtbaar(trekking: ActieTrekkingKort | null, nu: Date = new Date()): boolean {
-  const t = nu.getTime();
-  if (t < Date.parse(ACTIE.start)) return false;
-  if (trekking) return t - Date.parse(trekking.getrokken_op) < ZICHTBAAR_NA_TREKKING_MS;
-  return t < Date.parse(ACTIE.eind) + ZICHTBAAR_NA_EIND_MS;
-}
-
 export type ActieSamenvatting = {
-  eind: string; eindLabel: string; prijsLeads: number; leadsPerLot: number;
+  naam: string; eind: string; eindLabel: string; prijsLeads: number; leadsPerLot: number;
   totaalLoten: number; deelnemers: number;
   top: { klant: string; loten: number }[];
   winnaar: string | null;
 };
 
-/** Voor het live-dashboard: de stand van de pot, of null als de actie niet in beeld hoort. */
+/** Voor het live-dashboard: de stand van de zichtbare actie, of null als er geen in beeld hoort. */
 export async function laadActieSamenvatting(supabase: SupabaseClient, nu: Date = new Date()): Promise<ActieSamenvatting | null> {
-  const trekking = await laadTrekking(supabase);
-  if (!actieZichtbaar(trekking, nu)) return null;
-  const deelnemers = (await laadDeelnemers(supabase, { nu })).filter(d => d.totaal > 0);
+  const zichtbaar = await laadZichtbareActie(supabase, nu);
+  if (!zichtbaar) return null;
+  const { actie, trekking } = zichtbaar;
+  const deelnemers = (await laadDeelnemers(supabase, actie, { nu })).filter(d => d.totaal > 0);
   let winnaar: string | null = null;
   if (trekking) {
     const { data } = await supabase.from('customers').select('name').eq('id', trekking.winnaar_customer_id).maybeSingle();
     winnaar = (data?.name as string | undefined) ?? 'Onbekende klant';
   }
   return {
-    eind: ACTIE.eind, eindLabel: ACTIE.eindLabel, prijsLeads: ACTIE.prijsLeads, leadsPerLot: ACTIE.leadsPerLot,
+    naam: actie.naam, eind: actie.eind, eindLabel: actieLabels(actie).eindLabel, prijsLeads: actie.prijsLeads, leadsPerLot: actie.leadsPerLot,
     totaalLoten: deelnemers.reduce((s, d) => s + d.totaal, 0),
     deelnemers: deelnemers.length,
     top: deelnemers.slice(0, 6).map(d => ({ klant: d.klant, loten: d.totaal })),

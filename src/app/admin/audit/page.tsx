@@ -69,6 +69,8 @@ const ACTION_LABELS: Record<string, string> = {
   doorlopend_aan: 'Doorlopend op factuur aangezet',
   doorlopend_uit: 'Doorlopend op factuur uitgezet',
   actie_trekking: 'Winnaar actie getrokken',
+  actie_aangemaakt: 'Actie met loten aangemaakt',
+  actie_verwijderd: 'Actie met loten verwijderd',
   batch_doorgelopen: 'Batch doorgelopen op factuur',
   doorloop_betaald: 'Doorloopfactuur betaald',
   doorloop_gepauzeerd: 'Doorloop gepauzeerd (niet betaald)',

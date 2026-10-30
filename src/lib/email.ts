@@ -1016,14 +1016,14 @@ function getISOWeek(date: Date): number {
 }
 
 /**
- * Najaarsactie 2026: bevestiging van deelname na betaling van een batch,
+ * Actie met loten (zoals de najaarsactie 2026): bevestiging van deelname na betaling van een batch,
  * met de loten van deze batch, het totaal en de voorwaarden.
  */
 export async function sendActieLotenEmail(
   customer: Customer,
   info: {
     batchId: string; branche: string; batchSize: number; loten: number; totaalLoten: number;
-    prijsLeads: number; leadsPerLot: number; startLabel: string; eindLabel: string;
+    prijsLeads: number; leadsPerLot: number; startLabel: string; eindLabel: string; actie?: string;
   },
 ): Promise<boolean> {
   const greeting = customer.contact_person || customer.name;
@@ -1049,6 +1049,6 @@ export async function sendActieLotenEmail(
   return sendEmail(customer.email, titel, layout(titel, content), {
     type: 'actie_loten',
     toName: greeting,
-    metadata: { customer_id: customer.id, batch_id: info.batchId, loten: info.loten, totaal_loten: info.totaalLoten },
+    metadata: { customer_id: customer.id, batch_id: info.batchId, actie: info.actie ?? null, loten: info.loten, totaal_loten: info.totaalLoten },
   });
 }
