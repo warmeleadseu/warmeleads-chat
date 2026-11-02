@@ -16,6 +16,8 @@ import {
 import { adminCustomerLiveUnpaidEmbed, adminCustomerTargetsOnly } from '@/lib/adminBatchQueries';
 import { activeTargetSummariesFromUnknown } from '@/lib/batchTargetAreas';
 import { laadActieSamenvatting } from '@/lib/lotenActieLaden';
+import { omzetPosten, telOmzet } from '@/lib/omzetPerMaand';
+import { laadBetaaldeAfspraakBatches, laadBetaaldeBatches, laadExterneOmzet, laadFacturen } from '@/lib/omzetPerMaandLaden';
 import { amsterdamWallTimeToUtc, amsterdamYmd } from '@/lib/appointmentSlots';
 import {
   countApprovedReclamationsForAssignments,
@@ -29,7 +31,9 @@ const BATCHES_LIST_LIMIT = 1_500;
 const BULK_ASSIGNMENTS_MAX_PAGES = 80;
 
 const LIVE_STATS_CACHE_TTL_MS = 45_000;
-const LIVE_STATS_CACHE_KEY = 'live-stats-v9';
+const LIVE_STATS_CACHE_KEY = 'live-stats-v10';
+/** Batches en facturen van vóór deze dag tellen niet meer mee in de maandomzet. */
+const OMZET_LAAD_VANAF = '2026-01-01';
 const UNPAID_BATCH_FEED_LIMIT = 18;
 
 interface AiSpendSummary {
@@ -282,25 +286,23 @@ export async function GET(request: NextRequest) {
   const maandDag = `${amsterdamYmd(new Date()).slice(0, 7)}-01`;
   const MAAND_START_ISO = amsterdamWallTimeToUtc(maandDag, '00:00').toISOString();
 
-  /* Omzet over hetzelfde venster als de kosten, zodat de winst teller en
-     noemer over dezelfde periode heeft. */
-  const revenueStatsRes = await supabase.rpc('live_revenue_stats_since', {
-    p_since: MAAND_START_ISO,
+  /* Omzet van deze maand: gefactureerd en betaald, op de dag van betalen, met
+     afspraken, losse facturen, creditnota's en externe facturen; zonder
+     interne klanten. Eén definitie met Winst en verlies, zie
+     src/lib/omzetPerMaand.ts. Een fout mag het dashboard niet breken. */
+  const omzet = await (async () => {
+    const [batches, facturen, afspraakBatches, extern] = await Promise.all([
+      laadBetaaldeBatches(supabase, OMZET_LAAD_VANAF),
+      laadFacturen(supabase, OMZET_LAAD_VANAF),
+      laadBetaaldeAfspraakBatches(supabase, OMZET_LAAD_VANAF),
+      laadExterneOmzet(supabase, OMZET_LAAD_VANAF),
+    ]);
+    const posten = omzetPosten({ batches, facturen, afspraakBatches, extern: extern.rijen, dagVan: iso => amsterdamYmd(new Date(iso)) });
+    return { ...telOmzet(posten, maandDag, amsterdamYmd(new Date())), externOntbreekt: extern.ontbreekt };
+  })().catch(err => {
+    console.error('[live-stats] omzet', err instanceof Error ? err.message : err);
+    return null;
   });
-  const revenueStats =
-    (revenueStatsRes.data as {
-      batch_revenue: number;
-      bulk_revenue: number;
-      total_assignments: number;
-      unique_assigned_leads: number;
-      bulk_assignment_count: number;
-    } | null) || {
-      batch_revenue: 0,
-      bulk_revenue: 0,
-      total_assignments: 0,
-      unique_assigned_leads: 0,
-      bulk_assignment_count: 0,
-    };
 
   /* ── Advertentiekosten: één definitie, zie src/lib/metaCpl.ts ──
      Alle spend van deze maand telt mee, behalve campagnes met het woord
@@ -418,9 +420,9 @@ export async function GET(request: NextRequest) {
       ? Math.round((cplWindowSpend / netDistributionAssignTotal) * 100) / 100
       : 0;
 
-  const batchRevenue = Number(revenueStats.batch_revenue) || 0;
-  const bulkRevenue = Number(revenueStats.bulk_revenue) || 0;
-  const totalRevenue = batchRevenue + bulkRevenue;
+  const totalRevenue = omzet?.totaal ?? 0;
+  /* Winst op het dashboard: omzet min advertentiekosten (Meta, zonder de
+     pakketadvies- en energiecampagnes). Personeel en AI staan in Winst en verlies. */
   const totalProfit = totalRevenue - monthAdSpend;
 
   const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
@@ -687,9 +689,9 @@ export async function GET(request: NextRequest) {
       distributionAssignmentTotal: distributionAssignTotal,
       netDistributionAssignmentTotal: netDistributionAssignTotal,
       approvedReclamationsInWindow,
-      batchRevenue: Math.round(batchRevenue * 100) / 100,
-      bulkRevenue: Math.round(bulkRevenue * 100) / 100,
-      bulkAssignmentCount: revenueStats.bulk_assignment_count,
+      omzetPerSoort: omzet?.perSoort ?? null,
+      omzetFout: omzet === null,
+      externeOmzetOntbreekt: omzet?.externOntbreekt ?? false,
       totalProfit: Math.round(totalProfit * 100) / 100,
     },
     aiSpend: await loadAiSpendSummary(supabase),

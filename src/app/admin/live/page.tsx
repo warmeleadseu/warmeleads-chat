@@ -80,7 +80,16 @@ interface BatchInfo {
   notes: string | null;
   targetAreaLabels?: string[];
 }
-interface CostMetrics { monthAdSpend: number; brutoCpl: number; effectieveCpl: number; avgAssignments: number; distributionAssignmentTotal?: number; netDistributionAssignmentTotal?: number; approvedReclamationsInWindow?: number; batchRevenue: number; bulkRevenue: number; bulkAssignmentCount: number; totalProfit: number; }
+interface CostMetrics { monthAdSpend: number; brutoCpl: number; effectieveCpl: number; avgAssignments: number; distributionAssignmentTotal?: number; netDistributionAssignmentTotal?: number; approvedReclamationsInWindow?: number; omzetPerSoort?: OmzetPerSoort | null; omzetFout?: boolean; totalProfit: number; }
+type OmzetPerSoort = { leads: number; bulk: number; afspraken: number; overig: number; credit: number };
+
+/** "€41.200 leads · €6.300 bulk · ..." voor de omzettegel; alleen wat er is. */
+function omzetOpbouw(p: OmzetPerSoort | null | undefined): string | undefined {
+  if (!p) return undefined;
+  const delen: [string, number][] = [['leads', p.leads], ['bulk', p.bulk], ['afspraken', p.afspraken], ['overig', p.overig], ['credit', p.credit]];
+  const tekst = delen.filter(([, n]) => Math.round(n) !== 0).map(([l, n]) => `${euro(n)} ${l}`);
+  return tekst.length > 1 ? tekst.join(' · ') : undefined;
+}
 interface PaidBatch { id: string; batchId: string; customer: string; branch: string; amount: number; paidAt: string; amId: string | null; amName: string | null; amAvatarUrl?: string | null; celebrationVideoUrl: string | null; videoStart?: number | null; videoEnd?: number | null; }
 interface AMLeaderboardEntry { id: string; name: string; revenue: number; bulkRevenue: number; batches: number; celebrationVideoUrl: string | null; avatarUrl?: string | null; }
 
@@ -829,12 +838,13 @@ function SlideGeld({ data, costMetrics: cm }: { data: LiveData; costMetrics: Cos
       label: 'Omzet deze maand',
       waarde: euro(data.totalRevenue),
       kleur: 'text-white',
-      sub: cm.bulkRevenue > 0 ? `${euro(cm.batchRevenue)} batch + ${euro(cm.bulkRevenue)} bulk` : undefined,
+      sub: cm.omzetFout ? 'omzet kon niet worden geladen' : omzetOpbouw(cm.omzetPerSoort) ?? 'betaald, excl. btw',
+      uitleg: 'Betaald en gefactureerd deze maand, excl. btw, op de dag van betalen: batches, bulk, afspraken, losse en externe facturen, min creditnota’s. Interne klanten tellen niet mee.',
     },
     {
       label: 'Winst deze maand',
       waarde: `${cm.totalProfit >= 0 ? '+' : ''}${euro(cm.totalProfit)}`,
-      sub: 'omzet min ad spend',
+      sub: 'omzet min ad spend (Meta)',
       kleur: cm.totalProfit >= 0 ? 'text-emerald-400' : 'text-red-400',
     },
     {

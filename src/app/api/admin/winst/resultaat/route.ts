@@ -4,10 +4,14 @@ import { createServerClient } from '@/lib/supabase';
 import { berekenBatchWinst } from '@/lib/batchWinst';
 import { laadFacturenPerBatch } from '@/lib/batchWinstLaden';
 import { bouwResultaat, verdiendPerDag, type PeriodeSoort, type PersoneelsRegel, type WinstBatch } from '@/lib/resultaatPerPeriode';
+import { omzetPosten } from '@/lib/omzetPerMaand';
+import { laadExterneOmzet } from '@/lib/omzetPerMaandLaden';
 
 /**
  * Resultaat per periode: verdiende omzet min advertentiekosten min
- * personeelskosten. Vanaf 1 mei 2026 (sinds dan zijn de advertentiekosten
+ * personeelskosten. Gefactureerd volgt dezelfde definitie als het
+ * live-dashboard (src/lib/omzetPerMaand.ts); externe facturen (Rompslomp)
+ * tellen als verdiend én gefactureerd op hun factuurdatum. Vanaf 1 mei 2026 (sinds dan zijn de advertentiekosten
  * bekend). Alleen superadmin. Zie src/lib/resultaatPerPeriode.ts.
  *
  * Filters:
@@ -67,7 +71,7 @@ export async function GET(request: NextRequest) {
     }
     const ids = batches.map(b => b.id);
 
-    const [facturenPerBatch, leveringenRuw, advertentieRuw, personeelRuw, facturenRuw] = await Promise.all([
+    const [facturenPerBatch, leveringenRuw, advertentieRuw, personeelRuw, facturenRuw, externRuw] = await Promise.all([
       laadFacturenPerBatch(supabase, ids),
       (async () => {
         const uit: { batch_id: string; dag: string; aantal: number }[] = [];
@@ -113,6 +117,7 @@ export async function GET(request: NextRequest) {
         }
         return uit;
       })(),
+      laadExterneOmzet(supabase, START).catch(err => { throw new LaadFout(err instanceof Error ? err.message : String(err)); }),
     ]);
     if (advertentieRuw.error) throw new LaadFout(`advertentie: ${advertentieRuw.error.message}`);
     if (personeelRuw.error) throw new LaadFout(`personeel: ${personeelRuw.error.message}`);
@@ -126,7 +131,6 @@ export async function GET(request: NextRequest) {
 
     /* Verdiend: per batch naar rato van levering. */
     const verdiend = new Map<string, number>();
-    const gefactureerd = new Map<string, number>();
     for (const b of batches) {
       const facturen = facturenPerBatch.get(b.id) ?? [];
       const w = berekenBatchWinst(b, facturen, null);
@@ -136,13 +140,10 @@ export async function GET(request: NextRequest) {
         afgerond: b.completed_at ? nlDag(b.completed_at) : null, leveringen: leveringenPerBatch.get(b.id) ?? [],
       };
       for (const [dag, bedrag] of verdiendPerDag(invoer)) plus(verdiend, dag, bedrag);
-      /* Gefactureerd zonder factuur in het systeem (extern of batchprijs): op de aanmaakdag. */
-      if (facturen.length === 0 || w.omzetBron === 'extern') plus(gefactureerd, nlDag(b.created_at), w.omzet);
     }
 
-    /* Facturen: gefactureerd op de betaaldag; losse facturen (zonder batch) ook
-       als verdiend. Afspraken en interne klanten tellen niet. */
-    const batchSet = new Set(ids);
+    /* Losse facturen (zonder batch) tellen als verdiend op de betaaldag;
+       afspraken per geleverde afspraak (hieronder). Interne klanten tellen niet. */
     type Factuur = { id: string; customer_id: string | null; batch_id: string | null; appointment_batch_id: string | null; credit_note_of: string | null; subtotal: number | string | null; status: string; paid_at: string | null; created_at: string; customers: { intern?: boolean } | { intern?: boolean }[] | null };
     const facturen = facturenRuw as unknown as Factuur[];
     const perId = new Map(facturen.map(f => [f.id, f]));
@@ -157,28 +158,29 @@ export async function GET(request: NextRequest) {
       if (f.credit_note_of) {
         const origineel = perId.get(f.credit_note_of);
         if (!origineel || !telt(origineel)) continue;
-        if (origineel.batch_id && !batchSet.has(origineel.batch_id)) continue;
-        const dag = nlDag(f.created_at);
-        plus(gefactureerd, dag, -Math.abs(bedrag));
-        if (!origineel.batch_id && !origineel.appointment_batch_id && origineel.status === 'paid') plus(verdiend, dag, -Math.abs(bedrag));
+        if (!origineel.batch_id && !origineel.appointment_batch_id && origineel.status === 'paid') plus(verdiend, nlDag(f.created_at), -Math.abs(bedrag));
         continue;
       }
-      if (f.status !== 'paid' || !f.paid_at || !telt(f)) continue;
-      if (f.batch_id && !batchSet.has(f.batch_id)) continue;
-      const dag = nlDag(f.paid_at);
-      if (f.batch_id) {
-        /* Een extern bedrag gaat voor op de factuur: die batch telde hierboven al. */
-        const b = batches.find(x => x.id === f.batch_id);
-        if (b && b.extern_bedrag_excl !== null && b.extern_bedrag_excl !== undefined && String(b.extern_bedrag_excl) !== '') continue;
-        plus(gefactureerd, dag, bedrag);
-      } else if (f.appointment_batch_id) {
-        /* Afspraken: gefactureerd op de betaaldag; verdiend per geleverde afspraak (hieronder). */
-        plus(gefactureerd, dag, bedrag);
-      } else {
-        plus(gefactureerd, dag, bedrag);
-        plus(verdiend, dag, bedrag);
-      }
+      if (f.status !== 'paid' || !f.paid_at || !telt(f) || f.batch_id || f.appointment_batch_id) continue;
+      plus(verdiend, nlDag(f.paid_at), bedrag);
     }
+
+    /* Externe facturen: geleverd en gefactureerd buiten het systeem, dus verdiend op de factuurdatum. */
+    for (const e of externRuw.rijen) {
+      if (e.customer_id && uitgesloten.has(e.customer_id)) continue;
+      plus(verdiend, String(e.datum).slice(0, 10), Number(e.bedrag_excl) || 0);
+    }
+
+    /* Gefactureerd: zelfde definitie als het live-dashboard. */
+    const gefactureerd = new Map<string, number>();
+    for (const p of omzetPosten({
+      batches: batches.map(b => ({ id: b.id, customer_id: b.customer_id, batch_kind: b.batch_kind, created_at: b.created_at, total_price: b.total_price, extern_bedrag_excl: b.extern_bedrag_excl })),
+      facturen: facturen.map(f => ({ ...f, intern: Boolean((Array.isArray(f.customers) ? f.customers[0] : f.customers)?.intern) })),
+      afspraakBatches: afspraakBatches?.map(b => ({ id: b.id, customer_id: b.customer_id, total_price: b.total_price, created_at: b.created_at })) ?? null,
+      extern: externRuw.rijen,
+      uitgesloten,
+      dagVan: nlDag,
+    })) plus(gefactureerd, p.dag, p.bedrag);
 
     /* Afspraken: per geleverde afspraak op de dag dat hij werd ingepland. */
     if (afspraakBatches) {
@@ -194,7 +196,6 @@ export async function GET(request: NextRequest) {
         const omzet = gewoon.length > 0
           ? gewoon.reduce((t, x) => t + x.subtotal, 0) - fs2.filter(x => x.credit).reduce((t, x) => t + Math.abs(x.subtotal), 0)
           : Number(b.total_price) || 0;
-        if (gewoon.length === 0) plus(gefactureerd, nlDag(b.created_at), omzet);
         const perDag = new Map<string, number>();
         for (const a of b.afspraken) plus(perDag, nlDag(a), 1);
         const invoer: WinstBatch = {
@@ -220,7 +221,7 @@ export async function GET(request: NextRequest) {
 
     const uitgeslotenKosten = Math.round([...kostenUitgesloten.values()].reduce((t, v) => t + v, 0) * 100) / 100;
     return NextResponse.json(
-      { soort, start: START, vandaag, perioden, personeel, filter: { uitgesloten: [...uitgesloten], afspraken: metAfspraken, uitgeslotenKosten } },
+      { soort, start: START, vandaag, perioden, personeel, externeOmzetOntbreekt: externRuw.ontbreekt, filter: { uitgesloten: [...uitgesloten], afspraken: metAfspraken, uitgeslotenKosten } },
       { headers: { 'Cache-Control': 'no-store' } },
     );
   } catch (err) {
@@ -229,7 +230,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-type AfspraakBatch = { id: string; status: string; batch_size: number; total_price: number | string | null; created_at: string; updated_at: string | null; afspraken: string[] };
+type AfspraakBatch = { id: string; customer_id: string; status: string; batch_size: number; total_price: number | string | null; created_at: string; updated_at: string | null; afspraken: string[] };
 
 /** Betaalde afsprakenbatches (geen interne of uitgesloten klanten), met de momenten van hun geleverde afspraken. */
 async function laadAfspraakBatches(supabase: ReturnType<typeof createServerClient>, uitgesloten: Set<string>): Promise<AfspraakBatch[]> {
@@ -253,7 +254,7 @@ async function laadAfspraakBatches(supabase: ReturnType<typeof createServerClien
     }
   }
   return batches.map(b => ({
-    id: b.id as string, status: b.status as string, batch_size: Number(b.batch_size) || 0, total_price: b.total_price as number | string | null,
+    id: b.id as string, customer_id: b.customer_id as string, status: b.status as string, batch_size: Number(b.batch_size) || 0, total_price: b.total_price as number | string | null,
     created_at: b.created_at as string, updated_at: (b.updated_at as string | null) ?? null, afspraken: perBatch.get(b.id as string) ?? [],
   }));
 }

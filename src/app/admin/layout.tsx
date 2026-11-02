@@ -7,6 +7,7 @@ import { usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   HomeIcon,
+  BanknotesIcon,
   InboxStackIcon,
   UserGroupIcon,
   DocumentArrowUpIcon,
@@ -86,6 +87,7 @@ const NAV: {
   { label: 'Bestellingen', href: '/admin/orders', icon: ShoppingCartIcon, roles: ['superadmin', 'admin', 'accountmanager'] },
   { label: 'Facturen', href: '/admin/invoices', icon: DocumentTextIcon, roles: ['superadmin', 'admin', 'accountmanager'] },
   { label: 'Winst en verlies', href: '/admin/winst', icon: CurrencyEuroIcon, roles: ['superadmin'] },
+  { label: 'Externe omzet', href: '/admin/externe-omzet', icon: BanknotesIcon, roles: ['superadmin'] },
   { label: 'Direct leveren', href: '/admin/direct-leveren', icon: BoltIcon, roles: ['superadmin', 'admin'] },
   { label: 'Acties met loten', href: '/admin/actie', icon: TicketIcon, roles: ['superadmin', 'admin'] },
   { label: 'Branches', href: '/admin/branches', icon: Squares2X2Icon, roles: ['superadmin', 'admin'] },
