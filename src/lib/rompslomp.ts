@@ -12,7 +12,7 @@ import { naamSleutel, type ExterneSoort } from './externeOmzet';
  * 3. Zelfde klant, bedrag en periode als een batch in WarmeLeads: telt niet.
  * 4. Creditfactuur (negatief bedrag): telt; WarmeLeads kent die niet.
  * 5. Bulk: telt.
- * 6. De rest: telt niet tot iemand hem beoordeelt.
+ * 6. De rest (geen batch in WarmeLeads gevonden): telt mee zodra hij betaald is.
  */
 
 export type RompslompFactuur = {
@@ -132,7 +132,7 @@ export function deelIn(
     }
 
     if (basis.soort === 'bulk') { voorstel(true, 'bulk'); continue; }
-    voorstel(false, 'beoordelen: geen batch in WarmeLeads gevonden');
+    voorstel(true, 'geen batch in WarmeLeads gevonden');
   }
   return uit;
 }

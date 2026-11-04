@@ -30,7 +30,7 @@ describe('Rompslomp-facturen indelen', () => {
     ], [b], KLANTEN);
     expect(v[0]).toMatchObject({ telt_mee: false, customer_id: 'k-klant' });
     expect(v[0].reden).toMatch(/staat al in WarmeLeads/);
-    expect(v[1]).toMatchObject({ telt_mee: false, reden: 'beoordelen: geen batch in WarmeLeads gevonden' });
+    expect(v[1]).toMatchObject({ telt_mee: true, reden: 'geen batch in WarmeLeads gevonden' });
   });
 
   it('vergelijkt ook met het factuurbedrag in WarmeLeads, maar niet buiten 45 dagen', () => {
@@ -38,9 +38,9 @@ describe('Rompslomp-facturen indelen', () => {
       factuur({ price_without_vat: '900.0' }),
       factuur({ price_without_vat: '700.0', date: '2026-12-30' }),
     ], [batch({ total_price: 1500, factuurbedrag: 900 }), batch({ total_price: 700 })], []);
-    expect(v.map(x => x.telt_mee)).toEqual([false, false]);
+    expect(v.map(x => x.telt_mee)).toEqual([false, true]);
     expect(v[0].reden).toMatch(/staat al/);
-    expect(v[1].reden).toMatch(/^beoordelen/);
+    expect(v[1]).toMatchObject({ telt_mee: true, reden: 'geen batch in WarmeLeads gevonden' });
   });
 
   it('bulk telt mee; met het externe factuurnummer op een batch telt alleen het verschil', () => {
