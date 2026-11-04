@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deelIn, zelfdeKlant, type RompslompFactuur, type WlBatch } from '../rompslomp';
+import { deelIn, zakelijkDomein, zelfdeKlant, type RompslompFactuur, type WlBatch } from '../rompslomp';
 
 let n = 0;
 const factuur = (o: Partial<RompslompFactuur> & { klant?: string }): RompslompFactuur => ({
@@ -73,5 +73,31 @@ describe('Rompslomp-facturen indelen', () => {
     ], [], []);
     expect(v).toHaveLength(1);
     expect(v[0]).toMatchObject({ betaald: false, telt_mee: true });
+  });
+});
+
+describe('Rompslomp: klant onder een andere naam', () => {
+  it('herkent een batch via het e-maildomein en een bedrag met of zonder btw', () => {
+    const v = deelIn([
+      factuur({ klant: 'Solaris Prime', cached_contact: { name: 'Solaris Prime', contact_person_email_address: 'verkoop@solarisprime.nl' }, price_without_vat: '2700.0', description: 'TB Leads Warm/vers' }),
+      factuur({ klant: 'EGS Projects', price_without_vat: '1089.0', description: '37 exclusieve leads' }),
+      factuur({ klant: 'Iemand', cached_contact: { name: 'Iemand', contact_person_email_address: 'x@gmail.com' }, price_without_vat: '500.0' }),
+    ], [
+      batch({ klant: 'van Hattum Professionals', klant_email: 'a.weis@solarisprime.nl', total_price: 2700 }),
+      batch({ klant: 'EGS Projects', total_price: 1500, factuurbedrag: 900 }),
+      batch({ klant: 'Ander', klant_email: 'y@gmail.com', total_price: 500 }),
+    ], [{ id: 'k-sp', name: 'van Hattum Professionals', email: 'a.weis@solarisprime.nl' }]);
+    expect(v.find(x => x.klant_naam === 'Solaris Prime')).toMatchObject({ telt_mee: false, customer_id: 'k-sp' });
+    expect(v.find(x => x.klant_naam === 'EGS Projects')).toMatchObject({ telt_mee: false });
+    expect(v.find(x => x.klant_naam === 'Iemand')).toMatchObject({ telt_mee: true, reden: 'geen batch in WarmeLeads gevonden' });
+  });
+});
+
+describe('zakelijk e-maildomein', () => {
+  it('laat algemene domeinen weg, maar niet een domein dat er toevallig mee begint', () => {
+    expect(zakelijkDomein('a@gmail.com')).toBeNull();
+    expect(zakelijkDomein('facturen@metis-green.nl')).toBe('metis-green.nl');
+    expect(zakelijkDomein('x@mail.partof.nl')).toBe('partof.nl');
+    expect(zakelijkDomein('')).toBeNull();
   });
 });

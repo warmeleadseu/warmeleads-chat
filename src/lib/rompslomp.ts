@@ -10,6 +10,9 @@ import { naamSleutel, type ExterneSoort } from './externeOmzet';
  * 2. Gekoppeld aan een batch via het externe factuurnummer: alleen wat er
  *    boven het bedrag op die batch uitkomt telt.
  * 3. Zelfde klant, bedrag en periode als een batch in WarmeLeads: telt niet.
+ *    Zelfde klant = zelfde naam, of zelfde e-maildomein (Solaris Prime heet in
+ *    WarmeLeads "van Hattum Professionals"). Bedrag: ook met of zonder 21%
+ *    btw, omdat dat in Rompslomp soms andersom is ingevuld.
  * 4. Creditfactuur (negatief bedrag): telt; WarmeLeads kent die niet.
  * 5. Bulk: telt.
  * 6. De rest (geen batch in WarmeLeads gevonden): telt mee zodra hij betaald is.
@@ -23,12 +26,12 @@ export type RompslompFactuur = {
   payment_status: string;
   price_without_vat: string | number;
   description?: string | null;
-  cached_contact?: { name?: string | null } | null;
+  cached_contact?: { name?: string | null; contact_person_email_address?: string | null } | null;
   invoice_lines?: { description?: string | null }[] | null;
 };
 
 export type WlBatch = {
-  id: string; klant: string | null; created_at: string; total_price: number | string | null;
+  id: string; klant: string | null; klant_email?: string | null; created_at: string; total_price: number | string | null;
   extern_factuurnummer?: string | null; extern_bedrag_excl?: number | string | null; factuurbedrag?: number | null;
 };
 
@@ -60,13 +63,21 @@ export function zelfdeKlant(a: string | null | undefined, b: string | null | und
   return kort.length >= 5 && lang.startsWith(kort);
 }
 
+/** Het domein van een zakelijk e-mailadres; leeg voor gmail, hotmail en dergelijke. */
+const ALGEMEEN = /^(gmail|googlemail|hotmail|outlook|live|icloud|me|yahoo|ziggo|kpnmail|kpnplanet|planet|home|hetnet|xs4all|telenet|skynet|msn|protonmail|proton)\./;
+export function zakelijkDomein(email: string | null | undefined): string | null {
+  const d = String(email ?? '').trim().toLowerCase().split('@')[1];
+  if (!d || ALGEMEEN.test(d)) return null;
+  return d.replace(/^(mail|email|info)\./, '');
+}
+
 export const BETAALD = new Set(['paid', 'overpaid']);
 export const VANAF = '2026-05-01';
 
 export function deelIn(
   facturen: RompslompFactuur[],
   batches: WlBatch[],
-  klanten: { id: string; name: string | null }[],
+  klanten: { id: string; name: string | null; email?: string | null }[],
 ): Voorstel[] {
   const perNaam = new Map<string, string | null>();
   for (const k of klanten) {
@@ -74,13 +85,20 @@ export function deelIn(
     const s = naamSleutel(k.name);
     perNaam.set(s, perNaam.has(s) ? null : k.id);
   }
-  /* Klant in WarmeLeads: dezelfde naam, of anders precies één klant waarvan de naam ermee begint. */
-  const klantId = (naam: string | null): string | null => {
-    if (!naam) return null;
-    const exact = perNaam.get(naamSleutel(naam));
-    if (exact !== undefined) return exact;
-    const kandidaten = klanten.filter(k => zelfdeKlant(k.name, naam));
-    return kandidaten.length === 1 ? kandidaten[0].id : null;
+  /* Klant in WarmeLeads: dezelfde naam, anders precies één klant waarvan de
+     naam ermee begint, anders precies één klant met hetzelfde e-maildomein. */
+  const klantId = (naam: string | null, domein: string | null): string | null => {
+    if (naam) {
+      const exact = perNaam.get(naamSleutel(naam));
+      if (exact !== undefined && exact !== null) return exact;
+      const kandidaten = klanten.filter(k => zelfdeKlant(k.name, naam));
+      if (kandidaten.length === 1) return kandidaten[0].id;
+    }
+    if (domein) {
+      const opDomein = klanten.filter(k => zakelijkDomein(k.email) === domein);
+      if (opDomein.length === 1) return opDomein[0].id;
+    }
+    return null;
   };
   const gebruikt = new Set<string>();
   const uit: Voorstel[] = [];
@@ -92,12 +110,13 @@ export function deelIn(
 
   for (const f of lijst) {
     const klant = f.cached_contact?.name?.trim() || null;
+    const domein = zakelijkDomein(f.cached_contact?.contact_person_email_address);
     const regels = (f.invoice_lines ?? []).map(l => l.description ?? '').filter(Boolean).join(' | ');
     const tekst = `${f.description ?? ''} ${regels}`;
     const bedrag = Math.round(getal(f.price_without_vat) * 100) / 100;
     const basis = {
       extern_id: String(f.id), datum: f.date.slice(0, 10), factuurnummer: f.invoice_number || null, klant_naam: klant,
-      customer_id: klantId(klant), bedrag_excl: bedrag,
+      customer_id: klantId(klant, domein), bedrag_excl: bedrag,
       soort: (/bulk/i.test(tekst) ? 'bulk' : 'overig') as ExterneSoort,
       omschrijving: (f.description?.trim() || regels || null)?.slice(0, 300) ?? null,
       betaald: BETAALD.has(f.payment_status),
@@ -120,10 +139,12 @@ export function deelIn(
     if (/credit|terugbetaling/i.test(tekst)) { voorstel(false, 'beoordelen: creditfactuur met een positief bedrag'); continue; }
 
     const dubbel = batches.find(b => {
-      if (gebruikt.has(b.id) || !zelfdeKlant(b.klant, klant) || dagen(b.created_at, f.date) > 45) return false;
+      const klantGelijk = zelfdeKlant(b.klant, klant) || (domein !== null && zakelijkDomein(b.klant_email) === domein);
+      if (gebruikt.has(b.id) || !klantGelijk || dagen(b.created_at, f.date) > 45) return false;
       const marge = Math.max(5, bedrag * 0.01);
       return [b.factuurbedrag, getal(b.total_price), b.extern_bedrag_excl == null ? null : getal(b.extern_bedrag_excl)]
-        .some(x => x !== null && x !== undefined && Math.abs(x - bedrag) <= marge);
+        .flatMap(x => (x === null || x === undefined ? [] : [x, x * 1.21, x / 1.21]))
+        .some(x => Math.abs(x - bedrag) <= marge);
     });
     if (dubbel) {
       gebruikt.add(dubbel.id);

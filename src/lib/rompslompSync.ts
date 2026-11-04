@@ -42,16 +42,16 @@ async function laadBatches(supabase: SupabaseClient): Promise<WlBatch[]> {
   for (let p = 0; p < 20; p++) {
     const { data, error } = await supabase
       .from('customer_batches')
-      .select('id, created_at, total_price, extern_factuurnummer, extern_bedrag_excl, customers(name), invoices(subtotal, credit_note_of)')
+      .select('id, created_at, total_price, extern_factuurnummer, extern_bedrag_excl, customers(name, email), invoices(subtotal, credit_note_of)')
       .gte('created_at', '2026-03-15')
       .order('id')
       .range(p * 1000, p * 1000 + 999);
     if (error) throw new Error(`batches: ${error.message}`);
     for (const b of data ?? []) {
-      const k = (Array.isArray(b.customers) ? b.customers[0] : b.customers) as { name?: string } | null;
+      const k = (Array.isArray(b.customers) ? b.customers[0] : b.customers) as { name?: string; email?: string } | null;
       const f = ((b.invoices ?? []) as { subtotal: number | string | null; credit_note_of: string | null }[]).filter(x => !x.credit_note_of);
       uit.push({
-        id: b.id as string, klant: k?.name ?? null, created_at: b.created_at as string, total_price: b.total_price as number | null,
+        id: b.id as string, klant: k?.name ?? null, klant_email: k?.email ?? null, created_at: b.created_at as string, total_price: b.total_price as number | null,
         extern_factuurnummer: b.extern_factuurnummer as string | null, extern_bedrag_excl: b.extern_bedrag_excl as number | null,
         factuurbedrag: f.length > 0 ? f.reduce((s, x) => s + (Number(x.subtotal) || 0), 0) : null,
       });
@@ -62,11 +62,11 @@ async function laadBatches(supabase: SupabaseClient): Promise<WlBatch[]> {
 }
 
 async function laadKlanten(supabase: SupabaseClient) {
-  const uit: { id: string; name: string | null }[] = [];
+  const uit: { id: string; name: string | null; email: string | null }[] = [];
   for (let p = 0; p < 20; p++) {
-    const { data, error } = await supabase.from('customers').select('id, name').order('id').range(p * 1000, p * 1000 + 999);
+    const { data, error } = await supabase.from('customers').select('id, name, email').order('id').range(p * 1000, p * 1000 + 999);
     if (error) throw new Error(`klanten: ${error.message}`);
-    uit.push(...((data ?? []) as { id: string; name: string | null }[]));
+    uit.push(...((data ?? []) as { id: string; name: string | null; email: string | null }[]));
     if (!data || data.length < 1000) break;
   }
   return uit;
