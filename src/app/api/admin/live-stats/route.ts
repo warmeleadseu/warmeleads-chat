@@ -6,18 +6,14 @@ import {
 } from '@/lib/metaCpl';
 import { createServerClient } from '@/lib/supabase';
 import { requireSuperAdmin } from '@/lib/adminAuth';
-import { leaderboardYearMonthFromDate, leaderboardMonthStartIsoFromYearMonth, type ManualLineRow, type MonthlyPaidBatchRow } from '@/lib/amLeaderboardRules';
-import {
-  computeLeaderboardMapsFromDbRows,
-  fetchMonthlyPaidBatchesForLeaderboard,
-  loadLeaderboardExcludedBatchIds,
-  loadLeaderboardManualLines,
-} from '@/lib/amLeaderboardServer';
+import type { ManualLineRow } from '@/lib/amLeaderboardRules';
+import { loadLeaderboardExcludedBatchIds, loadLeaderboardManualLines } from '@/lib/amLeaderboardServer';
 import { adminCustomerLiveUnpaidEmbed, adminCustomerTargetsOnly } from '@/lib/adminBatchQueries';
 import { activeTargetSummariesFromUnknown } from '@/lib/batchTargetAreas';
 import { laadActieSamenvatting } from '@/lib/lotenActieLaden';
-import { omzetPosten, telOmzet } from '@/lib/omzetPerMaand';
-import { laadBetaaldeBatches, laadExterneOmzet, laadFacturen } from '@/lib/omzetPerMaandLaden';
+import { telOmzet } from '@/lib/omzetPerMaand';
+import { laadOmzetMetAm } from '@/lib/omzetPerMaandLaden';
+import { omzetPerAm } from '@/lib/omzetPerAm';
 import { amsterdamWallTimeToUtc, amsterdamYmd } from '@/lib/appointmentSlots';
 import {
   countApprovedReclamationsForAssignments,
@@ -28,10 +24,9 @@ const BREAKDOWN_LOOKBACK_DAYS = 90;
 /** Max rijen voor provincie/tak in JS-aggregatie (voorkomt full-table reads). */
 const BREAKDOWN_MAX_ROWS = 12_000;
 const BATCHES_LIST_LIMIT = 1_500;
-const BULK_ASSIGNMENTS_MAX_PAGES = 80;
 
 const LIVE_STATS_CACHE_TTL_MS = 45_000;
-const LIVE_STATS_CACHE_KEY = 'live-stats-v10';
+const LIVE_STATS_CACHE_KEY = 'live-stats-v11';
 /** Batches en facturen van vóór deze dag tellen niet meer mee in de maandomzet. */
 const OMZET_LAAD_VANAF = '2026-01-01';
 const UNPAID_BATCH_FEED_LIMIT = 18;
@@ -290,14 +285,13 @@ export async function GET(request: NextRequest) {
      losse facturen, creditnota's en externe facturen; zonder interne klanten
      en zonder afspraken (die tellen niet mee in omzet en winst, 4 nov 2026). Eén definitie met Winst en verlies, zie
      src/lib/omzetPerMaand.ts. Een fout mag het dashboard niet breken. */
+  const omzetBron = await laadOmzetMetAm(supabase, OMZET_LAAD_VANAF).catch(err => {
+    console.error('[live-stats] omzet laden', err instanceof Error ? err.message : err);
+    return null;
+  });
   const omzet = await (async () => {
-    const [batches, facturen, extern] = await Promise.all([
-      laadBetaaldeBatches(supabase, OMZET_LAAD_VANAF),
-      laadFacturen(supabase, OMZET_LAAD_VANAF),
-      laadExterneOmzet(supabase, OMZET_LAAD_VANAF),
-    ]);
-    const posten = omzetPosten({ batches, facturen, afspraakBatches: null, extern: extern.rijen, dagVan: iso => amsterdamYmd(new Date(iso)) });
-    return { ...telOmzet(posten, maandDag, amsterdamYmd(new Date())), externOntbreekt: extern.ontbreekt };
+    if (!omzetBron) throw new Error('omzet niet geladen');
+    return { ...telOmzet(omzetBron.posten, maandDag, amsterdamYmd(new Date())), externOntbreekt: omzetBron.externOntbreekt };
   })().catch(err => {
     console.error('[live-stats] omzet', err instanceof Error ? err.message : err);
     return null;
@@ -521,76 +515,35 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const yearMonth = leaderboardYearMonthFromDate();
-  const monthStart = leaderboardMonthStartIsoFromYearMonth(yearMonth);
-  let monthlyPaidBatches: MonthlyPaidBatchRow[] = [];
+  /* Leaderboard: dezelfde betaalde omzet als hierboven, per accountmanager
+     (src/lib/omzetPerAm.ts), met de uitsluitingen en handmatige regels van
+     /admin/am-leaderboard. Zo telt het podium op tot de omzet van de maand. */
+  const yearMonth = maandDag.slice(0, 7);
   let excludedBatchIds = new Set<string>();
   let manualLeaderboardLines: ManualLineRow[] = [];
   try {
-    const w = await Promise.all([
-      fetchMonthlyPaidBatchesForLeaderboard(supabase, yearMonth),
+    [excludedBatchIds, manualLeaderboardLines] = await Promise.all([
       loadLeaderboardExcludedBatchIds(supabase, yearMonth),
       loadLeaderboardManualLines(supabase, yearMonth),
     ]);
-    monthlyPaidBatches = w[0];
-    excludedBatchIds = w[1];
-    manualLeaderboardLines = w[2];
   } catch (e) {
-    console.warn('[live-stats] leaderboard overrides niet geladen, fallback zonder uitsluitingen:', e);
-    const { data } = await supabase
-      .from('customer_batches')
-      .select('id, total_price, account_manager_id, customer_id, customers(account_manager_id)')
-      .eq('is_paid', true)
-      .gte('created_at', monthStart);
-    monthlyPaidBatches = (data || []) as MonthlyPaidBatchRow[];
+    console.warn('[live-stats] leaderboard overrides niet geladen, zonder uitsluitingen:', e);
   }
-
-  const { amRevenue, amBatchCount } = computeLeaderboardMapsFromDbRows(
-    monthlyPaidBatches,
-    excludedBatchIds,
-    manualLeaderboardLines,
-  );
-
-  const { data: bulkCustomers } = await supabase
-    .from('customers')
-    .select('id, bulk_price_per_lead, account_manager_id')
-    .not('bulk_price_per_lead', 'is', null);
-
+  const perAm = omzetBron
+    ? omzetPerAm(omzetBron.posten, { vanDag: maandDag, totDag: amsterdamYmd(new Date()) }, omzetBron.bronnen, excludedBatchIds)
+    : new Map();
+  const amRevenue = new Map<string, number>();
   const amBulkRevenue = new Map<string, number>();
-  let bulkAssignmentsTruncated = false;
-  if (bulkCustomers && bulkCustomers.length > 0) {
-    const bulkMap = new Map<string, { price: number; amId: string | null }>();
-    for (const c of bulkCustomers) {
-      bulkMap.set(c.id, { price: Number(c.bulk_price_per_lead), amId: c.account_manager_id });
-    }
-
-    const bulkCustIds = [...bulkMap.keys()];
-    let bulkAssignments: { customer_id: string }[] = [];
-    const PAGE = 1000;
-    let offset = 0;
-    for (let p = 0; p < BULK_ASSIGNMENTS_MAX_PAGES; p++) {
-      const { data } = await supabase
-        .from('lead_assignments')
-        .select('customer_id')
-        .is('batch_id', null)
-        .in('customer_id', bulkCustIds)
-        .gte('assigned_at', monthStart)
-        .range(offset, offset + PAGE - 1);
-      if (!data || data.length === 0) break;
-      bulkAssignments = bulkAssignments.concat(data);
-      if (data.length < PAGE) break;
-      offset += PAGE;
-      if (p === BULK_ASSIGNMENTS_MAX_PAGES - 1) {
-        bulkAssignmentsTruncated = true;
-        break;
-      }
-    }
-
-    for (const a of bulkAssignments) {
-      const info = bulkMap.get(a.customer_id);
-      if (!info || !info.amId) continue;
-      amBulkRevenue.set(info.amId, (amBulkRevenue.get(info.amId) || 0) + info.price);
-    }
+  const amBatchCount = new Map<string, number>();
+  for (const [amId, r] of perAm) {
+    if (!amId) continue;
+    amRevenue.set(amId, Math.round((r.totaal - r.bulk) * 100) / 100);
+    amBulkRevenue.set(amId, r.bulk);
+    amBatchCount.set(amId, r.batches);
+  }
+  for (const m of manualLeaderboardLines) {
+    amRevenue.set(m.admin_user_id, Math.round(((amRevenue.get(m.admin_user_id) || 0) + (Number(m.amount_euro) || 0)) * 100) / 100);
+    if (Number(m.counts_as_batch) === 1) amBatchCount.set(m.admin_user_id, (amBatchCount.get(m.admin_user_id) || 0) + 1);
   }
 
   const { data: allAMs } = await supabase
@@ -628,6 +581,11 @@ export async function GET(request: NextRequest) {
   > = {};
 
   const { data: profitData } = await supabase.rpc('period_profit_stats');
+  /* De omzet in die cijfers (batchprijs bij aanmaken) vervangen we door de
+     betaalde omzet, zodat "laatste 24 uur" dezelfde definitie heeft als de
+     maandomzet. Winst = omzet min de advertentiekosten uit dezelfde functie. */
+  const omzetTussen = (van: number, tot: number) =>
+    omzetBron ? Math.round(omzetBron.posten.filter(p => { const t = Date.parse(p.moment); return t >= van && t < tot; }).reduce((s, p) => s + p.bedrag, 0) * 100) / 100 : null;
   if (profitData) {
     for (const key of Object.keys(profitData)) {
       const pp = profitData[key];
@@ -644,6 +602,18 @@ export async function GET(request: NextRequest) {
           profit: Math.round((Number(pp.profit) || 0) * 100) / 100,
           prevProfit: Math.round((Number(pp.prev_profit) || 0) * 100) / 100,
         };
+        if (key === 'day') {
+          const nu = Date.now();
+          const dag = omzetTussen(nu - 86_400_000, nu);
+          const vorige = omzetTussen(nu - 2 * 86_400_000, nu - 86_400_000);
+          const ps = periodStats[key];
+          if (dag !== null && vorige !== null) {
+            ps.revenue = dag;
+            ps.prevRevenue = vorige;
+            ps.profit = Math.round((dag - ps.adSpend) * 100) / 100;
+            ps.prevProfit = Math.round((vorige - ps.prevAdSpend) * 100) / 100;
+          }
+        }
       }
     }
   }
@@ -712,8 +682,6 @@ export async function GET(request: NextRequest) {
       metaCampaignPagesFetched,
       metaCampaignTruncated,
       batchesListLimit: BATCHES_LIST_LIMIT,
-      bulkAssignmentsMaxPages: BULK_ASSIGNMENTS_MAX_PAGES,
-      bulkAssignmentsTruncated,
       cacheTtlMs: LIVE_STATS_CACHE_TTL_MS,
       computeMs: Date.now() - t0,
     },

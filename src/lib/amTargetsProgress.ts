@@ -1,4 +1,14 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { laadOmzetMetAm, OMZET_LADEN_VANAF } from './omzetPerMaandLaden';
+import { omzetPerAm } from './omzetPerAm';
+
+export type OmzetBron = ReturnType<typeof laadOmzetMetAm>;
+
+/** Laadt de omzet één keer voor meerdere targets. */
+export function omzetBronVoorTargets(supabase: SupabaseClient): () => OmzetBron {
+  let bron: OmzetBron | null = null;
+  return () => (bron ??= laadOmzetMetAm(supabase, OMZET_LADEN_VANAF));
+}
 
 const ASSIGN_PAGE = 1000;
 const ASSIGN_MAX_PAGES = 200;
@@ -16,8 +26,12 @@ export function shouldCountAssignmentForAmTargetLead(
 }
 
 /**
- * Zelfde meetlogica als `/api/admin/am-targets` (batch.account_manager_id op customer_batches;
- * geen fallback naar klant-AM — dat kan afwijken van het live leaderboard).
+ * Voortgang van een target. Omzet: dezelfde betaalde omzet als het dashboard
+ * en het leaderboard (src/lib/omzetPerAm.ts): excl. btw, op de dag van
+ * betalen, met losse en externe facturen en min creditnota's; de
+ * accountmanager van de batch, anders die van de klant. Tot 4 nov 2026 telde
+ * hier de batchprijs bij aanmaken, ook als de batch nog niet betaald was.
+ * Uitsluitingen van het leaderboard gelden hier niet.
  */
 export async function calculateAmTargetProgress(
   supabase: SupabaseClient,
@@ -25,6 +39,7 @@ export async function calculateAmTargetProgress(
   targetType: string,
   periodStart: string,
   periodEnd: string,
+  omzet: () => OmzetBron = omzetBronVoorTargets(supabase),
 ): Promise<number> {
   const endPlusOne = new Date(periodEnd);
   endPlusOne.setDate(endPlusOne.getDate() + 1);
@@ -32,13 +47,9 @@ export async function calculateAmTargetProgress(
 
   switch (targetType) {
     case 'revenue': {
-      const { data } = await supabase
-        .from('customer_batches')
-        .select('total_price')
-        .eq('account_manager_id', adminUserId)
-        .gte('created_at', periodStart)
-        .lt('created_at', endISO);
-      return (data || []).reduce((sum: number, b: { total_price?: unknown }) => sum + (Number(b.total_price) || 0), 0);
+      const { posten, bronnen } = await omzet();
+      const r = omzetPerAm(posten, { vanDag: periodStart.slice(0, 10), totDag: periodEnd.slice(0, 10) }, bronnen).get(adminUserId);
+      return r?.totaal ?? 0;
     }
     case 'batches': {
       const { count } = await supabase

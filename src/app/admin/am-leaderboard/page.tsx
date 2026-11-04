@@ -7,7 +7,12 @@ import { useAdmin } from '../adminContext';
 import { leaderboardYearMonthFromDate } from '@/lib/amLeaderboardRules';
 
 type BatchLine = {
-  batch_id: string;
+  /** Uniek per regel; batch_id is leeg bij een losse of externe factuur. */
+  regel_id: string;
+  batch_id: string | null;
+  soort: string;
+  /** Dag van betalen (YYYY-MM-DD). */
+  dag: string;
   customer_name: string;
   branch: string;
   batch_kind: string | null;
@@ -16,6 +21,8 @@ type BatchLine = {
   excluded: boolean;
   exclusion?: { id: string; reason: string | null; created_at: string };
 };
+
+const dagNl = (iso: string) => { const [, m, d] = iso.slice(0, 10).split('-'); return `${Number(d)}-${Number(m)}`; };
 
 type ManualLine = {
   id: string;
@@ -88,7 +95,6 @@ export default function AmLeaderboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [rows, setRows] = useState<AmRow[]>([]);
-  const [bulkTrunc, setBulkTrunc] = useState(false);
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -116,7 +122,6 @@ export default function AmLeaderboardPage() {
           targets: r.targets ?? [],
         })),
       );
-      setBulkTrunc(Boolean((data as { bulk_assignments_truncated?: boolean }).bulk_assignments_truncated));
     } catch {
       setError('Netwerkfout');
       setRows([]);
@@ -233,15 +238,16 @@ export default function AmLeaderboardPage() {
       <div>
         <h1 className="text-xl font-bold text-slate-900">AM leaderboard</h1>
         <p className="mt-1 max-w-3xl text-sm text-slate-600">
-          Zelfde bron als het live-dashboard: betaalde batches in de kalendermaand (plus bulk-schatting), met
-          superadmin-uitsluitingen en handmatige correcties. Wijzigingen zijn zichtbaar in het activiteitenlog.
+          Dezelfde omzet als op het live-dashboard: betaald, excl. btw, in de maand van betalen. Batches, bulk, losse
+          en externe facturen (Rompslomp), min creditnota’s; geen afspraken en geen interne klanten. Telt bij de
+          accountmanager van de batch, anders bij die van de klant. Met superadmin-uitsluitingen en handmatige
+          correcties; wijzigingen staan in het activiteitenlog.
           <span className="mt-1 block text-slate-500">
-            <strong>AM targets</strong> met een periode die deze maand raakt: voortgang volgens de{' '}
+            De{' '}
             <a href="/admin/am-targets" className="font-medium text-brand-purple underline">
-              AM-targets
-            </a>
-            -definitie (o.a. omzet/batches op <code className="text-xs">customer_batches.account_manager_id</code>, kan
-            afwijken van leaderboard-attributie).
+              omzettargets
+            </a>{' '}
+            gebruiken dezelfde omzet, maar zonder de uitsluitingen en handmatige regels van deze pagina.
           </span>
         </p>
       </div>
@@ -269,7 +275,6 @@ export default function AmLeaderboardPage() {
         >
           Vernieuwen
         </button>
-        {bulkTrunc && <span className="text-xs font-medium text-amber-700">Bulk-telling afgekapt (veiligheid)</span>}
       </div>
 
       {error && (
@@ -349,7 +354,7 @@ export default function AmLeaderboardPage() {
                     <p className="font-bold text-slate-900">{am.name}</p>
                     <p className="text-xs text-slate-500 break-words">
                       Leaderboard: <span className="font-semibold text-emerald-700">{eur(am.leaderboard_total)}</span> ·{' '}
-                      {am.leaderboard_batches} batches · bulk {eur(am.bulk_revenue)} · batches-subtotaal {eur(am.revenue_from_batches)}
+                      {am.leaderboard_batches} batches · bulk {eur(am.bulk_revenue)} · zonder bulk {eur(am.revenue_from_batches)}
                     </p>
                   </div>
                 </button>
@@ -409,30 +414,33 @@ export default function AmLeaderboardPage() {
                       </>
                     )}
 
-                    <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-400">Meetellende batches</p>
+                    <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-400">Wat meetelt</p>
                     {am.included_batches.length === 0 ? (
                       <p className="text-slate-500">Geen.</p>
                     ) : (
                       <ul className="space-y-2">
                         {am.included_batches.map(b => (
-                          <li key={b.batch_id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2">
+                          <li key={b.regel_id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2">
                             <span className="min-w-0 flex-1 break-words">
                               <span className="font-medium text-slate-800">{b.customer_name}</span>
                               <span className="text-slate-500"> · {b.branch}</span>
                               {b.batch_kind && b.batch_kind !== 'leads' && (
                                 <span className="text-slate-400"> · {b.batch_kind}</span>
                               )}
+                              <span className="text-slate-400"> · betaald {dagNl(b.dag)}</span>
                               <span className="ml-2 font-semibold tabular-nums text-slate-900">{eur(b.total_price)}</span>
                             </span>
+                            {b.batch_id && (
                             <button
                               type="button"
                               disabled={busy === `ex-${b.batch_id}`}
-                              onClick={() => void excludeBatch(b.batch_id)}
+                              onClick={() => void excludeBatch(b.batch_id as string)}
                               className="inline-flex items-center gap-1 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-900 hover:bg-amber-100 disabled:opacity-50"
                             >
                               <XMarkIcon className="h-3.5 w-3.5" />
                               Niet op leaderboard
                             </button>
+                            )}
                           </li>
                         ))}
                       </ul>
@@ -443,7 +451,7 @@ export default function AmLeaderboardPage() {
                         <p className="mb-2 mt-4 text-xs font-bold uppercase tracking-wide text-amber-700">Uitgesloten (tellen niet mee)</p>
                         <ul className="space-y-2">
                           {am.excluded_batches.map(b => (
-                            <li key={b.batch_id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-100 bg-amber-50/60 px-3 py-2">
+                            <li key={b.regel_id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-100 bg-amber-50/60 px-3 py-2">
                               <span className="min-w-0 flex-1 break-words">
                                 <span className="font-medium text-slate-800">{b.customer_name}</span>
                                 <span className="text-slate-500"> · {eur(b.total_price)}</span>

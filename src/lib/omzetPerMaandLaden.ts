@@ -1,5 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { ExterneOmzetRij, OmzetAfspraakBatch, OmzetBatch, OmzetFactuur } from './omzetPerMaand';
+import { omzetPosten, type ExterneOmzetRij, type OmzetAfspraakBatch, type OmzetBatch, type OmzetFactuur, type OmzetPost } from './omzetPerMaand';
+import type { AmBronnen } from './omzetPerAm';
+import { amsterdamYmd } from './appointmentSlots';
 
 /**
  * Laadt wat omzetPosten (src/lib/omzetPerMaand.ts) nodig heeft, sinds
@@ -9,6 +11,8 @@ import type { ExterneOmzetRij, OmzetAfspraakBatch, OmzetBatch, OmzetFactuur } fr
  */
 
 const SOORTEN = ['leads', 'bulk_leads', 'niche_research'];
+/** Vanaf hier laden het dashboard, het leaderboard en de omzettargets. */
+export const OMZET_LADEN_VANAF = '2026-01-01';
 type Klant = { intern?: boolean } | { intern?: boolean }[] | null;
 const intern = (k: Klant) => Boolean((Array.isArray(k) ? k[0] : k)?.intern);
 
@@ -27,7 +31,7 @@ export async function laadBetaaldeBatches(supabase: SupabaseClient, vanaf: strin
   const rijen = await alles<OmzetBatch & { customers: Klant }>(
     (van, tot) => supabase
       .from('customer_batches')
-      .select('id, customer_id, batch_kind, created_at, total_price, extern_bedrag_excl, customers(intern)')
+      .select('id, customer_id, batch_kind, created_at, total_price, extern_bedrag_excl, account_manager_id, customers(intern)')
       .in('batch_kind', SOORTEN)
       .eq('is_paid', true)
       .gte('created_at', vanaf)
@@ -92,4 +96,30 @@ export async function laadExterneOmzet(supabase: SupabaseClient, vanaf: string):
     if (!data || data.length < 1000) break;
   }
   return { rijen: uit, ontbreekt: false };
+}
+
+/**
+ * Alle omzetposten sinds `vanaf` (zonder afspraken, zoals op het dashboard en
+ * in Winst en verlies) plus wie de accountmanager is van elke batch en klant.
+ * Basis voor het leaderboard en de omzettargets (src/lib/omzetPerAm.ts).
+ */
+export async function laadOmzetMetAm(supabase: SupabaseClient, vanaf: string): Promise<{ posten: OmzetPost[]; bronnen: AmBronnen; externOntbreekt: boolean }> {
+  const [batches, facturen, extern, klanten] = await Promise.all([
+    laadBetaaldeBatches(supabase, vanaf),
+    laadFacturen(supabase, vanaf),
+    laadExterneOmzet(supabase, vanaf),
+    alles<{ id: string; account_manager_id: string | null }>(
+      (van, tot) => supabase.from('customers').select('id, account_manager_id').order('id').range(van, tot),
+      'klanten',
+    ),
+  ]);
+  const posten = omzetPosten({ batches, facturen, afspraakBatches: null, extern: extern.rijen, dagVan: iso => amsterdamYmd(new Date(iso)) });
+  return {
+    posten,
+    bronnen: {
+      batchAm: new Map(batches.map(b => [b.id, b.account_manager_id ?? null])),
+      klantAm: new Map(klanten.map(k => [k.id, k.account_manager_id])),
+    },
+    externOntbreekt: extern.ontbreekt,
+  };
 }

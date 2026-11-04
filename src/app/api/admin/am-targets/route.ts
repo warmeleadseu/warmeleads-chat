@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
-import { calculateAmTargetProgress } from '@/lib/amTargetsProgress';
+import { calculateAmTargetProgress, omzetBronVoorTargets } from '@/lib/amTargetsProgress';
 
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
@@ -29,9 +29,10 @@ export async function GET(request: NextRequest) {
     revenue: 'Omzet', batches: 'Batches', new_customers: 'Klanten', leads_delivered: 'Leads',
   };
 
+  const omzet = omzetBronVoorTargets(supabase);
   const enriched = await Promise.all(
     (targets || []).map(async (t: any) => {
-      const current = await calculateAmTargetProgress(supabase, t.admin_user_id, t.target_type, t.period_start, t.period_end);
+      const current = await calculateAmTargetProgress(supabase, t.admin_user_id, t.target_type, t.period_start, t.period_end, omzet);
       const pct = Number(t.target_value) > 0 ? Math.round((current / Number(t.target_value)) * 100) : 0;
 
       // One-time target-hit celebration

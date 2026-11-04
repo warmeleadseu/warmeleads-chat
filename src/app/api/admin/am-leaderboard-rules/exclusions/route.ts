@@ -41,11 +41,10 @@ export async function POST(request: NextRequest) {
   }
 
   const supabase = createServerClient();
-  const monthStart = leaderboardMonthStartIsoFromYearMonth(year_month);
 
   const { data: batch, error: bErr } = await supabase
     .from('customer_batches')
-    .select('id, is_paid, created_at')
+    .select('id, is_paid')
     .eq('id', customer_batch_id)
     .maybeSingle();
 
@@ -55,9 +54,7 @@ export async function POST(request: NextRequest) {
   if (!batch.is_paid) {
     return NextResponse.json({ error: 'Alleen betaalde batches kunnen worden uitgesloten' }, { status: 400 });
   }
-  if (!batch.created_at || batch.created_at < monthStart) {
-    return NextResponse.json({ error: 'Batch valt niet in de gekozen kalendermaand' }, { status: 400 });
-  }
+  /* Een batch telt in de maand van betalen, dus ook een batch van vorige maand. */
 
   const { data: row, error: insErr } = await supabase
     .from('am_leaderboard_batch_exclusions')

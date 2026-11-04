@@ -1,16 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { requireSuperAdmin } from '@/lib/adminAuth';
-import { calculateAmTargetProgress, calendarMonthDateBounds } from '@/lib/amTargetsProgress';
+import { calculateAmTargetProgress, calendarMonthDateBounds, omzetBronVoorTargets } from '@/lib/amTargetsProgress';
 import { leaderboardYearMonthFromDate, leaderboardMonthStartIsoFromYearMonth } from '@/lib/amLeaderboardRules';
-import {
-  computeLeaderboardMapsFromDbRows,
-  fetchMonthlyPaidBatchesForLeaderboard,
-  isAmLeaderboardMigrationMissingError,
-  loadLeaderboardExcludedBatchIds,
-  loadLeaderboardManualLines,
-  resolveBatchAmId,
-} from '@/lib/amLeaderboardServer';
+import { isAmLeaderboardMigrationMissingError, loadLeaderboardExcludedBatchIds } from '@/lib/amLeaderboardServer';
+import { omzetPerAm, omzetRegelsVanAm } from '@/lib/omzetPerAm';
+import { amsterdamYmd } from '@/lib/appointmentSlots';
 
 const YM_RE = /^\d{4}-\d{2}$/;
 
@@ -40,8 +35,9 @@ export async function GET(request: NextRequest) {
   const monthStart = leaderboardMonthStartIsoFromYearMonth(yearMonth);
 
   try {
-    const [batches, excludedIds, exclusionsRows, manualRows, allAms, bulkCustomers] = await Promise.all([
-      fetchMonthlyPaidBatchesForLeaderboard(supabase, yearMonth),
+    const omzetBron = omzetBronVoorTargets(supabase);
+    const [{ posten, bronnen }, excludedIds, exclusionsRows, manualRows, allAms] = await Promise.all([
+      omzetBron(),
       loadLeaderboardExcludedBatchIds(supabase, yearMonth),
       supabase
         .from('am_leaderboard_batch_exclusions')
@@ -58,7 +54,6 @@ export async function GET(request: NextRequest) {
         .eq('is_account_manager', true)
         .eq('is_active', true)
         .order('name', { ascending: true }),
-      supabase.from('customers').select('id, name, bulk_price_per_lead, account_manager_id').not('bulk_price_per_lead', 'is', null),
     ]);
 
     if (exclusionsRows.error) {
@@ -74,41 +69,40 @@ export async function GET(request: NextRequest) {
       throw new Error(manualRows.error.message);
     }
 
-    const { amRevenue, amBatchCount } = computeLeaderboardMapsFromDbRows(batches, excludedIds, manualRows.data || []);
-
-    const BULK_PAGE = 1000;
-    const BULK_MAX_PAGES = 80;
-    const bulkMap = new Map<string, { price: number; amId: string | null; name: string }>();
-    for (const c of bulkCustomers.data || []) {
-      bulkMap.set(c.id, {
-        price: Number(c.bulk_price_per_lead),
-        amId: c.account_manager_id,
-        name: (c as { name?: string }).name || '',
-      });
-    }
-    const bulkCustIds = [...bulkMap.keys()];
-    let bulkAssignments: { customer_id: string }[] = [];
-    let bulkTruncated = false;
-    let offset = 0;
-    for (let p = 0; p < BULK_MAX_PAGES; p++) {
-      const { data } = await supabase
-        .from('lead_assignments')
-        .select('customer_id')
-        .is('batch_id', null)
-        .in('customer_id', bulkCustIds)
-        .gte('assigned_at', monthStart)
-        .range(offset, offset + BULK_PAGE - 1);
-      if (!data?.length) break;
-      bulkAssignments = bulkAssignments.concat(data);
-      if (data.length < BULK_PAGE) break;
-      offset += data.length;
-      if (p === BULK_MAX_PAGES - 1) bulkTruncated = true;
-    }
+    /* Dezelfde betaalde omzet als het live-dashboard (src/lib/omzetPerAm.ts):
+       op de dag van betalen, in Nederlandse tijd. De lopende maand tot vandaag. */
+    const { first: maandEerste, last: maandLaatste } = calendarMonthDateBounds(yearMonth);
+    const vandaag = amsterdamYmd(new Date());
+    const periode = { vanDag: maandEerste, totDag: maandLaatste < vandaag ? maandLaatste : vandaag };
+    const perAm = omzetPerAm(posten, periode, bronnen, excludedIds);
+    const amRevenue = new Map<string, number>();
     const amBulkRevenue = new Map<string, number>();
-    for (const a of bulkAssignments) {
-      const info = bulkMap.get(a.customer_id);
-      if (!info?.amId) continue;
-      amBulkRevenue.set(info.amId, (amBulkRevenue.get(info.amId) || 0) + info.price);
+    const amBatchCount = new Map<string, number>();
+    for (const [amId, r] of perAm) {
+      if (!amId) continue;
+      amRevenue.set(amId, Math.round((r.totaal - r.bulk) * 100) / 100);
+      amBulkRevenue.set(amId, r.bulk);
+      amBatchCount.set(amId, r.batches);
+    }
+    for (const m of manualRows.data || []) {
+      const amId = m.admin_user_id as string;
+      amRevenue.set(amId, Math.round(((amRevenue.get(amId) || 0) + (Number(m.amount_euro) || 0)) * 100) / 100);
+      if (Number(m.counts_as_batch) === 1) amBatchCount.set(amId, (amBatchCount.get(amId) || 0) + 1);
+    }
+
+    /* Klant- en batchgegevens voor de regels per accountmanager. */
+    const regelsPerAm = new Map((allAms.data || []).map(am => [am.id as string, omzetRegelsVanAm(posten, periode, bronnen, am.id as string)]));
+    const batchIds = [...new Set([...regelsPerAm.values()].flat().map(r => r.batch_id).filter((x): x is string => Boolean(x)))];
+    const klantIds = [...new Set([...regelsPerAm.values()].flat().map(r => r.customer_id).filter((x): x is string => Boolean(x)))];
+    const batchInfo = new Map<string, { branch: string | null; batch_kind: string | null; created_at: string }>();
+    for (let i = 0; i < batchIds.length; i += 200) {
+      const { data } = await supabase.from('customer_batches').select('id, branch, batch_kind, created_at').in('id', batchIds.slice(i, i + 200));
+      for (const b of data || []) batchInfo.set(b.id as string, { branch: b.branch as string | null, batch_kind: b.batch_kind as string | null, created_at: b.created_at as string });
+    }
+    const klantNaam = new Map<string, string>();
+    for (let i = 0; i < klantIds.length; i += 200) {
+      const { data } = await supabase.from('customers').select('id, name').in('id', klantIds.slice(i, i + 200));
+      for (const k of data || []) klantNaam.set(k.id as string, (k.name as string) || '-');
     }
 
     const exclusionMetaByBatch = new Map<string, { id: string; reason: string | null; created_at: string }>();
@@ -121,7 +115,11 @@ export async function GET(request: NextRequest) {
     }
 
     type BatchLine = {
-      batch_id: string;
+      /** Uniek per regel; batch_id is leeg bij een losse of externe factuur. */
+      regel_id: string;
+      batch_id: string | null;
+      soort: string;
+      dag: string;
       customer_name: string;
       branch: string;
       batch_kind: string | null;
@@ -153,23 +151,27 @@ export async function GET(request: NextRequest) {
       return byAm[amId];
     }
 
-    for (const b of batches) {
-      const amId = resolveBatchAmId(b);
-      if (!amId) continue;
-      const cust = b.customers as { name?: string } | null | undefined;
+    const regel = (amId: string, r: { sleutel: string; batch_id: string | null; customer_id: string | null; soort: string; dag: string; bedrag: number }, excluded: boolean) => {
+      const info = r.batch_id ? batchInfo.get(r.batch_id) : undefined;
       const line: BatchLine = {
-        batch_id: b.id,
-        customer_name: cust?.name || '-',
-        branch: b.branch || '-',
-        batch_kind: b.batch_kind ?? null,
-        total_price: Number(b.total_price) || 0,
-        created_at: b.created_at || '',
-        excluded: excludedIds.has(b.id),
-        exclusion: exclusionMetaByBatch.get(b.id),
+        regel_id: r.sleutel,
+        batch_id: r.batch_id,
+        soort: r.soort,
+        dag: r.dag,
+        customer_name: (r.customer_id && klantNaam.get(r.customer_id)) || '-',
+        branch: info?.branch || (r.batch_id ? '-' : r.soort === 'credit' ? 'creditnota' : 'factuur'),
+        batch_kind: info?.batch_kind ?? null,
+        total_price: r.bedrag,
+        created_at: info?.created_at || r.dag,
+        excluded,
+        exclusion: r.batch_id ? exclusionMetaByBatch.get(r.batch_id) : undefined,
       };
       const bucket = ensureAm(amId);
-      if (line.excluded) bucket.excluded_batches.push(line);
+      if (excluded) bucket.excluded_batches.push(line);
       else bucket.included_batches.push(line);
+    };
+    for (const [amId, regels] of regelsPerAm) {
+      for (const r of regels) regel(amId, r, Boolean(r.batch_id && excludedIds.has(r.batch_id)));
     }
 
     for (const m of manualRows.data || []) {
@@ -183,7 +185,8 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const { first: rangeFirst, last: rangeLast } = calendarMonthDateBounds(yearMonth);
+    const rangeFirst = maandEerste;
+    const rangeLast = maandLaatste;
     const { data: rawTargets, error: tgtErr } = await supabase
       .from('am_targets')
       .select(
@@ -237,6 +240,7 @@ export async function GET(request: NextRequest) {
             t.target_type,
             t.period_start,
             t.period_end,
+            omzetBron,
           );
           const tv = Number(t.target_value) || 0;
           const pct = tv > 0 ? Math.round((current / tv) * 100) : 0;
@@ -287,7 +291,6 @@ export async function GET(request: NextRequest) {
       year_month: yearMonth,
       month_start_iso: monthStart,
       account_managers: accountManagers,
-      bulk_assignments_truncated: bulkTruncated,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Onbekende fout';

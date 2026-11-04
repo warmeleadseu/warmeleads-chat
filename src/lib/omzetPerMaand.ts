@@ -20,11 +20,19 @@
  */
 
 export type OmzetSoort = 'leads' | 'bulk' | 'afspraken' | 'overig' | 'credit';
-export type OmzetPost = { dag: string; bedrag: number; soort: OmzetSoort };
+export type OmzetPost = {
+  dag: string; bedrag: number; soort: OmzetSoort;
+  /** Tijdstip van de boeking (ISO); bij externe facturen middernacht van de factuurdag. */
+  moment: string;
+  /** Voor de omzet per accountmanager (src/lib/omzetPerAm.ts). */
+  customer_id: string | null;
+  batch_id: string | null;
+};
 
 export type OmzetBatch = {
   id: string; customer_id: string; batch_kind: string; created_at: string;
   total_price: number | string | null; extern_bedrag_excl?: number | string | null; intern?: boolean;
+  account_manager_id?: string | null;
 };
 export type OmzetFactuur = {
   id: string; customer_id: string | null; batch_id: string | null; appointment_batch_id: string | null;
@@ -56,7 +64,10 @@ export function omzetPosten(i: OmzetInvoer): OmzetPost[] {
   const uit: OmzetPost[] = [];
   const weg = i.uitgesloten ?? new Set<string>();
   const telt = (x: { intern?: boolean; customer_id: string | null }) => !x.intern && !(x.customer_id && weg.has(x.customer_id));
-  const post = (dag: string, bedrag: number, soort: OmzetSoort) => { if (bedrag) uit.push({ dag, bedrag: Math.round(bedrag * 100) / 100, soort }); };
+  type Herkomst = { customer_id: string | null; batch_id: string | null };
+  const post = (moment: string, bedrag: number, soort: OmzetSoort, h: Herkomst, dag = i.dagVan(moment)) => {
+    if (bedrag) uit.push({ dag, bedrag: Math.round(bedrag * 100) / 100, soort, moment, customer_id: h.customer_id, batch_id: h.batch_id });
+  };
 
   const batches = new Map(i.batches.filter(telt).map(b => [b.id, b]));
   const afspraken = new Map((i.afspraakBatches ?? []).filter(telt).map(b => [b.id, b]));
@@ -70,27 +81,28 @@ export function omzetPosten(i: OmzetInvoer): OmzetPost[] {
 
   /* Een batch (of afsprakenbatch): extern bedrag, anders zijn betaalde
      facturen, anders de batchprijs. */
-  const boekBatch = (b: { created_at: string; total_price: number | string | null; extern_bedrag_excl?: number | string | null }, facturen: OmzetFactuur[], soort: OmzetSoort) => {
+  const boekBatch = (b: { id: string; customer_id: string; created_at: string; total_price: number | string | null; extern_bedrag_excl?: number | string | null }, facturen: OmzetFactuur[], soort: OmzetSoort, isBatch: boolean) => {
+    const h = { customer_id: b.customer_id, batch_id: isBatch ? b.id : null };
     const betaaldeFacturen = facturen.filter(betaald).sort((x, y) => String(x.paid_at).localeCompare(String(y.paid_at)));
     if (heeftWaarde(b.extern_bedrag_excl)) {
-      post(i.dagVan(betaaldeFacturen[0]?.paid_at ?? b.created_at), getal(b.extern_bedrag_excl), soort);
+      post(betaaldeFacturen[0]?.paid_at ?? b.created_at, getal(b.extern_bedrag_excl), soort, h);
     } else if (betaaldeFacturen.length > 0) {
-      for (const f of betaaldeFacturen) post(i.dagVan(f.paid_at as string), getal(f.subtotal), soort);
+      for (const f of betaaldeFacturen) post(f.paid_at as string, getal(f.subtotal), soort, h);
     } else if (facturen.length > 0) {
       /* Betaald gemeld terwijl de factuur nog open staat: het factuurbedrag
          op de aanmaakdag, tot de factuur zelf op betaald gaat. */
-      post(i.dagVan(b.created_at), facturen.reduce((s, f) => s + getal(f.subtotal), 0), soort);
+      post(b.created_at, facturen.reduce((s, f) => s + getal(f.subtotal), 0), soort, h);
     } else {
-      post(i.dagVan(b.created_at), getal(b.total_price), soort);
+      post(b.created_at, getal(b.total_price), soort, h);
     }
   };
-  for (const b of batches.values()) boekBatch(b, perBatch.get(`b:${b.id}`) ?? [], b.batch_kind === 'bulk_leads' ? 'bulk' : 'leads');
-  for (const b of afspraken.values()) boekBatch(b, perBatch.get(`a:${b.id}`) ?? [], 'afspraken');
+  for (const b of batches.values()) boekBatch(b, perBatch.get(`b:${b.id}`) ?? [], b.batch_kind === 'bulk_leads' ? 'bulk' : 'leads', true);
+  for (const b of afspraken.values()) boekBatch(b, perBatch.get(`a:${b.id}`) ?? [], 'afspraken', false);
 
   /* Losse facturen, zonder batch. */
   for (const f of gewoon) {
     if (f.batch_id || f.appointment_batch_id || !betaald(f) || !telt(f)) continue;
-    post(i.dagVan(f.paid_at as string), getal(f.subtotal), 'overig');
+    post(f.paid_at as string, getal(f.subtotal), 'overig', { customer_id: f.customer_id, batch_id: null });
   }
 
   /* Creditnota's: alleen op omzet die hier meetelt. Bij een extern bedrag op
@@ -106,13 +118,14 @@ export function omzetPosten(i: OmzetInvoer): OmzetPost[] {
     } else if (o.appointment_batch_id) {
       if (!afspraken.has(o.appointment_batch_id)) continue;
     } else if (!betaald(o)) continue;
-    post(i.dagVan(c.created_at), -Math.abs(getal(c.subtotal)), 'credit');
+    post(c.created_at, -Math.abs(getal(c.subtotal)), 'credit', { customer_id: o.customer_id ?? c.customer_id, batch_id: o.batch_id });
   }
 
   /* Externe facturen (Rompslomp e.d.): een negatief bedrag is een creditfactuur. */
   for (const e of i.extern) {
     if (e.customer_id && weg.has(e.customer_id)) continue;
-    post(String(e.datum).slice(0, 10), getal(e.bedrag_excl), e.soort === 'bulk' ? 'bulk' : 'overig');
+    const dag = String(e.datum).slice(0, 10);
+    post(`${dag}T00:00:00+01:00`, getal(e.bedrag_excl), e.soort === 'bulk' ? 'bulk' : 'overig', { customer_id: e.customer_id ?? null, batch_id: null }, dag);
   }
   return uit;
 }
