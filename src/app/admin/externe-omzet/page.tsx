@@ -9,15 +9,26 @@ import { herkenKolommen, type Beoordeling, type ExterneInvoer, type Kolommen } f
 /**
  * Externe omzet: facturen die buiten WarmeLeads om zijn verstuurd (vooral
  * bulkfacturen uit Rompslomp). Ze tellen mee in de maandomzet van het
- * live-dashboard en in Winst en verlies. Invoer per factuur of in één keer
- * via een Excel- of CSV-export.
+ * live-dashboard en in Winst en verlies. Invoer per factuur, in één keer
+ * via een Excel- of CSV-export, of elke nacht vanzelf uit Rompslomp. Van de
+ * Rompslomp-facturen telt alleen mee wat niet al als batch in WarmeLeads
+ * staat en geen afspraken zijn; per factuur is dat om te zetten.
  */
 
 type Rij = {
   id: string; datum: string; customer_id: string | null; klant_naam: string | null; soort: 'bulk' | 'overig';
   factuurnummer: string | null; bedrag_excl: number | string; omschrijving: string | null; bron: string;
   aangemaakt_door: string | null; created_at: string;
+  telt_mee: boolean; reden: string | null; betaald: boolean | null; administratie: string | null; handmatig_beoordeeld: boolean;
 };
+const teltMee = (r: Rij) => r.telt_mee && r.betaald !== false;
+type Filter = 'alle' | 'mee' | 'beoordelen' | 'niet';
+const FILTERS: { sleutel: Filter; label: string; past: (r: Rij) => boolean }[] = [
+  { sleutel: 'alle', label: 'Alles', past: () => true },
+  { sleutel: 'mee', label: 'Telt mee', past: teltMee },
+  { sleutel: 'beoordelen', label: 'Te beoordelen', past: r => !r.handmatig_beoordeeld && Boolean(r.reden?.startsWith('beoordelen')) },
+  { sleutel: 'niet', label: 'Telt niet mee', past: r => !teltMee(r) },
+];
 type Klant = { id: string; name: string };
 
 const EURO2 = new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -125,6 +136,39 @@ function Formulier({ klanten, bewerk, onKlaar }: { klanten: Klant[]; bewerk: Rij
       <p className="mt-2 text-xs text-slate-400">Een creditfactuur vul je in als negatief bedrag. Een klant die niet in WarmeLeads staat mag; dan blijft alleen de naam bewaard.</p>
       {melding && <p className={`mt-2 text-sm ${melding.ok ? 'text-emerald-700' : 'text-red-600'}`}>{melding.tekst}</p>}
     </form>
+  );
+}
+
+function Rompslomp({ onKlaar }: { onKlaar: () => void }) {
+  const [bezig, setBezig] = useState(false);
+  const [melding, setMelding] = useState<{ ok: boolean; tekst: string } | null>(null);
+  const ophalen = async () => {
+    setBezig(true);
+    setMelding(null);
+    try {
+      const res = await adminFetch('/api/admin/externe-omzet/rompslomp', { method: 'POST' });
+      const d = (await res.json().catch(() => ({}))) as { error?: string; nieuw?: number; bijgewerkt?: number; tellenMee?: number; bedragMee?: number };
+      if (!res.ok) { setMelding({ ok: false, tekst: d.error ?? 'Ophalen mislukt' }); return; }
+      setMelding({ ok: true, tekst: `${d.nieuw} nieuw, ${d.bijgewerkt} bijgewerkt. ${d.tellenMee} facturen tellen mee (${eur2(d.bedragMee ?? 0)}).` });
+      onKlaar();
+    } finally {
+      setBezig(false);
+    }
+  };
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold text-slate-900">Rompslomp</p>
+        <p className="mt-0.5 text-xs text-slate-500">
+          Elke nacht worden de facturen van WarmeLeads.eu en Warme Thuisbatterij Leads vanaf 1 mei opgehaald. Alleen betaalde facturen tellen,
+          en niet als ze als batch al in WarmeLeads staan of over afspraken gaan. Zet een factuur hieronder aan of uit; die keuze blijft staan.
+        </p>
+        {melding && <p className={`mt-1 text-sm ${melding.ok ? 'text-emerald-700' : 'text-red-600'}`}>{melding.tekst}</p>}
+      </div>
+      <button type="button" disabled={bezig} onClick={() => void ophalen()} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+        <ArrowPathIcon className={`h-4 w-4 ${bezig ? 'animate-spin' : ''}`} /> {bezig ? 'Ophalen...' : 'Nu ophalen'}
+      </button>
+    </div>
   );
 }
 
@@ -299,6 +343,7 @@ export default function ExterneOmzetPagina() {
   const [laden, setLaden] = useState(true);
   const [fout, setFout] = useState<string | null>(null);
   const [maand, setMaand] = useState<string>('alle');
+  const [filter, setFilter] = useState<Filter>('alle');
   const [bewerk, setBewerk] = useState<Rij | null>(null);
 
   const laad = useCallback(async () => {
@@ -322,6 +367,7 @@ export default function ExterneOmzetPagina() {
   const perMaand = useMemo(() => {
     const m = new Map<string, { aantal: number; bulk: number; overig: number }>();
     for (const r of rijen) {
+      if (!teltMee(r)) continue;
       const k = r.datum.slice(0, 7);
       const x = m.get(k) ?? { aantal: 0, bulk: 0, overig: 0 };
       x.aantal += 1;
@@ -330,7 +376,15 @@ export default function ExterneOmzetPagina() {
     }
     return [...m.entries()].sort((a, b) => b[0].localeCompare(a[0]));
   }, [rijen]);
-  const zichtbaar = maand === 'alle' ? rijen : rijen.filter(r => r.datum.startsWith(maand));
+  const inMaand = (r: Rij) => maand === 'alle' || r.datum.startsWith(maand);
+  const pastFilter = FILTERS.find(f => f.sleutel === filter)!.past;
+  const zichtbaar = rijen.filter(r => inMaand(r) && pastFilter(r));
+
+  const zetMee = async (r: Rij, mee: boolean) => {
+    setRijen(lijst => lijst.map(x => (x.id === r.id ? { ...x, telt_mee: mee, handmatig_beoordeeld: true } : x)));
+    const res = await adminFetch('/api/admin/externe-omzet', { method: 'PUT', body: JSON.stringify({ id: r.id, telt_mee: mee }) });
+    if (!res.ok) { const d = (await res.json().catch(() => ({}))) as { error?: string }; window.alert(d.error ?? 'Opslaan mislukt'); void laad(); }
+  };
 
   const verwijder = async (r: Rij) => {
     if (!window.confirm(`Factuur ${r.factuurnummer ?? ''} van ${r.klant_naam ?? 'onbekend'} (${eur2(Number(r.bedrag_excl))}) verwijderen?`)) return;
@@ -366,15 +420,16 @@ export default function ExterneOmzetPagina() {
 
       {!ontbreekt && !fout && (
         <>
+          <Rompslomp onKlaar={() => void laad()} />
           <Formulier klanten={klanten} bewerk={bewerk} onKlaar={() => { setBewerk(null); void laad(); }} />
           <Importeren onKlaar={() => void laad()} />
 
           <div className="grid gap-5 lg:grid-cols-[18rem_1fr]">
             <div className="h-fit rounded-xl border border-slate-200 bg-white">
-              <p className="border-b border-slate-100 px-4 py-3 text-sm font-semibold text-slate-900">Per maand</p>
+              <p className="border-b border-slate-100 px-4 py-3 text-sm font-semibold text-slate-900">Telt mee, per maand</p>
               {perMaand.length === 0 && <p className="px-4 py-3 text-sm text-slate-400">{laden ? 'Laden...' : 'Nog niets ingevoerd.'}</p>}
               <button onClick={() => setMaand('alle')} className={`flex w-full justify-between px-4 py-2 text-left text-sm ${maand === 'alle' ? 'bg-slate-100 font-semibold' : 'hover:bg-slate-50'}`}>
-                <span>Alles</span><span className="tabular-nums">{eur2(rijen.reduce((s, r) => s + (Number(r.bedrag_excl) || 0), 0))}</span>
+                <span>Alles</span><span className="tabular-nums">{eur2(rijen.filter(teltMee).reduce((s, r) => s + (Number(r.bedrag_excl) || 0), 0))}</span>
               </button>
               {perMaand.map(([m, x]) => (
                 <button key={m} onClick={() => setMaand(m)} className={`w-full px-4 py-2 text-left text-sm ${maand === m ? 'bg-slate-100 font-semibold' : 'hover:bg-slate-50'}`}>
@@ -385,31 +440,55 @@ export default function ExterneOmzetPagina() {
             </div>
 
             <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <div className="flex flex-wrap gap-1 border-b border-slate-100 p-2">
+                {FILTERS.map(f => (
+                  <button key={f.sleutel} onClick={() => setFilter(f.sleutel)} className={`rounded-lg px-3 py-1.5 text-xs font-medium ${filter === f.sleutel ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>
+                    {f.label} <span className="opacity-60">{rijen.filter(r => inMaand(r) && f.past(r)).length}</span>
+                  </button>
+                ))}
+              </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-slate-50 text-left text-xs text-slate-500">
                     <tr>
                       <th className="px-3 py-2">Datum</th><th className="px-3 py-2">Nummer</th><th className="px-3 py-2">Klant</th>
-                      <th className="px-3 py-2">Soort</th><th className="px-3 py-2 text-right">Excl. btw</th><th className="px-3 py-2" />
+                      <th className="px-3 py-2">Soort</th><th className="px-3 py-2 text-right">Excl. btw</th><th className="px-3 py-2">Telt mee</th><th className="px-3 py-2" />
                     </tr>
                   </thead>
                   <tbody>
                     {zichtbaar.length === 0 && (
-                      <tr><td colSpan={6} className="px-3 py-6 text-center text-slate-400">{laden ? 'Laden...' : 'Geen facturen in deze selectie.'}</td></tr>
+                      <tr><td colSpan={7} className="px-3 py-6 text-center text-slate-400">{laden ? 'Laden...' : 'Geen facturen in deze selectie.'}</td></tr>
                     )}
                     {zichtbaar.map(r => (
-                      <tr key={r.id} className={`border-t border-slate-100 ${bewerk?.id === r.id ? 'bg-amber-50' : ''}`}>
+                      <tr key={r.id} className={`border-t border-slate-100 ${bewerk?.id === r.id ? 'bg-amber-50' : teltMee(r) ? '' : 'text-slate-400'}`}>
                         <td className="whitespace-nowrap px-3 py-2">{datumNl(r.datum)}</td>
                         <td className="px-3 py-2">{r.factuurnummer ?? <span className="text-slate-300">—</span>}</td>
                         <td className="px-3 py-2">
                           {r.customer_id ? <Link href={`/admin/customers?id=${r.customer_id}`} className="hover:underline">{r.klant_naam}</Link> : <span>{r.klant_naam}</span>}
                           {r.omschrijving && <span className="block text-xs text-slate-400">{r.omschrijving}</span>}
+                          {r.bron === 'rompslomp' && <span className="block text-[11px] text-slate-400">Rompslomp · {r.administratie}</span>}
                         </td>
                         <td className="px-3 py-2 text-xs">{r.soort === 'bulk' ? 'Bulk' : 'Overig'}</td>
                         <td className={`whitespace-nowrap px-3 py-2 text-right tabular-nums ${Number(r.bedrag_excl) < 0 ? 'text-red-600' : ''}`}>{eur2(Number(r.bedrag_excl))}</td>
+                        <td className="px-3 py-2 text-xs">
+                          <label className="inline-flex cursor-pointer items-center gap-1.5">
+                            <input type="checkbox" checked={r.telt_mee} onChange={e => void zetMee(r, e.target.checked)} className="h-4 w-4 rounded border-slate-300" />
+                            <span className={r.telt_mee ? 'text-slate-700' : 'text-slate-400'}>{r.telt_mee ? 'ja' : 'nee'}</span>
+                          </label>
+                          {r.betaald === false && <span className="block text-amber-600">nog niet betaald</span>}
+                          {r.reden && (
+                            <span className={`block ${r.reden.startsWith('beoordelen') && !r.handmatig_beoordeeld ? 'text-amber-600' : 'text-slate-400'}`}>
+                              {r.handmatig_beoordeeld ? 'met de hand gekozen' : r.reden}
+                            </span>
+                          )}
+                        </td>
                         <td className="whitespace-nowrap px-3 py-2 text-right">
-                          <button onClick={() => { setBewerk(r); window.scrollTo({ top: 0, behavior: 'smooth' }); }} title="Wijzigen" className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><PencilSquareIcon className="h-4 w-4" /></button>
-                          <button onClick={() => void verwijder(r)} title="Verwijderen" className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600"><TrashIcon className="h-4 w-4" /></button>
+                          {r.bron !== 'rompslomp' && (
+                            <>
+                              <button onClick={() => { setBewerk(r); window.scrollTo({ top: 0, behavior: 'smooth' }); }} title="Wijzigen" className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><PencilSquareIcon className="h-4 w-4" /></button>
+                              <button onClick={() => void verwijder(r)} title="Verwijderen" className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600"><TrashIcon className="h-4 w-4" /></button>
+                            </>
+                          )}
                         </td>
                       </tr>
                     ))}

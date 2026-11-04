@@ -71,6 +71,10 @@ export function tabelOntbreekt(error: { code?: string; message?: string } | null
   return error.code === '42P01' || error.code === 'PGRST205' || (/externe_omzet/.test(error.message ?? '') && /(does not exist|schema cache)/.test(error.message ?? ''));
 }
 
+/**
+ * Externe omzet die meetelt: niet uitgezet (telt_mee, migratie 192) en niet
+ * onbetaald. Handmatige invoer heeft geen betaalstatus en telt gewoon.
+ */
 export async function laadExterneOmzet(supabase: SupabaseClient, vanaf: string): Promise<{ rijen: ExterneOmzetRij[]; ontbreekt: boolean }> {
   const uit: ExterneOmzetRij[] = [];
   for (let p = 0; p < 50; p++) {
@@ -78,6 +82,8 @@ export async function laadExterneOmzet(supabase: SupabaseClient, vanaf: string):
       .from('externe_omzet')
       .select('datum, bedrag_excl, soort, customer_id')
       .gte('datum', vanaf)
+      .eq('telt_mee', true)
+      .or('betaald.is.null,betaald.eq.true')
       .order('id')
       .range(p * 1000, p * 1000 + 999);
     if (tabelOntbreekt(error)) return { rijen: [], ontbreekt: true };

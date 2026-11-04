@@ -13,7 +13,10 @@ import { tabelOntbreekt } from '@/lib/omzetPerMaandLaden';
  *
  * GET              alle regels en de klantenlijst
  * POST             { rijen, proef?, bron? }: proef = alleen controleren
- * PUT              { id, ...regel }
+ * PUT              { id, ...regel }, of { id, telt_mee } om een factuur aan/uit te zetten
+ *
+ * Facturen uit Rompslomp (bron 'rompslomp') volgen Rompslomp: alleen
+ * meetellen aan/uit kan hier, wijzigen en verwijderen niet.
  * DELETE ?id=
  */
 
@@ -53,7 +56,7 @@ export async function GET(request: NextRequest) {
   for (let p = 0; p < 50; p++) {
     const { data, error } = await supabase
       .from('externe_omzet')
-      .select('id, datum, customer_id, klant_naam, soort, factuurnummer, bedrag_excl, omschrijving, bron, aangemaakt_door, created_at')
+      .select('id, datum, customer_id, klant_naam, soort, factuurnummer, bedrag_excl, omschrijving, bron, aangemaakt_door, created_at, telt_mee, reden, betaald, administratie, handmatig_beoordeeld')
       .order('datum', { ascending: false })
       .order('id')
       .range(p * 1000, p * 1000 + 999);
@@ -115,7 +118,7 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   const { admin, error: geenToegang } = await requireSuperAdmin(request);
   if (geenToegang) return geenToegang;
-  const body = (await request.json().catch(() => ({}))) as ExterneInvoer & { id?: unknown };
+  const body = (await request.json().catch(() => ({}))) as ExterneInvoer & { id?: unknown; telt_mee?: unknown };
   if (typeof body.id !== 'string' || !UUID.test(body.id)) return NextResponse.json({ error: 'Geen regel opgegeven' }, { status: 400 });
   const id = body.id;
 
@@ -124,6 +127,21 @@ export async function PUT(request: NextRequest) {
   if (tabelOntbreekt(leesFout)) return geenTabel();
   if (leesFout) return NextResponse.json({ error: 'Regel kon niet worden geladen' }, { status: 500 });
   if (!oud) return NextResponse.json({ error: 'Regel niet gevonden' }, { status: 404 });
+
+  /* Alleen meetellen aan of uit; de nachtelijke Rompslomp-ronde laat deze keuze staan. */
+  if (typeof body.telt_mee === 'boolean' && Object.keys(body).every(k => k === 'id' || k === 'telt_mee')) {
+    const { error } = await supabase
+      .from('externe_omzet')
+      .update({ telt_mee: body.telt_mee, handmatig_beoordeeld: true, updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) return NextResponse.json({ error: 'Opslaan mislukt' }, { status: 500 });
+    await logAudit({
+      adminId: admin?.id ?? null, adminName: admin?.name ?? null, action: body.telt_mee ? 'externe_omzet_mee' : 'externe_omzet_niet_mee', entityType: 'externe_omzet', entityId: id,
+      details: { factuurnummer: oud.factuurnummer, klant: oud.klant_naam, bedrag_excl: oud.bedrag_excl, reden: oud.reden },
+    }).catch(() => {});
+    return NextResponse.json({ success: true });
+  }
+  if (oud.bron === 'rompslomp') return NextResponse.json({ error: 'Deze factuur komt uit Rompslomp; wijzig hem daar' }, { status: 400 });
   const { nummers, error: nrFout } = await laadNummers(supabase, id);
   if (nrFout) return NextResponse.json({ error: 'Bestaande facturen konden niet worden geladen' }, { status: 500 });
   let klanten: { id: string; name: string | null }[];
@@ -146,6 +164,9 @@ export async function DELETE(request: NextRequest) {
   const id = request.nextUrl.searchParams.get('id');
   if (!id || !UUID.test(id)) return NextResponse.json({ error: 'Geen regel opgegeven' }, { status: 400 });
   const supabase = createServerClient();
+  const { data: bron, error: bronFout } = await supabase.from('externe_omzet').select('bron').eq('id', id).maybeSingle();
+  if (tabelOntbreekt(bronFout)) return geenTabel();
+  if (bron?.bron === 'rompslomp') return NextResponse.json({ error: 'Deze factuur komt uit Rompslomp en komt dan vannacht terug; zet hem op "telt niet mee"' }, { status: 400 });
   const { data, error } = await supabase.from('externe_omzet').delete().eq('id', id).select('datum, bedrag_excl, factuurnummer, klant_naam');
   if (tabelOntbreekt(error)) return geenTabel();
   if (error) return NextResponse.json({ error: 'Verwijderen mislukt' }, { status: 500 });
