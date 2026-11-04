@@ -839,7 +839,7 @@ function SlideGeld({ data, costMetrics: cm }: { data: LiveData; costMetrics: Cos
       waarde: euro(data.totalRevenue),
       kleur: 'text-white',
       sub: cm.omzetFout ? 'omzet kon niet worden geladen' : omzetOpbouw(cm.omzetPerSoort) ?? 'betaald, excl. btw',
-      uitleg: 'Betaald en gefactureerd deze maand, excl. btw, op de dag van betalen: batches, bulk, afspraken, losse en externe facturen, min creditnota’s. Interne klanten tellen niet mee.',
+      uitleg: 'Betaald en gefactureerd deze maand, excl. btw, op de dag van betalen: batches, bulk, losse en externe facturen, min creditnota’s. Afspraken en interne klanten tellen niet mee.',
     },
     {
       label: 'Winst deze maand',

@@ -17,7 +17,7 @@ import { adminCustomerLiveUnpaidEmbed, adminCustomerTargetsOnly } from '@/lib/ad
 import { activeTargetSummariesFromUnknown } from '@/lib/batchTargetAreas';
 import { laadActieSamenvatting } from '@/lib/lotenActieLaden';
 import { omzetPosten, telOmzet } from '@/lib/omzetPerMaand';
-import { laadBetaaldeAfspraakBatches, laadBetaaldeBatches, laadExterneOmzet, laadFacturen } from '@/lib/omzetPerMaandLaden';
+import { laadBetaaldeBatches, laadExterneOmzet, laadFacturen } from '@/lib/omzetPerMaandLaden';
 import { amsterdamWallTimeToUtc, amsterdamYmd } from '@/lib/appointmentSlots';
 import {
   countApprovedReclamationsForAssignments,
@@ -287,17 +287,16 @@ export async function GET(request: NextRequest) {
   const MAAND_START_ISO = amsterdamWallTimeToUtc(maandDag, '00:00').toISOString();
 
   /* Omzet van deze maand: gefactureerd en betaald, op de dag van betalen, met
-     afspraken, losse facturen, creditnota's en externe facturen; zonder
-     interne klanten. Eén definitie met Winst en verlies, zie
+     losse facturen, creditnota's en externe facturen; zonder interne klanten
+     en zonder afspraken (die tellen niet mee in omzet en winst, 4 nov 2026). Eén definitie met Winst en verlies, zie
      src/lib/omzetPerMaand.ts. Een fout mag het dashboard niet breken. */
   const omzet = await (async () => {
-    const [batches, facturen, afspraakBatches, extern] = await Promise.all([
+    const [batches, facturen, extern] = await Promise.all([
       laadBetaaldeBatches(supabase, OMZET_LAAD_VANAF),
       laadFacturen(supabase, OMZET_LAAD_VANAF),
-      laadBetaaldeAfspraakBatches(supabase, OMZET_LAAD_VANAF),
       laadExterneOmzet(supabase, OMZET_LAAD_VANAF),
     ]);
-    const posten = omzetPosten({ batches, facturen, afspraakBatches, extern: extern.rijen, dagVan: iso => amsterdamYmd(new Date(iso)) });
+    const posten = omzetPosten({ batches, facturen, afspraakBatches: null, extern: extern.rijen, dagVan: iso => amsterdamYmd(new Date(iso)) });
     return { ...telOmzet(posten, maandDag, amsterdamYmd(new Date())), externOntbreekt: extern.ontbreekt };
   })().catch(err => {
     console.error('[live-stats] omzet', err instanceof Error ? err.message : err);
