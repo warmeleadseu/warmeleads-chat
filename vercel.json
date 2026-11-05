@@ -14,7 +14,7 @@
     },
     {
       "path": "/api/cron/meta-sync",
-      "schedule": "0 7,10,13,14 * * *"
+      "schedule": "0 7,10,13,14,17,21 * * *"
     },
     {
       "path": "/api/cron/feedback-digest",

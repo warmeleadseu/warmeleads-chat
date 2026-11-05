@@ -14,6 +14,9 @@
  * Kosten
  * - Advertentiekosten van de geleverde leads (zie lead_kosten in migratie
  *   174). Een lead die naar drie klanten ging, telt per batch voor een derde.
+ * - Een lead die na de laatste Meta-sync binnenkwam, heeft nog geen kosten en
+ *   telt tot de volgende sync voor 0 euro (leadsNogNietBerekend). Leads uit de
+ *   lopende week kunnen nog verschuiven (leadsLopendeWeek).
  */
 
 export type Betaalwijze = 'open' | 'mollie' | 'factuur' | 'extern';
@@ -37,6 +40,10 @@ export type WinstKosten = {
   kosten: number | string;
   leads_zonder_kosten?: number;
   gedeeld_gemiddeld?: number | string | null;
+  /** Nog niet berekend: binnen sinds de laatste Meta-sync (migratie 193). */
+  leads_nog_niet_berekend?: number;
+  /** Uit de lopende week: hun kosten verschuiven nog. */
+  leads_lopende_week?: number;
 };
 
 export type BatchWinst = {
@@ -54,7 +61,12 @@ export type BatchWinst = {
   kostenPerLead: number | null;
   opbrengstPerLead: number | null;
   prognoseWinst: number | null;
+  /** Echt geen advertentiekosten: geen campagne (zoals een import) of vóór 1 mei 2026. */
   leadsZonderKosten: number;
+  /** Kosten nog niet berekend; dat gebeurt bij de volgende Meta-sync. */
+  leadsNogNietBerekend: number;
+  /** Leads uit de lopende week: de kosten staan pas vast als de week voorbij is. */
+  leadsLopendeWeek: number;
   gedeeldGemiddeld: number | null;
 };
 
@@ -136,6 +148,8 @@ export function berekenBatchWinst(
     opbrengstPerLead: !pakket && grootte > 0 ? euro(omzet / grootte) : null,
     prognoseWinst: prognoseWinst === null ? null : euro(prognoseWinst),
     leadsZonderKosten: Math.max(0, Math.round(getal(kosten?.leads_zonder_kosten))),
+    leadsNogNietBerekend: Math.max(0, Math.round(getal(kosten?.leads_nog_niet_berekend))),
+    leadsLopendeWeek: Math.max(0, Math.round(getal(kosten?.leads_lopende_week))),
     gedeeldGemiddeld: kosten?.gedeeld_gemiddeld == null ? null : getal(kosten.gedeeld_gemiddeld),
   };
 }

@@ -89,6 +89,19 @@ describe('berekenBatchWinst: naar rato geleverd', () => {
     expect(w.kostenPerLead).toBeNull();
     expect(w.marge).toBeNull();
   });
+
+  it('houdt nog niet berekende leads apart van leads zonder kosten', () => {
+    const w = berekenBatchWinst(basis, [], {
+      geleverd: 36, kosten: 237.66, leads_zonder_kosten: 1, leads_nog_niet_berekend: 9, leads_lopende_week: 36,
+    });
+    expect(w.leadsZonderKosten).toBe(1);
+    expect(w.leadsNogNietBerekend).toBe(9);
+    expect(w.leadsLopendeWeek).toBe(36);
+    /* De oude functie (vóór migratie 193) gaf de nieuwe velden niet terug. */
+    const oud = berekenBatchWinst(basis, [], { geleverd: 36, kosten: 237.66, leads_zonder_kosten: 9 });
+    expect(oud.leadsNogNietBerekend).toBe(0);
+    expect(oud.leadsLopendeWeek).toBe(0);
+  });
 });
 
 describe('telWinstOp', () => {

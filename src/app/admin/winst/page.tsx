@@ -22,7 +22,7 @@ type Rij = {
   batchprijs: number; betaalwijze: Betaalwijze; omzetBron: 'extern' | 'factuur' | 'batchprijs';
   omzet: number; geleverd: number; geleverdExtern: number; grootte: number; voortgang: number; gerealiseerd: number;
   kosten: number; winst: number; marge: number | null; kostenPerLead: number | null; opbrengstPerLead: number | null;
-  prognoseWinst: number | null; leadsZonderKosten: number; gedeeldGemiddeld: number | null;
+  prognoseWinst: number | null; leadsZonderKosten: number; leadsNogNietBerekend: number; leadsLopendeWeek: number; gedeeldGemiddeld: number | null;
 };
 type Totaal = { omzet: number; gerealiseerd: number; kosten: number; winst: number; marge: number | null; prognoseWinst: number };
 type Lekkage = { uitgaven: number; acquisitie: number; aan_batches: number; intern?: number; buiten_batch: number; onverkocht: number; rest: number };
@@ -372,8 +372,8 @@ export default function WinstPage() {
                       <td className="px-3 py-2.5">
                         <div className="flex min-w-0 items-center gap-1.5">
                           <Link href={`/admin/customers?open=${r.customer_id}`} onClick={e => e.stopPropagation()} className="truncate font-medium text-slate-900 hover:text-brand-purple">{r.klant}</Link>
-                          {r.leadsZonderKosten > 0 && (
-                            <span title={`${r.leadsZonderKosten} leads zonder bekende kosten (geen campagne of vóór 1 mei)`}>
+                          {r.leadsNogNietBerekend > 0 && (
+                            <span title={`${r.leadsNogNietBerekend} leads nog zonder kosten: binnen na de laatste Meta-sync (tellen tot de volgende sync voor €0)`}>
                               <ExclamationTriangleIcon className="h-3.5 w-3.5 shrink-0 text-amber-500" />
                             </span>
                           )}

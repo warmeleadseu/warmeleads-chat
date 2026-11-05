@@ -115,8 +115,14 @@ export default function BatchWinstBlok({ batchId }: { batchId: string }) {
                   <span className={`tabular-nums font-medium ${w.prognoseWinst >= 0 ? 'text-slate-700' : 'text-red-600'}`}>{EURO.format(w.prognoseWinst)}</span>
                 </div>
               )}
+              {w.leadsNogNietBerekend > 0 && (
+                <p className="text-[11px] text-amber-600">{w.leadsNogNietBerekend} {w.leadsNogNietBerekend === 1 ? 'lead' : 'leads'} nog zonder kosten: binnen na de laatste Meta-sync. Tellen tot de volgende sync voor €0, dus de winst is nu iets te hoog.</p>
+              )}
               {w.leadsZonderKosten > 0 && (
-                <p className="text-[11px] text-amber-600">{w.leadsZonderKosten} leads zonder bekende kosten (geen campagne of vóór 1 mei 2026).</p>
+                <p className="text-[11px] text-slate-400">{w.leadsZonderKosten} {w.leadsZonderKosten === 1 ? 'lead' : 'leads'} zonder advertentiekosten (geen campagne, zoals een import, of vóór 1 mei 2026).</p>
+              )}
+              {w.leadsLopendeWeek > 0 && w.leadsLopendeWeek > w.leadsNogNietBerekend && (
+                <p className="text-[11px] text-slate-400">{w.leadsLopendeWeek} {w.leadsLopendeWeek === 1 ? 'lead' : 'leads'} uit deze week: de kosten staan vast als de week voorbij is.</p>
               )}
             </div>
           </div>
