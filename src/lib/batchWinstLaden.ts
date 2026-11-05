@@ -36,7 +36,18 @@ export async function laadFacturenPerBatch(supabase: SupabaseClient, ids: string
   return perBatch;
 }
 
-/** Geleverde leads en toegerekende kosten per batch (zie migratie 174). */
+/**
+ * Klanten die geen leadkosten dragen: interne klanten en afspraakpartners
+ * (migratie 194). De kosten van een lead worden alleen verdeeld over de
+ * klanten die ervoor betalen.
+ */
+export async function laadKlantenZonderKostendeel(supabase: SupabaseClient): Promise<Set<string>> {
+  const { data, error } = await supabase.from('customers').select('id').or('intern.eq.true,afspraakpartner.eq.true');
+  if (error) throw new Error(error.message);
+  return new Set((data ?? []).map(k => k.id as string));
+}
+
+/** Geleverde leads en toegerekende kosten per batch (zie migratie 174 en 194). */
 export async function laadKostenPerBatch(supabase: SupabaseClient, ids: string[]): Promise<Map<string, WinstKosten>> {
   const perBatch = new Map<string, WinstKosten>();
   for (let i = 0; i < ids.length; i += 200) {

@@ -14,6 +14,8 @@
  * Kosten
  * - Advertentiekosten van de geleverde leads (zie lead_kosten in migratie
  *   174). Een lead die naar drie klanten ging, telt per batch voor een derde.
+ *   Alleen betalende klanten tellen: interne klanten en afspraakpartners
+ *   (Infinite Scale) dragen geen kosten (migratie 194).
  * - Een lead die na de laatste Meta-sync binnenkwam, heeft nog geen kosten en
  *   telt tot de volgende sync voor 0 euro (leadsNogNietBerekend). Leads uit de
  *   lopende week kunnen nog verschuiven (leadsLopendeWeek).

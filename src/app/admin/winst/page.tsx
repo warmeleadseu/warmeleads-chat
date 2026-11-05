@@ -263,7 +263,7 @@ export default function WinstPage() {
   const lekRegels: [string, number, string][] = lek ? [
     ['Leads in batches', lek.aan_batches, 'naar rato verdeeld over de batches hierboven (alle batches, niet alleen deze selectie)'],
     ['Leads buiten een batch', lek.buiten_batch, 'bulktoewijzingen en -exports; de betaalde losse facturen staan hieronder bij "omzet buiten batches"'],
-    ['Interne batches', Number(lek.intern) || 0, 'klanten die WarmeLeads zelf is (masterportaal, verzameling voor afspraken); geen omzet van buiten'],
+    ['Intern en afspraken', Number(lek.intern) || 0, 'leads die alleen naar WarmeLeads zelf (masterportaal, verzameling voor afspraken) of naar een afspraakpartner (Infinite Scale) gingen; geen omzet van buiten'],
     ['Onverkochte leads', lek.onverkocht, 'leads die naar geen enkele klant gingen'],
     ['Acquisitie', lek.acquisitie, 'campagnes zonder leads, zoals de partnercampagnes die nieuwe klanten werven'],
     ['Overig', lek.rest, 'uitgaven zonder lead, en verschil door de weekverdeling aan de randen van de periode'],
@@ -278,7 +278,7 @@ export default function WinstPage() {
           </h1>
           <p className="mt-0.5 max-w-3xl text-sm text-slate-500">
             Omzet naar rato van wat er geleverd is, min de advertentiekosten van de geleverde leads. Een lead die naar drie klanten ging,
-            telt per batch voor een derde. Alle bedragen excl. btw; advertentiekosten vanaf 1 mei 2026. Interne klanten tellen niet mee.
+            telt per batch voor een derde. Alle bedragen excl. btw; advertentiekosten vanaf 1 mei 2026. Interne klanten en afspraakpartners (Infinite Scale) tellen niet mee en dragen geen leadkosten: de kosten van een lead worden alleen verdeeld over de klanten die ervoor betalen.
           </p>
         </div>
         <button onClick={() => void laad()} disabled={laden}

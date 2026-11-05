@@ -3,7 +3,7 @@ import { requireSuperAdmin } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
 import { berekenBatchWinst } from '@/lib/batchWinst';
-import { laadFacturenPerBatch, laadKostenPerBatch } from '@/lib/batchWinstLaden';
+import { laadFacturenPerBatch, laadKostenPerBatch, laadKlantenZonderKostendeel } from '@/lib/batchWinstLaden';
 
 /**
  * Detail van de winst van één batch: per geleverde lead wat hij kostte, uit
@@ -31,12 +31,12 @@ export async function GET(request: NextRequest, { params }: Ctx) {
       .eq('id', batchId)
       .maybeSingle();
     if (!batch) return NextResponse.json({ error: 'Batch niet gevonden' }, { status: 404 });
-    const { data: klant } = await supabase.from('customer_batches').select('customers(intern)').eq('id', batchId).maybeSingle();
-    const k = (Array.isArray(klant?.customers) ? klant?.customers[0] : klant?.customers) as { intern?: boolean } | null | undefined;
+    const { data: klant } = await supabase.from('customer_batches').select('customers(intern, afspraakpartner)').eq('id', batchId).maybeSingle();
+    const k = (Array.isArray(klant?.customers) ? klant?.customers[0] : klant?.customers) as { intern?: boolean; afspraakpartner?: boolean } | null | undefined;
     try {
       const [facturen, kosten] = await Promise.all([laadFacturenPerBatch(supabase, [batchId]), laadKostenPerBatch(supabase, [batchId])]);
       return NextResponse.json(
-        { samenvatting: berekenBatchWinst(batch, facturen.get(batchId) ?? [], kosten.get(batchId) ?? null), extern_factuurnummer: batch.extern_factuurnummer, intern: Boolean(k?.intern) },
+        { samenvatting: berekenBatchWinst(batch, facturen.get(batchId) ?? [], kosten.get(batchId) ?? null), extern_factuurnummer: batch.extern_factuurnummer, intern: Boolean(k?.intern), afspraakpartner: Boolean(k?.afspraakpartner) },
         { headers: { 'Cache-Control': 'no-store' } },
       );
     } catch {
@@ -54,6 +54,8 @@ export async function GET(request: NextRequest, { params }: Ctx) {
   if (error) return NextResponse.json({ error: 'Leads konden niet worden geladen' }, { status: 500 });
 
   const leadIds = (toewijzingen ?? []).map(t => t.lead_id as string);
+  /* Zelfde verdeling als batch_winst_kosten (migratie 194): alleen over betalende klanten. */
+  const zonderKostendeel = await laadKlantenZonderKostendeel(supabase);
   const kosten = new Map<string, { kosten: number; bron: string; campagne_id: string | null }>();
   const klanten = new Map<string, Set<string>>();
   for (let i = 0; i < leadIds.length; i += 150) {
@@ -64,7 +66,7 @@ export async function GET(request: NextRequest, { params }: Ctx) {
     ]);
     for (const r of k ?? []) kosten.set(r.lead_id as string, { kosten: Number(r.kosten), bron: r.bron as string, campagne_id: r.campagne_id as string | null });
     for (const r of a ?? []) {
-      if (r.source === 'mirror' || r.source === 'demo') continue;
+      if (r.source === 'mirror' || r.source === 'demo' || zonderKostendeel.has(r.customer_id as string)) continue;
       const s = klanten.get(r.lead_id as string) ?? new Set<string>();
       s.add(r.customer_id as string);
       klanten.set(r.lead_id as string, s);

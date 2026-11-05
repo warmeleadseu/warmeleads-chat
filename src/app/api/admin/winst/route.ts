@@ -37,13 +37,13 @@ export async function GET(request: NextRequest) {
     batch_size: number; total_price: number | string | null; price_per_lead: number | string | null;
     is_paid: boolean | null; mollie_payment_id: string | null; leads_delivered_external: number | null;
     extern_bedrag_excl: number | string | null; extern_factuurnummer: string | null;
-    created_at: string; completed_at: string | null; customers: { name?: string; intern?: boolean } | { name?: string; intern?: boolean }[] | null;
+    created_at: string; completed_at: string | null; customers: { name?: string; intern?: boolean; afspraakpartner?: boolean } | { name?: string; intern?: boolean; afspraakpartner?: boolean }[] | null;
   };
   const batches: BatchRij[] = [];
   for (let p = 0; p < 20; p++) {
     const { data, error } = await supabase
       .from('customer_batches')
-      .select('id, customer_id, branch, batch_kind, status, batch_size, total_price, price_per_lead, is_paid, mollie_payment_id, leads_delivered_external, extern_bedrag_excl, extern_factuurnummer, created_at, completed_at, customers(name, intern)')
+      .select('id, customer_id, branch, batch_kind, status, batch_size, total_price, price_per_lead, is_paid, mollie_payment_id, leads_delivered_external, extern_bedrag_excl, extern_factuurnummer, created_at, completed_at, customers(name, intern, afspraakpartner)')
       .in('batch_kind', SOORTEN)
       /* Verlopen offertes zijn nooit omzet geweest. */
       .neq('status', 'expired')
@@ -52,11 +52,12 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false })
       .range(p * 1000, p * 1000 + 999);
     if (error) return NextResponse.json({ error: 'Batches konden niet worden geladen' }, { status: 500 });
-    /* Interne klanten (masterportaal, afsprakenverzameling) zijn geen omzet
-       van buiten; hun leadkosten staan apart in het lekkage-overzicht. */
+    /* Interne klanten (masterportaal, afsprakenverzameling) en
+       afspraakpartners (Infinite Scale, migratie 194) zijn geen omzet van
+       buiten; hun leadkosten staan apart in het lekkage-overzicht. */
     batches.push(...((data ?? []) as BatchRij[]).filter(b => {
       const k = Array.isArray(b.customers) ? b.customers[0] : b.customers;
-      return !k?.intern;
+      return !k?.intern && !k?.afspraakpartner;
     }));
     if (!data || data.length < 1000) break;
   }
