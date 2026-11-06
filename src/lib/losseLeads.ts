@@ -9,8 +9,9 @@ import { sendEmail, layout, cta, EMAIL_BASE_URL } from './email';
 import { sendPushToCustomer } from './pushNotification';
 import { logAudit } from './audit';
 import {
-  LOSSE_LEADS_BRANCHES, LOSSE_LEAD_PRIJS, MAX_LEEFTIJD_DAGEN, MAX_PER_AANKOOP, RESERVERING_MINUTEN,
-  exclusiefVoorKoper, isVerkoopbaar, leeftijdTekst, terugbetaling, zichtbareAntwoorden, type Bezet,
+  LOSSE_LEADS_BRANCHES, MAX_LEEFTIJD_DAGEN, MAX_PER_AANKOOP, RESERVERING_MINUTEN,
+  exclusiefVoorKoper, isVerkoopbaar, leeftijdTekst, prijsVoorLeeftijd, prijzenVanAankoop, regelsPerPrijs,
+  somPrijzen, terugbetaling, zichtbareAntwoorden, type Bezet,
 } from './losseLeadsRegels';
 
 /**
@@ -26,6 +27,8 @@ export type AanbodLead = {
   land: string | null;
   binnen: string;
   leeftijd: string;
+  /** Prijs excl. btw op dit moment (staffel naar leeftijd). */
+  prijs_excl: number;
   antwoorden: { label: string; waarde: string }[];
 };
 
@@ -75,7 +78,8 @@ async function laadBezet(supabase: SupabaseClient, leads: LeadRij[], koperId: st
 }
 
 async function laadKandidaten(supabase: SupabaseClient, nu: Date, alleenIds?: string[]): Promise<LeadRij[]> {
-  const sinds = new Date(nu.getTime() - MAX_LEEFTIJD_DAGEN * 86_400_000).toISOString();
+  /* Tot en met "10 dagen oud": minder dan 11 x 24 uur. */
+  const sinds = new Date(nu.getTime() - (MAX_LEEFTIJD_DAGEN + 1) * 86_400_000).toISOString();
   const uit: LeadRij[] = [];
   for (let p = 0; p < 10; p++) {
     let q = supabase
@@ -106,6 +110,7 @@ export async function laadAanbod(supabase: SupabaseClient, koperId: string, nu: 
       land: l.land,
       binnen: l.created_at,
       leeftijd: leeftijdTekst(l.created_at, nu),
+      prijs_excl: prijsVoorLeeftijd(l.created_at, nu) as number,
       antwoorden: zichtbareAntwoorden(l.custom_fields),
     }));
 }
@@ -134,7 +139,8 @@ export async function startAankoop(
   if (branches.size !== 1) throw new AankoopFout('Koop per keer leads uit één branche.');
   const branch = [...branches][0] as string;
 
-  const totaalExcl = Math.round(LOSSE_LEAD_PRIJS * ids.length * 100) / 100;
+  /* De prijs van nu ligt vast: verwerkBetaaldeAankoop rekent hem terug vanaf created_at. */
+  const totaalExcl = somPrijzen(vrij.map(l => prijsVoorLeeftijd(l.created_at, nu) as number));
   const btw = computeInvoiceVat({ subtotalExclBtw: totaalExcl, country: opts.koper.country ?? 'NL', customerVatId: opts.koper.vat_id });
 
   const { data: aankoop, error } = await supabase
@@ -144,9 +150,10 @@ export async function startAankoop(
       portal_user_id: opts.portalUserId,
       branch,
       lead_ids: ids,
-      prijs_per_lead: LOSSE_LEAD_PRIJS,
+      prijs_per_lead: Math.round((totaalExcl / ids.length) * 100) / 100,
       totaal_excl: totaalExcl,
       totaal_incl: btw.total_incl_btw,
+      created_at: nu.toISOString(),
       gereserveerd_tot: new Date(nu.getTime() + RESERVERING_MINUTEN * 60_000).toISOString(),
     })
     .select('id')
@@ -210,7 +217,7 @@ export async function verwerkBetaaldeAankoop(supabase: SupabaseClient, aankoopId
   const [{ data: toew }, { data: wacht }, { data: leads }] = await Promise.all([
     supabase.from('lead_assignments').select('lead_id, source').in('lead_id', leadIds),
     supabase.from('geplande_leadleveringen').select('lead_id').eq('status', 'gepland').in('lead_id', leadIds),
-    supabase.from('leads').select('id, branch, lat, lng, provincie, land, postcode, plaatsnaam, custom_fields').in('id', leadIds),
+    supabase.from('leads').select('id, branch, created_at, lat, lng, provincie, land, postcode, plaatsnaam, custom_fields').in('id', leadIds),
   ]);
   const bezet = new Set<string>([
     ...(toew ?? []).filter(t => t.source !== MIRROR_ASSIGNMENT_SOURCE).map(t => t.lead_id as string),
@@ -221,7 +228,13 @@ export async function verwerkBetaaldeAankoop(supabase: SupabaseClient, aankoopId
 
   const { data: br } = await supabase.from('branches').select('name').eq('slug', a.branch).maybeSingle();
   const brancheNaam = (br?.name as string | undefined) || a.branch;
-  const prijs = Number(a.prijs_per_lead);
+  /* Per lead de prijs die bij het afrekenen gold. */
+  const prijzen = prijzenVanAankoop(
+    { lead_ids: leadIds, created_at: a.created_at as string, totaal_excl: Number(a.totaal_excl), prijs_per_lead: Number(a.prijs_per_lead) },
+    new Map((leads ?? []).map(l => [l.id as string, l.created_at as string])),
+  );
+  const totaalVan = (ids: string[]) => somPrijzen(ids.map(id => prijzen.get(id) ?? 0));
+  const gemiddeld = (ids: string[]) => (ids.length ? Math.round((totaalVan(ids) / ids.length) * 100) / 100 : 0);
 
   const geleverd: string[] = [];
   let batchId: string | null = null;
@@ -232,8 +245,8 @@ export async function verwerkBetaaldeAankoop(supabase: SupabaseClient, aankoopId
         customer_id: a.customer_id,
         branch: a.branch,
         batch_size: vrij.length,
-        price_per_lead: prijs,
-        total_price: Math.round(prijs * vrij.length * 100) / 100,
+        price_per_lead: gemiddeld(vrij),
+        total_price: totaalVan(vrij),
         status: 'completed',
         completed_at: nu.toISOString(),
         is_paid: true,
@@ -276,7 +289,7 @@ export async function verwerkBetaaldeAankoop(supabase: SupabaseClient, aankoopId
   }
 
   const nietGeleverd = leadIds.filter(id => !geleverd.includes(id));
-  const terug = terugbetaling(Number(a.totaal_incl), leadIds.length, nietGeleverd.length);
+  const terug = terugbetaling(Number(a.totaal_incl), Number(a.totaal_excl), totaalVan(nietGeleverd));
   if (terug > 0) {
     try {
       await getMollieClient().paymentRefunds.create({
@@ -300,7 +313,7 @@ export async function verwerkBetaaldeAankoop(supabase: SupabaseClient, aankoopId
       batchId = null;
     } else {
       await supabase.from('customer_batches')
-        .update({ batch_size: geleverd.length, total_price: Math.round(prijs * geleverd.length * 100) / 100 })
+        .update({ batch_size: geleverd.length, price_per_lead: gemiddeld(geleverd), total_price: totaalVan(geleverd) })
         .eq('id', batchId);
     }
   }
@@ -318,11 +331,12 @@ export async function verwerkBetaaldeAankoop(supabase: SupabaseClient, aankoopId
       batch_id: batchId,
       branch_name: brancheNaam,
       batch_size: geleverd.length,
-      price_per_lead: prijs,
-      total_price: Math.round(prijs * geleverd.length * 100) / 100,
+      price_per_lead: gemiddeld(geleverd),
+      total_price: totaalVan(geleverd),
       mollie_payment_id: paymentId,
       paid_at: nu.toISOString(),
       invoice_product: 'losse_leads',
+      regels_per_prijs: regelsPerPrijs(geleverd.map(id => prijzen.get(id) ?? 0)),
     }).catch(e => console.error('[losse-leads] factuur mislukt:', e));
 
     /* Wie koopt is klant: demoleads opruimen, net als bij een eerste batch. */
@@ -342,8 +356,8 @@ export async function verwerkBetaaldeAankoop(supabase: SupabaseClient, aankoopId
       customer_name: klant?.name || 'Onbekend',
       branch_name: `${brancheNaam} (losse leads)`,
       batch_size: geleverd.length,
-      total_price: Math.round(prijs * geleverd.length * 100) / 100,
-      price_per_lead: prijs,
+      total_price: totaalVan(geleverd),
+      price_per_lead: gemiddeld(geleverd),
       is_paid: true,
       source: 'portal',
       batch_kind: 'bulk_leads',

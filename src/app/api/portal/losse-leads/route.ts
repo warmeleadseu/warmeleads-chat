@@ -4,12 +4,12 @@ import { createServerClient } from '@/lib/supabase';
 import { hasPermission, forbidden, PERMISSIONS } from '@/lib/portalPermissions';
 import { computeInvoiceVat } from '@/lib/invoiceVat';
 import { AankoopFout, laadAanbod, startAankoop } from '@/lib/losseLeads';
-import { LOSSE_LEADS_BRANCHES, LOSSE_LEADS_UITLEG, LOSSE_LEAD_PRIJS, MAX_PER_AANKOOP } from '@/lib/losseLeadsRegels';
+import { HOOGSTE_PRIJS, LAAGSTE_PRIJS, LOSSE_LEADS_BRANCHES, LOSSE_LEADS_UITLEG, MAX_PER_AANKOOP } from '@/lib/losseLeadsRegels';
 
 /**
  * Losse leads in het portaal: leads die buiten alle regio's vielen en nog
- * nooit zijn uitgedeeld, voor EUR 15 per stuk. Elke klant met een account ziet
- * het aanbod; kopen kan wie mag bestellen.
+ * nooit zijn uitgedeeld, voor EUR 7,50 tot 15 per stuk, naar leeftijd. Elke
+ * klant met een account ziet het aanbod; kopen kan wie mag bestellen.
  *
  * GET              het aanbod (zonder persoonsgegevens)
  * GET ?aankoop=id  de stand van een eigen aankoop (terug van Mollie)
@@ -47,11 +47,13 @@ export async function GET(request: NextRequest) {
       laadAanbod(supabase, session.customer.id),
       supabase.from('branches').select('slug, name').in('slug', [...LOSSE_LEADS_BRANCHES]),
     ]);
-    const btw = computeInvoiceVat({ subtotalExclBtw: LOSSE_LEAD_PRIJS, country: session.customer.country ?? 'NL', customerVatId: session.customer.vat_id ?? null });
+    const btw = computeInvoiceVat({ subtotalExclBtw: HOOGSTE_PRIJS, country: session.customer.country ?? 'NL', customerVatId: session.customer.vat_id ?? null });
     return NextResponse.json({
       uitleg: LOSSE_LEADS_UITLEG,
-      prijs_excl: LOSSE_LEAD_PRIJS,
-      prijs_incl: btw.total_incl_btw,
+      prijs_min_excl: LAAGSTE_PRIJS,
+      prijs_max_excl: HOOGSTE_PRIJS,
+      /* Het portaal telt de prijzen excl. op en rekent de btw zoals computeInvoiceVat. */
+      btw_percentage: btw.btw_percentage,
       verlegd: btw.vat_mode === 'reverse_charge_be',
       max_per_aankoop: MAX_PER_AANKOOP,
       mag_kopen: hasPermission(session, PERMISSIONS.ORDERS_CREATE),

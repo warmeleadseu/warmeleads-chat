@@ -8,7 +8,8 @@ import { EmptyState, PageHeader, Skeleton, StickyCheckoutBar, T } from '../_ui';
 
 /**
  * Extra leads: leads die buiten de regio's van onze klanten vielen en nog
- * nooit zijn geleverd, voor een vaste prijs per stuk. De klant ziet waar de
+ * nooit zijn geleverd. De prijs per lead hangt af van zijn leeftijd (staffels
+ * in losseLeadsRegels.ts); we tonen bewust niet wanneer een prijs zakt. De klant ziet waar de
  * lead woont en wat hij invulde, maar geen naam of contactgegevens; die komen
  * na betaling in het portaal.
  */
@@ -21,12 +22,14 @@ type Lead = {
   land: string | null;
   binnen: string;
   leeftijd: string;
+  prijs_excl: number;
   antwoorden: { label: string; waarde: string }[];
 };
 type Aanbod = {
   uitleg: string;
-  prijs_excl: number;
-  prijs_incl: number;
+  prijs_min_excl: number;
+  prijs_max_excl: number;
+  btw_percentage: number;
   verlegd: boolean;
   max_per_aankoop: number;
   mag_kopen: boolean;
@@ -67,6 +70,16 @@ export default function ExtraLeadsPage() {
   }, []);
 
   useEffect(() => { void laad(); }, [laad]);
+
+  /* Elke minuut en bij terugkeer naar het tabblad verversen: wat een ander
+     koopt verdwijnt en prijzen blijven actueel. Niet tijdens het afrekenen. */
+  useEffect(() => {
+    if (bezig) return;
+    const ververs = () => { if (document.visibilityState === 'visible') void laad(); };
+    const t = setInterval(ververs, 60_000);
+    document.addEventListener('visibilitychange', ververs);
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', ververs); };
+  }, [laad, bezig]);
 
   /* Terug van Mollie: de stand van de aankoop volgen tot hij binnen is. */
   useEffect(() => {
@@ -124,7 +137,12 @@ export default function ExtraLeadsPage() {
     });
   };
 
-  const totaal = (aanbod?.prijs_incl ?? 0) * gekozen.size;
+  /* Zelfde afronding als computeInvoiceVat op de server. */
+  const totaal = useMemo(() => {
+    const excl = Math.round((aanbod?.leads ?? []).filter(l => gekozen.has(l.id)).reduce((s, l) => s + l.prijs_excl, 0) * 100) / 100;
+    const btw = Math.round(excl * (aanbod?.btw_percentage ?? 0)) / 100;
+    return Math.round((excl + btw) * 100) / 100;
+  }, [aanbod, gekozen]);
 
   const afrekenen = async () => {
     if (gekozen.size === 0) return;
@@ -154,7 +172,7 @@ export default function ExtraLeadsPage() {
     <div className={`space-y-5 ${T.pagePaddingForSticky}`}>
       <PageHeader
         title="Extra leads"
-        subtitle={aanbod ? `${formatCurrency(aanbod.prijs_excl)} per lead (excl. btw)` : undefined}
+        subtitle={aanbod ? `${formatCurrency(aanbod.prijs_min_excl)} tot ${formatCurrency(aanbod.prijs_max_excl)} per lead (excl. btw)` : undefined}
         action={
           <button type="button" onClick={() => void laad()} className={T.btnGhost} disabled={laden}>
             <ArrowPathIcon className={`h-4 w-4 ${laden ? 'animate-spin' : ''}`} /> Verversen
@@ -250,11 +268,14 @@ export default function ExtraLeadsPage() {
                         </div>
                       )}
                     </div>
-                    {aanbod.mag_kopen && (
-                      <span className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-2 ${aan ? 'border-brand-purple bg-brand-purple text-white' : 'border-slate-300'}`}>
-                        {aan && <CheckCircleIcon className="h-4 w-4" />}
-                      </span>
-                    )}
+                    <div className="flex shrink-0 items-center gap-3">
+                      <span className="text-sm font-bold text-slate-900">{formatCurrency(l.prijs_excl)}</span>
+                      {aanbod.mag_kopen && (
+                        <span className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-2 ${aan ? 'border-brand-purple bg-brand-purple text-white' : 'border-slate-300'}`}>
+                          {aan && <CheckCircleIcon className="h-4 w-4" />}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </button>
               );
@@ -271,7 +292,7 @@ export default function ExtraLeadsPage() {
               <div>
                 <p className="text-sm font-semibold text-slate-900">{gekozen.size} lead{gekozen.size === 1 ? '' : 's'} gekozen</p>
                 <p className={T.helper}>
-                  {aanbod.verlegd ? 'BTW verlegd' : 'Incl. 21% btw'} · maximaal {aanbod.max_per_aankoop} per keer
+                  {aanbod.verlegd ? 'BTW verlegd' : `Incl. ${aanbod.btw_percentage}% btw`} · maximaal {aanbod.max_per_aankoop} per keer
                 </p>
               </div>
               <div className="flex items-center gap-4">

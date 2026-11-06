@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { canAssignWithinCap, effectiveMaxAssignments } from '../assignmentCap';
-import { exclusiefVoorKoper, isVerkoopbaar, leeftijdTekst, terugbetaling, zichtbareAntwoorden, type Bezet } from '../losseLeadsRegels';
+import {
+  exclusiefVoorKoper, isVerkoopbaar, leeftijdTekst, prijsVoorLeeftijd, prijzenVanAankoop, regelsPerPrijs, terugbetaling,
+  zichtbareAntwoorden, type Bezet,
+} from '../losseLeadsRegels';
 
 const nu = new Date('2026-10-27T12:00:00Z');
 const uurGeleden = (u: number) => new Date(nu.getTime() - u * 3_600_000).toISOString();
@@ -19,9 +22,10 @@ describe('isVerkoopbaar', () => {
     expect(isVerkoopbaar(lead({ branch: 'kozijnen' }), leeg(), nu)).toBe(false);
     expect(isVerkoopbaar(lead({ branch: 'dakrenovatie' }), leeg(), nu)).toBe(false);
   });
-  it('alleen tot 7 dagen oud', () => {
-    expect(isVerkoopbaar(lead({ created_at: uurGeleden(7 * 24 - 1) }), leeg(), nu)).toBe(true);
-    expect(isVerkoopbaar(lead({ created_at: uurGeleden(7 * 24 + 1) }), leeg(), nu)).toBe(false);
+  it('tot en met 10 dagen oud', () => {
+    expect(isVerkoopbaar(lead({ created_at: uurGeleden(10 * 24 + 23) }), leeg(), nu)).toBe(true);
+    expect(isVerkoopbaar(lead({ created_at: uurGeleden(11 * 24) }), leeg(), nu)).toBe(false);
+    expect(isVerkoopbaar(lead({ created_at: uurGeleden(-1) }), leeg(), nu)).toBe(false);
   });
   it('niet als hij is uitgedeeld, gepland, door een ander gereserveerd of exclusief elders', () => {
     for (const k of ['uitgedeeld', 'gepland', 'gereserveerd', 'exclusiefElders'] as const) {
@@ -35,6 +39,49 @@ describe('isVerkoopbaar', () => {
     expect(isVerkoopbaar(lead({ bron: 'demo' }), leeg(), nu)).toBe(false);
     expect(isVerkoopbaar(lead({ phone_valid: false }), leeg(), nu)).toBe(false);
     expect(isVerkoopbaar(lead({ phone_valid: null }), leeg(), nu)).toBe(true);
+  });
+});
+
+describe('prijsVoorLeeftijd', () => {
+  it('staffels naar hele dagen, zoals het portaal de leeftijd toont', () => {
+    expect(prijsVoorLeeftijd(uurGeleden(0), nu)).toBe(15);
+    expect(prijsVoorLeeftijd(uurGeleden(3 * 24 + 23), nu)).toBe(15);
+    expect(prijsVoorLeeftijd(uurGeleden(4 * 24), nu)).toBe(12.5);
+    expect(prijsVoorLeeftijd(uurGeleden(5 * 24 + 23), nu)).toBe(12.5);
+    expect(prijsVoorLeeftijd(uurGeleden(6 * 24), nu)).toBe(10);
+    expect(prijsVoorLeeftijd(uurGeleden(7 * 24 + 23), nu)).toBe(10);
+    expect(prijsVoorLeeftijd(uurGeleden(8 * 24), nu)).toBe(7.5);
+    expect(prijsVoorLeeftijd(uurGeleden(10 * 24 + 23), nu)).toBe(7.5);
+  });
+  it('te oud of nog niet binnen: geen prijs', () => {
+    expect(prijsVoorLeeftijd(uurGeleden(11 * 24), nu)).toBeNull();
+    expect(prijsVoorLeeftijd(uurGeleden(-25), nu)).toBeNull();
+    expect(prijsVoorLeeftijd('geen datum', nu)).toBeNull();
+  });
+  it('label en prijs vallen samen', () => {
+    expect(leeftijdTekst(uurGeleden(3 * 24 + 23), nu)).toBe('3 dagen oud');
+    expect(leeftijdTekst(uurGeleden(4 * 24), nu)).toBe('4 dagen oud');
+  });
+});
+
+describe('prijzenVanAankoop', () => {
+  const binnen = new Map([['a', uurGeleden(5)], ['b', uurGeleden(4 * 24 + 2)], ['c', uurGeleden(9 * 24)]]);
+  /* De aankoop werd een uur geleden afgerekend: toen was b 4 dagen en 1 uur oud. */
+  const aankoop = { lead_ids: ['a', 'b', 'c'], created_at: uurGeleden(1), totaal_excl: 35, prijs_per_lead: 11.67 };
+  it('de prijs van het moment van afrekenen, ook als die nu lager zou zijn', () => {
+    expect([...prijzenVanAankoop(aankoop, binnen)]).toEqual([['a', 15], ['b', 12.5], ['c', 7.5]]);
+  });
+  it('som klopt niet met het betaalde bedrag (oude aankoop): gemiddelde prijs', () => {
+    const oud = { ...aankoop, totaal_excl: 45, prijs_per_lead: 15 };
+    expect([...prijzenVanAankoop(oud, binnen).values()]).toEqual([15, 15, 15]);
+  });
+  it('lead bestaat niet meer: gemiddelde prijs', () => {
+    expect([...prijzenVanAankoop({ ...aankoop, lead_ids: ['a', 'x'] }, binnen).values()]).toEqual([11.67, 11.67]);
+  });
+  it('factuurregels per prijs, duurste eerst', () => {
+    expect(regelsPerPrijs([7.5, 15, 7.5, 12.5])).toEqual([
+      { aantal: 1, prijs_per_lead: 15 }, { aantal: 1, prijs_per_lead: 12.5 }, { aantal: 2, prijs_per_lead: 7.5 },
+    ]);
   });
 });
 
@@ -63,10 +110,12 @@ describe('leeftijdTekst en terugbetaling', () => {
     expect(leeftijdTekst(uurGeleden(30), nu)).toBe('1 dag oud');
     expect(leeftijdTekst(uurGeleden(80), nu)).toBe('3 dagen oud');
   });
-  it('terugbetaling naar rato, volledig als niets geleverd kon worden', () => {
-    expect(terugbetaling(54.45, 3, 0)).toBe(0);
-    expect(terugbetaling(54.45, 3, 1)).toBe(18.15);
-    expect(terugbetaling(54.45, 3, 3)).toBe(54.45);
+  it('terugbetaling naar rato van de prijs, volledig als niets geleverd kon worden', () => {
+    expect(terugbetaling(54.45, 45, 0)).toBe(0);
+    expect(terugbetaling(54.45, 45, 15)).toBe(18.15);
+    expect(terugbetaling(54.45, 45, 45)).toBe(54.45);
+    /* 15 + 12,50 + 7,50 = 35 excl, 42,35 incl; de lead van 7,50 was weg. */
+    expect(terugbetaling(42.35, 35, 7.5)).toBe(9.08);
   });
 });
 

@@ -25,6 +25,8 @@ interface CreateInvoiceParams {
   invoice_product?: 'leads' | 'niche_research' | 'bulk_leads' | 'appointments' | 'losse_leads';
   /** Titel van de te onderzoeken niche (alleen bij niche_research) */
   niche_title?: string | null;
+  /** Losse leads met verschillende prijzen (staffel naar leeftijd): één factuurregel per prijs. */
+  regels_per_prijs?: { aantal: number; prijs_per_lead: number }[];
   /**
    * `new_batch_order`: klant krijgt open-factuurmail met extra intro over net aangemaakte batch
    * (admin → nieuwe batch + factuur met betaallink).
@@ -151,12 +153,20 @@ export async function createInvoice(params: CreateInvoiceParams) {
           ? `Losse leads: ${params.batch_size} × ${params.branch_name}`
           : `${params.batch_size} ${params.branch_name} leads`;
 
-  const lineItems: InvoiceLineItem[] = [{
-    description: lineDescription,
-    quantity: isNiche || isBulk ? 1 : params.batch_size,
-    unit_price: isNiche || isBulk ? subtotal : Number(params.price_per_lead),
-    total: subtotal,
-  }];
+  const perPrijs = isLos ? (params.regels_per_prijs ?? []).filter(r => r.aantal > 0) : [];
+  const lineItems: InvoiceLineItem[] = perPrijs.length > 0
+    ? perPrijs.map(r => ({
+        description: lineDescription,
+        quantity: r.aantal,
+        unit_price: r.prijs_per_lead,
+        total: Math.round(r.aantal * r.prijs_per_lead * 100) / 100,
+      }))
+    : [{
+        description: lineDescription,
+        quantity: isNiche || isBulk ? 1 : params.batch_size,
+        unit_price: isNiche || isBulk ? subtotal : Number(params.price_per_lead),
+        total: subtotal,
+      }];
 
   const invoiceNumber = await getNextInvoiceNumber(supabase);
   const now = new Date().toISOString();
