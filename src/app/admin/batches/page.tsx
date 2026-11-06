@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import ExterneFactuurKeuze, { beginStand, naarVelden, type ExterneFactuurStand } from '@/components/admin/ExterneFactuurKeuze';
 import BatchWinstBlok from '@/components/admin/BatchWinstBlok';
+import BatchHerkomstBlok from '@/components/admin/BatchHerkomstBlok';
 import BetaalOpvolging from '@/components/admin/BetaalOpvolging';
 import { directHerkomst, type DirectStand } from '@/lib/directLeveren';
 import Link from 'next/link';
@@ -1722,6 +1723,9 @@ function BatchDetailPanel({ batchId, branches, onClose, onEdit, onListRefresh }:
 
                 {/* Winst (alleen superadmin) */}
                 {currentUser.role === 'superadmin' && <BatchWinstBlok batchId={batch.id} />}
+
+                {/* Herkomst leads per Meta-campagne (alleen superadmin) */}
+                {currentUser.role === 'superadmin' && <BatchHerkomstBlok batchId={batch.id} />}
 
                 {/* Account Manager */}
                 {currentUser.role !== 'accountmanager' && (
