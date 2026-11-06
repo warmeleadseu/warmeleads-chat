@@ -1,6 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { fetchActiveBatchTargetsByBatch, type GeoTargetRow } from './batchTargets';
+import { laadCampagneRegels } from './campagneExclusiviteit';
+import { REDENEN, redenNietGekoppeld, type RedenBatch, type RedenCode } from './campagneRedenen';
 import {
-  berekenCampagnes, berekenHerkomst, type BatchHerkomst, type CampagneLead, type CampagneRij, type Context,
+  berekenCampagnes, berekenHerkomst, bestemmingVan, gekoppeldOp, type BatchHerkomst, type CampagneLead, type CampagneRij, type Context,
   type HerkomstLead, type Klant, type Koppeling, type Toewijzing, type Uitgaven,
 } from './campagneEffectiviteit';
 
@@ -79,13 +82,16 @@ async function laadContext(supabase: SupabaseClient, leadIds: string[], koppelin
   };
 }
 
-async function laadBatchKlant(supabase: SupabaseClient, batchIds: string[]): Promise<Map<string, string>> {
-  const rijen = await inDelen<{ id: string; customers: { name: string | null } | { name: string | null }[] | null }>(batchIds, deel =>
-    supabase.from('customer_batches').select('id, customers(name)').in('id', deel));
-  return new Map(rijen.map(r => {
-    const c = Array.isArray(r.customers) ? r.customers[0] : r.customers;
-    return [r.id, c?.name || 'Onbekend'];
-  }));
+async function laadBatchKlant(supabase: SupabaseClient, batchIds: string[]): Promise<{ klant: Map<string, string>; actief: Set<string> }> {
+  const rijen = await inDelen<{ id: string; status: string | null; customers: { name: string | null } | { name: string | null }[] | null }>(batchIds, deel =>
+    supabase.from('customer_batches').select('id, status, customers(name)').in('id', deel));
+  return {
+    klant: new Map(rijen.map(r => {
+      const c = Array.isArray(r.customers) ? r.customers[0] : r.customers;
+      return [r.id, c?.name || 'Onbekend'];
+    })),
+    actief: new Set(rijen.filter(r => r.status === 'active').map(r => r.id)),
+  };
 }
 
 /** Alle campagnes met uitgaven of leads in de periode (datums yyyy-mm-dd, tot en met). */
@@ -104,12 +110,13 @@ export async function laadCampagneOverzicht(supabase: SupabaseClient, van: strin
     laadKoppelingen(supabase),
   ]);
   const ctx = await laadContext(supabase, leads.map(l => l.id), koppelingen);
-  const batchKlant = await laadBatchKlant(supabase, [...new Set(koppelingen.map(k => k.batch_id))]);
+  const batches = await laadBatchKlant(supabase, [...new Set(koppelingen.map(k => k.batch_id))]);
   return berekenCampagnes({
     uitgaven: spend.map<Uitgaven>(s => ({ campaign_id: s.campaign_id, naam: s.campaign_name, spend: Number(s.spend) || 0, meta_leads: Number(s.leads_count) || 0 })),
     leads: leads.map<CampagneLead>(l => ({ id: l.id, campaign_id: l.meta_campaign_id, created_at: l.created_at, phone_valid: l.phone_valid })),
     ctx,
-    batchKlant,
+    batchKlant: batches.klant,
+    actieveBatches: batches.actief,
     van,
     tot,
   });
@@ -155,4 +162,94 @@ export async function laadBatchHerkomst(supabase: SupabaseClient, batchId: strin
   for (const n of namen) if (n.campaign_name && !naamMap.has(n.campaign_id)) naamMap.set(n.campaign_id, n.campaign_name);
 
   return berekenHerkomst({ batchId, geleverd, campagneLeads: perCampagne, koppelingen, uitgavenPerDag, namen: naamMap, nu: new Date() });
+}
+
+export type RedenGroep = {
+  code: RedenCode;
+  label: string;
+  aantal: number;
+  voorbeelden: { plaats: string | null; provincie: string | null; binnen: string; naar: string[] }[];
+};
+
+/**
+ * Waarom de leads van deze campagne die bij "andere klanten" terechtkwamen
+ * niet bij de gekoppelde klant kwamen (zie campagneRedenen.ts).
+ */
+export async function laadRedenen(supabase: SupabaseClient, campaignId: string, van: string, tot: string): Promise<{ totaal: number; groepen: RedenGroep[] }> {
+  const totExcl = new Date(`${tot}T00:00:00Z`);
+  totExcl.setUTCDate(totExcl.getUTCDate() + 1);
+  const [leads, alleKoppelingen, regels] = await Promise.all([
+    alles<{ id: string; branch: string; created_at: string; lat: number | null; lng: number | null; provincie: string | null; land: string | null; postcode: string | null; plaatsnaam: string | null; phone_valid: boolean | null; custom_fields: Record<string, string> | null; meta_campaign_id: string }>((a, b) =>
+      supabase.from('leads').select('id, branch, created_at, lat, lng, provincie, land, postcode, plaatsnaam, phone_valid, custom_fields, meta_campaign_id')
+        .eq('meta_campaign_id', campaignId).or(ECHTE_LEAD)
+        .gte('created_at', `${van}T00:00:00Z`).lt('created_at', totExcl.toISOString())
+        .order('created_at').range(a, b)),
+    laadKoppelingen(supabase),
+    laadCampagneRegels(supabase),
+  ]);
+  const koppelingen = alleKoppelingen.filter(k => k.campaign_id === campaignId);
+  const ctx = await laadContext(supabase, leads.map(l => l.id), alleKoppelingen);
+
+  const andere = leads.filter(l => bestemmingVan({ id: l.id, campaign_id: campaignId, created_at: l.created_at, phone_valid: l.phone_valid }, koppelingen, ctx).bestemming === 'andere_klant');
+  if (andere.length === 0) return { totaal: 0, groepen: [] };
+
+  const batchIds = [...new Set(koppelingen.map(k => k.batch_id))];
+  const [batches, batchTargets, toewMomenten, leadToew] = await Promise.all([
+    inDelen<{ id: string; customer_id: string; branch: string; batch_size: number | null; leads_per_day: number | null; leads_per_week: number | null; dagdosering: boolean | null; starts_at: string | null; created_at: string; lookback_days: number | null; lead_filters: unknown }>(batchIds, deel =>
+      supabase.from('customer_batches').select('id, customer_id, branch, batch_size, leads_per_day, leads_per_week, dagdosering, starts_at, created_at, lookback_days, lead_filters').in('id', deel)),
+    fetchActiveBatchTargetsByBatch(supabase, batchIds),
+    alles<{ batch_id: string; assigned_at: string; source: string | null }>((a, b) =>
+      supabase.from('lead_assignments').select('batch_id, assigned_at, source').in('batch_id', batchIds).range(a, b)),
+    inDelen<{ lead_id: string; customer_id: string; assigned_at: string; source: string | null }>(andere.map(l => l.id), deel =>
+      supabase.from('lead_assignments').select('lead_id, customer_id, assigned_at, source').in('lead_id', deel)),
+  ]);
+  const klantIds = [...new Set([...batches.map(b => b.customer_id), ...leadToew.map(t => t.customer_id)])];
+  const [klantTargets, uitsl] = await Promise.all([
+    inDelen<GeoTargetRow & { customer_id: string; marge_km?: number | null }>(klantIds, deel =>
+      supabase.from('customer_targets').select('*').in('customer_id', deel).eq('is_active', true)),
+    inDelen<{ id: string; exclude_customers: string[] | null }>(klantIds, deel =>
+      supabase.from('customers').select('id, exclude_customers').in('id', deel)),
+  ]);
+
+  const leveringen = new Map<string, number[]>();
+  for (const t of toewMomenten) {
+    if (GEEN_ECHTE_TOEWIJZING.has(t.source ?? '')) continue;
+    leveringen.set(t.batch_id, [...(leveringen.get(t.batch_id) ?? []), new Date(t.assigned_at).getTime()]);
+  }
+  const doelenPerKlant = new Map<string, GeoTargetRow[]>();
+  for (const t of klantTargets) doelenPerKlant.set(t.customer_id, [...(doelenPerKlant.get(t.customer_id) ?? []), t]);
+  const redenBatches = new Map<string, RedenBatch>(batches.map(b => {
+    const eigen = batchTargets.get(b.id);
+    return [b.id, {
+      id: b.id, customer_id: b.customer_id, branch: b.branch, batch_size: Number(b.batch_size) || 0,
+      leads_per_day: b.leads_per_day, leads_per_week: b.leads_per_week, dagdosering: b.dagdosering,
+      starts_at: b.starts_at, created_at: b.created_at, lookback_days: b.lookback_days,
+      lead_filters: Array.isArray(b.lead_filters) ? (b.lead_filters as RedenBatch['lead_filters']) : null,
+      targets: eigen && eigen.length > 0 ? eigen : doelenPerKlant.get(b.customer_id) ?? [],
+      leveringen: (leveringen.get(b.id) ?? []).sort((x, y) => x - y),
+    }];
+  }));
+  const uitsluitingen = new Map(uitsl.map(u => [u.id, Array.isArray(u.exclude_customers) ? u.exclude_customers : []]));
+  const klantenPerLead = new Map<string, { customer_id: string; assigned_at: string }[]>();
+  for (const t of leadToew) {
+    if (GEEN_ECHTE_TOEWIJZING.has(t.source ?? '')) continue;
+    klantenPerLead.set(t.lead_id, [...(klantenPerLead.get(t.lead_id) ?? []), { customer_id: t.customer_id, assigned_at: t.assigned_at }]);
+  }
+
+  const groepen = new Map<RedenCode, RedenGroep>();
+  for (const l of andere) {
+    const golden = gekoppeldOp(koppelingen, l.created_at).map(k => redenBatches.get(k.batch_id)).filter((b): b is RedenBatch => !!b);
+    const klanten = klantenPerLead.get(l.id) ?? [];
+    const code = redenNietGekoppeld({ ...l, klanten }, golden, { regels, uitsluitingen });
+    const g = groepen.get(code) ?? { code, label: REDENEN[code], aantal: 0, voorbeelden: [] };
+    g.aantal++;
+    if (g.voorbeelden.length < 8) {
+      g.voorbeelden.push({
+        plaats: l.plaatsnaam, provincie: l.provincie, binnen: l.created_at,
+        naar: [...new Set(klanten.map(k => ctx.klanten.get(k.customer_id)?.naam ?? 'Onbekend'))],
+      });
+    }
+    groepen.set(code, g);
+  }
+  return { totaal: andere.length, groepen: [...groepen.values()].sort((a, b) => b.aantal - a.aantal) };
 }

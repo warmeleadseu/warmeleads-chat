@@ -69,7 +69,8 @@ export function bestemmingVan(
   return uit(lead.phone_valid === false || oud ? 'verloren' : 'te_koop');
 }
 
-export type GekoppeldAan = { batch_id: string; klant: string; van: string; tot: string | null; geschat: boolean };
+/** actief: de batch loopt nog (status actief) en de koppeling is niet beëindigd. */
+export type GekoppeldAan = { batch_id: string; klant: string; van: string; tot: string | null; geschat: boolean; actief: boolean };
 
 export type CampagneRij = {
   campaign_id: string;
@@ -101,6 +102,8 @@ export function berekenCampagnes(opts: {
   leads: CampagneLead[];
   ctx: Context;
   batchKlant: Map<string, string>;
+  /** Batches met status actief. */
+  actieveBatches?: Set<string>;
   van: string;
   tot: string;
 }): CampagneRij[] {
@@ -152,7 +155,10 @@ export function berekenCampagnes(opts: {
     /* Koppelingen die in de periode golden. */
     const gekoppeldAan = kop
       .filter(k => new Date(k.van).getTime() <= totMs && (k.tot === null || new Date(k.tot).getTime() >= vanMs))
-      .map(k => ({ batch_id: k.batch_id, klant: opts.batchKlant.get(k.batch_id) ?? 'Onbekend', van: k.van, tot: k.tot, geschat: k.bron === 'startstand' }))
+      .map(k => ({
+        batch_id: k.batch_id, klant: opts.batchKlant.get(k.batch_id) ?? 'Onbekend', van: k.van, tot: k.tot, geschat: k.bron === 'startstand',
+        actief: k.tot === null && (opts.actieveBatches?.has(k.batch_id) ?? false),
+      }))
       .sort((a, b) => b.van.localeCompare(a.van));
 
     const spend = rond(u?.spend ?? 0);

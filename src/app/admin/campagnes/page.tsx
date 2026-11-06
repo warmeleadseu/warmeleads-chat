@@ -28,6 +28,59 @@ const KOLOMMEN: { b: Bestemming; label: string; uitleg: string }[] = [
   { b: 'verloren', label: 'Verloren', uitleg: 'Zonder klant en te oud of een ongeldig nummer' },
 ];
 
+type Filter = 'alle' | 'gekoppeld' | 'actief';
+type RedenGroep = { code: string; label: string; aantal: number; voorbeelden: { plaats: string | null; provincie: string | null; binnen: string; naar: string[] }[] };
+
+/** Waarom leads van deze campagne bij andere klanten kwamen en niet bij de gekoppelde klant. */
+function Redenen({ campagne, van, tot }: { campagne: string; van: string; tot: string }) {
+  const [d, setD] = useState<{ totaal: number; groepen: RedenGroep[] } | null>(null);
+  const [fout, setFout] = useState<string | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
+  useEffect(() => {
+    let weg = false;
+    setD(null);
+    setFout(null);
+    void adminFetch(`/api/admin/campagnes/redenen?campagne=${encodeURIComponent(campagne)}&van=${van}&tot=${tot}`, { cache: 'no-store' })
+      .then(async r => {
+        const j = await r.json().catch(() => ({}));
+        if (weg) return;
+        if (!r.ok) setFout(j.error || 'Laden mislukt');
+        else setD(j);
+      })
+      .catch(() => { if (!weg) setFout('Laden mislukt'); });
+    return () => { weg = true; };
+  }, [campagne, van, tot]);
+
+  return (
+    <div className="mt-4 border-t border-slate-200 pt-3">
+      <p className="mb-1 text-xs font-semibold text-slate-700">Waarom niet bij de gekoppelde klant</p>
+      <p className="mb-2 text-[11px] text-slate-400">Per lead de eerste verdeelregel die de gekoppelde batch tegenhield, op het moment van binnenkomst. Werkgebied en filters zoals ze nu zijn ingesteld.</p>
+      {fout ? <p className="text-xs text-red-600">{fout}</p> : !d ? <div className="h-10 animate-pulse rounded-lg bg-slate-100" /> : d.groepen.length === 0 ? (
+        <p className="text-xs text-slate-500">Geen leads bij andere klanten in deze periode.</p>
+      ) : (
+        <ul className="space-y-1">
+          {d.groepen.map(g => (
+            <li key={g.code} className="rounded-lg bg-white px-3 py-2 ring-1 ring-slate-200">
+              <button type="button" onClick={() => setOpen(open === g.code ? null : g.code)} className="flex w-full items-center justify-between gap-3 text-left text-xs">
+                <span className="font-medium text-slate-800">{g.label}</span>
+                <span className="shrink-0 tabular-nums text-slate-600">{g.aantal} <span className="text-slate-400">({Math.round((g.aantal / d.totaal) * 100)}%)</span></span>
+              </button>
+              {open === g.code && (
+                <ul className="mt-2 space-y-0.5 border-t border-slate-100 pt-2 text-[11px] text-slate-500">
+                  {g.voorbeelden.map((v, i) => (
+                    <li key={i}>{[v.plaats, v.provincie].filter(Boolean).join(', ') || 'Onbekende plaats'} · {datum(v.binnen)} · naar {v.naar.join(', ') || 'onbekend'}</li>
+                  ))}
+                  {g.aantal > g.voorbeelden.length && <li className="text-slate-400">en nog {g.aantal - g.voorbeelden.length}</li>}
+                </ul>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 type Sorteer = 'uitgaven' | 'binnen' | 'gekoppeld_pct' | 'kosten_per_gekoppelde_lead' | 'verloren';
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
@@ -38,7 +91,7 @@ export default function CampagnesPage() {
   const [data, setData] = useState<Antwoord | null>(null);
   const [laden, setLaden] = useState(true);
   const [fout, setFout] = useState<string | null>(null);
-  const [alleenGekoppeld, setAlleenGekoppeld] = useState(false);
+  const [filter, setFilter] = useState<Filter>('alle');
   const [sorteer, setSorteer] = useState<Sorteer>('uitgaven');
   const [open, setOpen] = useState<string | null>(null);
 
@@ -63,7 +116,8 @@ export default function CampagnesPage() {
   useEffect(() => { void laad(); }, [laad]);
 
   const rijen = useMemo(() => {
-    const r = (data?.campagnes ?? []).filter(c => !alleenGekoppeld || c.gekoppeld_aan.length > 0);
+    const r = (data?.campagnes ?? []).filter(c =>
+      filter === 'alle' || (filter === 'gekoppeld' ? c.gekoppeld_aan.length > 0 : c.gekoppeld_aan.some(g => g.actief)));
     const waarde = (c: Rij): number => {
       if (sorteer === 'verloren') return c.binnen ? (c.per_bestemming.verloren + c.per_bestemming.te_koop) / c.binnen : -1;
       if (sorteer === 'binnen') return c.binnen;
@@ -73,7 +127,7 @@ export default function CampagnesPage() {
     };
     const oplopend = sorteer === 'gekoppeld_pct';
     return [...r].sort((a, b) => (oplopend ? waarde(a) - waarde(b) : waarde(b) - waarde(a)));
-  }, [data, alleenGekoppeld, sorteer]);
+  }, [data, filter, sorteer]);
 
   const totaal = useMemo(() => {
     const t = { uitgaven: 0, meta: 0, binnen: 0, per: Object.fromEntries(KOLOMMEN.map(k => [k.b, 0])) as Record<Bestemming, number> };
@@ -107,9 +161,11 @@ export default function CampagnesPage() {
               </button>
             ))}
           </div>
-          <label className="flex min-h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-600">
-            <input type="checkbox" checked={alleenGekoppeld} onChange={e => setAlleenGekoppeld(e.target.checked)} /> Alleen gekoppeld
-          </label>
+          <select value={filter} onChange={e => setFilter(e.target.value as Filter)} className="min-h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-600">
+            <option value="alle">Alle campagnes</option>
+            <option value="gekoppeld">Gekoppeld aan een batch</option>
+            <option value="actief">Gekoppeld aan een actieve batch</option>
+          </select>
           <button onClick={() => void laad()} disabled={laden} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
             <ArrowPathIcon className={`h-4 w-4 ${laden ? 'animate-spin' : ''}`} /> Verversen
           </button>
@@ -193,7 +249,9 @@ export default function CampagnesPage() {
                       const n = c.per_bestemming[k.b];
                       return (
                         <td key={k.b} className={`px-3 py-2.5 text-right tabular-nums ${n === 0 ? 'text-slate-300' : k.b === 'gekoppeld' ? 'font-semibold text-slate-900' : ''}`}>
-                          {k.b === 'gekoppeld' && c.gekoppeld_aan.length === 0 ? '–' : n}
+                          {k.b === 'gekoppeld' && c.gekoppeld_aan.length === 0 ? '–' : k.b === 'andere_klant' && n > 0 && c.gekoppeld_aan.length > 0 ? (
+                            <button type="button" title="Waarom niet bij de gekoppelde klant?" onClick={e => { e.stopPropagation(); setOpen(c.campaign_id); }} className="font-semibold text-brand-purple underline decoration-dotted underline-offset-2 hover:decoration-solid">{n}</button>
+                          ) : n}
                           {n > 0 && c.binnen > 0 && <span className="block text-[11px] font-normal text-slate-400">{Math.round((n / c.binnen) * 100)}%</span>}
                         </td>
                       );
@@ -212,7 +270,7 @@ export default function CampagnesPage() {
                               <ul className="space-y-1 text-xs text-slate-600">
                                 {c.gekoppeld_aan.map(g => (
                                   <li key={`${g.batch_id}-${g.van}`}>
-                                    <span className="font-medium text-slate-800">{g.klant}</span>: {g.geschat ? 'sinds aanmaken batch (geschat)' : `vanaf ${datum(g.van)}`}{g.tot ? ` tot ${datum(g.tot)}` : ', nog gekoppeld'}
+                                    <span className="font-medium text-slate-800">{g.klant}</span>{g.actief && <span className="ml-1 rounded bg-emerald-50 px-1 text-[10px] font-semibold text-emerald-700">actief</span>}: {g.geschat ? 'sinds aanmaken batch (geschat)' : `vanaf ${datum(g.van)}`}{g.tot ? ` tot ${datum(g.tot)}` : ', nog gekoppeld'}
                                   </li>
                                 ))}
                               </ul>
@@ -238,6 +296,7 @@ export default function CampagnesPage() {
                             )}
                           </div>
                         </div>
+                        {data && c.gekoppeld_aan.length > 0 && c.per_bestemming.andere_klant > 0 && <Redenen campagne={c.campaign_id} van={data.van} tot={data.tot} />}
                       </td>
                     </tr>
                   )}
