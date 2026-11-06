@@ -45,6 +45,10 @@
       "schedule": "0 7 * * *"
     },
     {
+      "path": "/api/cron/extra-leads-maandag",
+      "schedule": "0 7 * * 1"
+    },
+    {
       "path": "/api/cron/onverkochte-leads-week",
       "schedule": "0 6 * * 1"
     },

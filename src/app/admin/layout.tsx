@@ -101,6 +101,7 @@ const NAV: {
   { label: 'E-learning', href: '/admin/e-learning', icon: AcademicCapIcon, roles: ['superadmin', 'accountmanager'] },
   { label: 'Handboek', href: '/admin/handboek', icon: BookOpenIcon, roles: ['superadmin'] },
   { label: 'E-mails', href: '/admin/emails', icon: EnvelopeIcon, roles: ['superadmin'] },
+  { label: 'Extra leads-mail', href: '/admin/extra-leads-mail', icon: EnvelopeIcon, roles: ['superadmin'] },
   { label: 'Activiteitenlog', href: '/admin/audit', icon: ClipboardDocumentListIcon, roles: ['superadmin'] },
   { label: 'AM Targets', href: '/admin/am-targets', icon: TrophyIcon, roles: ['superadmin'] },
   { label: 'AM leaderboard', href: '/admin/am-leaderboard', icon: PresentationChartLineIcon, roles: ['superadmin'] },
