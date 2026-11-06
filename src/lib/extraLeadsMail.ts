@@ -18,7 +18,18 @@ export type MailLead = {
   land: string | null;
   prijs_excl: number;
   antwoorden: { label: string; waarde: string }[];
+  /** False als de postcode niet bij het land past; zo'n lead nemen we niet als voorbeeld. */
+  postcode_klopt?: boolean;
 };
+
+/** Past de postcode bij het land? NL: 1234 AB, BE: 1234. */
+export function postcodeKlopt(postcode: string | null | undefined, land: string | null | undefined): boolean {
+  const p = (postcode ?? '').trim();
+  if (!p) return false;
+  if (land === 'BE') return /^\d{4}$/.test(p);
+  if (!land || land === 'NL') return /^[1-9]\d{3}\s?[A-Za-z]{2}$/.test(p);
+  return true;
+}
 
 export type MailInhoud = { onderwerp: string; html: string; aantal: number };
 
@@ -136,14 +147,60 @@ function voordeel(icoon: string, kop: string, tekst: string): string {
     </td></tr>`;
 }
 
-/** Drie voorbeelden uit verschillende branches (het aanbod komt nieuwste eerst binnen). */
+/**
+ * Budgetten waar we niet mee adverteren (afspraak 6 nov 2026): een
+ * thuisbatterij van hooguit 5.000 euro is klein. Geldt ook voor warmtepomp en
+ * zonnepanelen; airco heeft vanzelf lagere bedragen.
+ */
+const MIN_VOORBEELD_BUDGET: Record<string, number> = { thuisbatterij: 5000, warmtepomp: 5000, zonnepanelen: 5000 };
+
+/**
+ * De bovengrens van een budgetantwoord: "Tussen de €2500,- en €5000,-" is
+ * 5000, "Meer dan €7500,-" is onbegrensd. Null als er geen budget is ingevuld.
+ */
+export function budgetBovengrens(l: Pick<MailLead, 'antwoorden'>): number | null {
+  const a = l.antwoorden.find(x => /budget/i.test(x.label));
+  if (!a) return null;
+  if (/meer dan|vanaf|boven|>/i.test(a.waarde)) return Infinity;
+  const getallen = (a.waarde.replace(/(\d)\.(\d{3})/g, '$1$2').match(/\d+/g) ?? []).map(Number);
+  return getallen.length ? Math.max(...getallen) : null;
+}
+
+/** Het budget eerst tonen, als dat er is: dat zegt een koper het meest. */
+function budgetVoorop(l: MailLead): MailLead {
+  const i = l.antwoorden.findIndex(x => /budget/i.test(x.label));
+  return i > 0 ? { ...l, antwoorden: [l.antwoorden[i], ...l.antwoorden.filter((_, j) => j !== i)] } : l;
+}
+
+/**
+ * Voorbeelden voor de introductiemail: uit verschillende branches, het hoogste
+ * budget eerst, nooit een laag budget of een adres dat niet klopt, en
+ * minstens één lead van 10 of 7,50 euro, zodat de mail laat zien dat het ook
+ * voordeliger kan.
+ */
 export function kiesVoorbeelden(leads: MailLead[], aantal = 3): MailLead[] {
+  const geschikt = leads.filter(l => {
+    if (!l.plaats || l.postcode_klopt === false) return false;
+    const b = budgetBovengrens(l);
+    return b === null || b > (MIN_VOORBEELD_BUDGET[l.branch] ?? 0);
+  });
+  /* Binnen een branche: hoogste budget eerst; verder blijft de volgorde (nieuwste eerst). */
+  /* Onbegrensd ("meer dan") als heel groot getal: Infinity - Infinity is NaN en breekt de sortering. */
+  const score = (l: MailLead) => Math.min(budgetBovengrens(l) ?? 0, Number.MAX_SAFE_INTEGER);
+  const gesorteerd = geschikt.map((l, i) => ({ l, i })).sort((a, b) => score(b.l) - score(a.l) || a.i - b.i).map(x => x.l);
+
   const uit: MailLead[] = [];
-  for (const l of leads) {
+  for (const l of gesorteerd) {
     if (uit.length >= aantal) break;
-    if (l.plaats && !uit.some(v => v.branch === l.branch)) uit.push(l);
+    if (!uit.some(v => v.branch === l.branch)) uit.push(l);
   }
-  return uit;
+  if (uit.length > 0 && uit.every(l => l.prijs_excl > 10)) {
+    const andere = (l: MailLead) => !uit.slice(0, -1).some(v => v.branch === l.branch);
+    const voordelig = gesorteerd.filter(l => l.prijs_excl <= 10);
+    const keuze = voordelig.find(andere) ?? voordelig[0];
+    if (keuze) uit[uit.length - 1] = keuze;
+  }
+  return uit.map(budgetVoorop);
 }
 
 /** De eenmalige introductiemail; null als er niets te koop staat. */

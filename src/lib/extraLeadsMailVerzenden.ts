@@ -5,7 +5,7 @@ import { laadAanbod } from './losseLeads';
 import { LOSSE_LEADS_BRANCHES } from './losseLeadsRegels';
 import {
   INTRO_TYPE, MAANDAG_TYPE, SCHAKELAAR_KEY, TEMPLATE_KEY, TEST_ADRES, TEST_TYPE,
-  bouwIntroMail, bouwMaandagMail, maandagVan, regioVan, voornaamVan, type MailInhoud, type MailLead,
+  bouwIntroMail, bouwMaandagMail, maandagVan, postcodeKlopt, regioVan, voornaamVan, type MailInhoud, type MailLead,
 } from './extraLeadsMail';
 
 /**
@@ -58,7 +58,15 @@ export async function laadMailAanbod(supabase: SupabaseClient): Promise<{ leads:
     supabase.from('branches').select('slug, name').in('slug', [...LOSSE_LEADS_BRANCHES]),
   ]);
   const namen = new Map((br ?? []).map(b => [b.slug as string, b.name as string]));
-  return { leads: aanbod, brancheNaam: slug => namen.get(slug) ?? slug };
+  /* De postcode gaat niet mee naar het portaal; hier alleen om voorbeelden te kiezen. */
+  const postcodes = new Map<string, string | null>();
+  const ids = aanbod.map(l => l.id);
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data } = await supabase.from('leads').select('id, postcode').in('id', ids.slice(i, i + 200));
+    for (const r of data ?? []) postcodes.set(r.id as string, (r.postcode as string | null) ?? null);
+  }
+  const leads = aanbod.map(l => ({ ...l, postcode_klopt: postcodeKlopt(postcodes.get(l.id), l.land) }));
+  return { leads, brancheNaam: slug => namen.get(slug) ?? slug };
 }
 
 export async function laadOntvangers(supabase: SupabaseClient): Promise<Ontvanger[]> {
