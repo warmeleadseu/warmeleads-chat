@@ -484,6 +484,39 @@ export default function BatchesPage() {
     fetchData();
   };
 
+  /* Zelfde export als de Excel-knop bij de klant (tabblad Leads), gefilterd op deze batch. */
+  const [exporterend, setExporterend] = useState<string | null>(null);
+  const exportBatch = async (b: Batch) => {
+    if (exporterend) return;
+    setExporterend(b.id);
+    try {
+      const res = await adminFetch('/api/admin/assignments/export', {
+        method: 'POST',
+        body: JSON.stringify({ customer_id: b.customer_id, format: 'xlsx', all_filtered: true, filters: { batch_id: b.id } }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        showToast(d.error === 'Geen leads om te exporteren' ? 'Deze batch heeft nog geen leads' : (d.error || 'Export mislukt'));
+        return;
+      }
+      const blob = await res.blob();
+      const klant = (b.customers?.name || 'klant').replace(/[^a-zA-Z0-9_-]+/g, '_').slice(0, 40);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `leads-${klant}-${b.branch}-${String(b.created_at || '').slice(0, 10)}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      showToast('Leads van deze batch geëxporteerd als Excel');
+    } catch {
+      showToast('Export mislukt');
+    } finally {
+      setExporterend(null);
+    }
+  };
+
   const removeBatch = async (b: Batch) => {
     const name = b.customers?.name || 'Onbekend';
     if (!confirm(`Batch van ${name} verwijderen?`)) return;
@@ -800,6 +833,11 @@ export default function BatchesPage() {
                             className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-brand-purple">
                             <PencilSquareIcon className="h-4 w-4" />
                           </button>
+                          <button onClick={e => { e.stopPropagation(); exportBatch(b); }} title="Leads van deze batch exporteren als Excel"
+                            disabled={exporterend === b.id}
+                            className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-emerald-600 disabled:animate-pulse disabled:opacity-60">
+                            <ArrowDownTrayIcon className="h-4 w-4" />
+                          </button>
                           {b.status !== 'completed' && b.status !== 'pending_payment' && b.status !== 'expired' && (
                             <button onClick={e => { e.stopPropagation(); toggleStatus(b); }} title={b.status === 'active' ? 'Pauzeren' : 'Heractiveren'}
                               className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-amber-600">
@@ -871,6 +909,11 @@ export default function BatchesPage() {
                     <div className="flex items-center gap-0.5">
                       <button onClick={e => { e.stopPropagation(); setEditBatch(b); }} className="rounded-lg p-2.5 text-slate-400 hover:bg-slate-100 hover:text-brand-purple">
                         <PencilSquareIcon className="h-4 w-4" />
+                      </button>
+                      <button onClick={e => { e.stopPropagation(); exportBatch(b); }} title="Leads exporteren als Excel"
+                        disabled={exporterend === b.id}
+                        className="rounded-lg p-2.5 text-slate-400 hover:bg-slate-100 hover:text-emerald-600 disabled:animate-pulse disabled:opacity-60">
+                        <ArrowDownTrayIcon className="h-4 w-4" />
                       </button>
                       {b.status !== 'completed' && b.status !== 'pending_payment' && b.status !== 'expired' && (
                         <button onClick={e => { e.stopPropagation(); toggleStatus(b); }} className="rounded-lg p-2.5 text-slate-400 hover:bg-slate-100 hover:text-amber-600">
