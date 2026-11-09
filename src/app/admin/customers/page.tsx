@@ -928,15 +928,23 @@ function CustomerDetailPanel({
     setLiveCustomer(customer);
   }, [customer]);
 
+  /* Alleen bij een andere klant terug naar Overzicht. Het verversen van de
+     klantgegevens (bijv. door het Leads-tabblad) geeft een nieuwe
+     branches-array en mag het gekozen tabblad niet resetten. */
   useEffect(() => {
     setTab('overview');
     setCopied(false);
     setResettingPw(false);
     setNewPw('');
-    setBranchEdit(c.branches || []);
     setEditingBranches(false);
     setBranchSaveError('');
-  }, [c.id, c.branches]);
+  }, [c.id]);
+
+  const branchesSleutel = (c.branches || []).join('|');
+  useEffect(() => {
+    setBranchEdit(c.branches || []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- volgt de inhoud, niet de array-referentie
+  }, [c.id, branchesSleutel]);
   const portalReady = c.portal_active && c.has_password && c.email;
   const activity = getActivityStatus(c);
   const neverLogged = c.portal_active && c.has_password && (!c.last_login_at || !c.login_count);
