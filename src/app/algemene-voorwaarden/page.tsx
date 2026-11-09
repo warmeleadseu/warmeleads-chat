@@ -18,12 +18,16 @@ export default function AlgemeneVoorwaardenPage() {
       <section className="bg-brand-navy py-16 sm:py-20">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h1 className="text-3xl sm:text-4xl font-bold text-white">Algemene voorwaarden</h1>
-          <p className="mt-3 text-base text-white/70">Laatst gewijzigd op 30 oktober 2026</p>
+          <p className="mt-3 text-base text-white/70">Laatst gewijzigd op 9 november 2026</p>
         </div>
       </section>
 
       {/* Content */}
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
+
+        <div className="mb-10 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-relaxed text-amber-900">
+          <span className="font-semibold">Gewijzigde voorwaarden per 9 december 2026.</span> Op 9 november 2026 zijn de artikelen 3.2, 4.5a, 4.6.3, 4.9 en 7.5 tot en met 7.8 gewijzigd of toegevoegd. Conform artikel 11.2 gelden deze wijzigingen vanaf 9 december 2026; tot die datum geldt de vorige versie, die op verzoek beschikbaar is.
+        </div>
 
         {/* Artikel 1 */}
         <section className="mb-10">
@@ -53,7 +57,7 @@ export default function AlgemeneVoorwaardenPage() {
           <h2 className="text-lg font-bold text-slate-900 mb-3">Artikel 3: Totstandkoming van de Overeenkomst</h2>
           <div className="space-y-3 text-sm leading-relaxed text-slate-600">
             <p><span className="font-semibold text-slate-900">3.1</span> De overeenkomst tussen Warmeleads.eu en de Klant komt tot stand op het moment dat de Klant de door Warmeleads.eu verstuurde factuur betaalt of een betaling doet via het online portaal van Warmeleads.eu.</p>
-            <p><span className="font-semibold text-slate-900">3.2</span> Voor niet-exclusieve leads geldt dat deze aan meerdere klanten geleverd kunnen worden. De Klant verklaart zich hiermee akkoord door het aangaan van de overeenkomst.</p>
+            <p><span className="font-semibold text-slate-900">3.2</span> Voor niet-exclusieve leads geldt dat deze aan meerdere klanten geleverd kunnen worden, met een maximum van drie (3) klanten per lead. Dit maximum geldt ongeacht de wijze van levering, zoals via het online portaal of via een bestand. Bestanden en exports die Warmeleads.eu uitsluitend voor eigen gebruik maakt, zoals voor administratie, analyse, kwaliteitscontrole of back-up, gelden niet als levering. De Klant verklaart zich met dit artikel akkoord door het aangaan van de overeenkomst.</p>
           </div>
         </section>
 
@@ -66,7 +70,7 @@ export default function AlgemeneVoorwaardenPage() {
             <p><span className="font-semibold text-slate-900">4.3</span> Warmeleads.eu biedt geen garantie op conversie van de geleverde leads, aangezien de uiteindelijke verkoop en klantrelatie afhankelijk zijn van de inspanningen van de Klant.</p>
             <p><span className="font-semibold text-slate-900">4.4</span> Leads worden geleverd binnen de termijn zoals afgesproken, maar levertermijnen zijn indicatief en kunnen variëren. Warmeleads.eu is niet aansprakelijk voor eventuele vertragingen. Vertragingen geven de Klant geen recht op annulering van de overeenkomst of op enige schadevergoeding.</p>
             <p><span className="font-semibold text-slate-900">4.5</span> Warmeleads.eu behoudt zich het recht voor om de levering van leads op te schorten of te vertragen in geval van onvoorziene omstandigheden, zoals technische storingen of marktschommelingen die de kwaliteit of beschikbaarheid van de leads kunnen beïnvloeden. In een dergelijk geval wordt de Klant zo spoedig mogelijk op de hoogte gebracht.</p>
-            <p><span className="font-semibold text-slate-900">4.5a</span> Leads die op exclusieve basis worden geleverd, worden gedurende een periode van 30 dagen uitsluitend gekoppeld aan de betreffende Klant. Na afloop van deze periode kan Warmeleads.eu, mits relevant en conform haar gebruikelijke werkwijze, besluiten deze gegevens opnieuw in te zetten binnen haar dienstverlening.</p>
+            <p><span className="font-semibold text-slate-900">4.5a</span> Leads die op exclusieve basis worden geleverd, worden gedurende een periode van 30 dagen uitsluitend gekoppeld aan de betreffende Klant. Na afloop van deze periode kan Warmeleads.eu, mits relevant en conform haar gebruikelijke werkwijze, besluiten deze gegevens opnieuw in te zetten binnen haar dienstverlening, altijd binnen het maximum van drie klanten per lead (artikel 3.2) en binnen twaalf (12) maanden na de aanvraag van de lead.</p>
           </div>
         </section>
 
@@ -80,7 +84,7 @@ export default function AlgemeneVoorwaardenPage() {
               <li><span className="font-semibold text-slate-900">Dubbele Lead binnen 1 Maand:</span> Indien een lead binnen één maand na de initiële levering opnieuw wordt aangeleverd aan dezelfde Klant, wordt deze als dubbel beschouwd en kan een reclamatie worden ingediend.</li>
             </ul>
             <p><span className="font-semibold text-slate-900">4.6.2</span> Leads die opnieuw worden aangeleverd na één maand worden beschouwd als nieuwe leads en zijn niet reclamabel. De Klant verklaart zich akkoord met deze voorwaarden door het aangaan van de overeenkomst.</p>
-            <p><span className="font-semibold text-slate-900">4.6.3 Procedure voor Reclamatie:</span> De Klant kan een reclamatie indienen door de betreffende lead in de gedeelde Google Spreadsheet rood te markeren en in de opmerkingen de reden voor de reclamatie te vermelden (bijvoorbeeld &ldquo;onjuist telefoonnummer&rdquo; of &ldquo;dubbele lead&rdquo;). Warmeleads.eu zal de reclamatie beoordelen binnen 5 werkdagen. Indien de reclamatie wordt goedgekeurd, zal Warmeleads.eu de gereclameerde lead vervangen door een nieuwe lead die voldoet aan de kwaliteitscriteria.</p>
+            <p><span className="font-semibold text-slate-900">4.6.3 Procedure voor Reclamatie:</span> De Klant dient een reclamatie in via het online portaal van Warmeleads.eu, bij de betreffende lead, met vermelding van de reden (bijvoorbeeld &ldquo;onjuist telefoonnummer&rdquo; of &ldquo;dubbele lead&rdquo;). Heeft de Klant geen toegang tot het portaal, dan kan de reclamatie per e-mail worden ingediend. Warmeleads.eu zal de reclamatie beoordelen binnen 5 werkdagen. Indien de reclamatie wordt goedgekeurd, zal Warmeleads.eu de gereclameerde lead vervangen door een nieuwe lead die voldoet aan de kwaliteitscriteria.</p>
             <p><span className="font-semibold text-slate-900">4.6.4</span> Het reclameren van een lead houdt in dat de oorspronkelijke lead door een nieuwe, kwalitatieve lead wordt vervangen. Een credit of terugbetaling wordt niet aangeboden, tenzij uitdrukkelijk anders overeengekomen.</p>
             <p><span className="font-semibold text-slate-900">4.6.5</span> Warmeleads.eu behoudt zich het recht voor om reclamatieclaims te verwerpen indien de lead voldoet aan de door Warmeleads.eu vastgestelde kwaliteitscriteria.</p>
           </div>
@@ -106,6 +110,17 @@ export default function AlgemeneVoorwaardenPage() {
             <p><span className="font-semibold text-slate-900">4.8.3</span> Na afloop van de actie trekt Warmeleads.eu één winnaar uit alle loten; elk lot heeft een gelijke kans. De trekking gebeurt met een willekeurig, geautomatiseerd proces en wordt met de volledige lijst van deelnemers en loten vastgelegd. De winnaar ontvangt 20 kosteloze leads in de eigen branche en het eigen gebied en wordt persoonlijk benaderd.</p>
             <p><span className="font-semibold text-slate-900">4.8.4</span> De prijs is niet inwisselbaar voor geld en niet overdraagbaar. Wordt een batch gecrediteerd of terugbetaald, dan vervallen de loten van die batch. Interne accounts en demo-accounts van Warmeleads.eu doen niet mee.</p>
             <p><span className="font-semibold text-slate-900">4.8.5</span> Warmeleads.eu mag een actie wijzigen of beëindigen als daar een gegronde reden voor is, bijvoorbeeld bij misbruik of fraude. Al verkregen loten blijven in dat geval geldig, tenzij ze door misbruik of fraude zijn verkregen.</p>
+          </div>
+        </section>
+
+        {/* Artikel 4.9 */}
+        <section className="mb-10">
+          <h2 className="text-lg font-bold text-slate-900 mb-3">Artikel 4.9: Overlap in werkgebieden en extra partijen</h2>
+          <div className="space-y-3 text-sm leading-relaxed text-slate-600">
+            <p><span className="font-semibold text-slate-900">4.9.1</span> Warmeleads.eu verdeelt leads via een geautomatiseerd systeem op basis van onder meer het werkgebied, de branche en de instellingen van de Klant. Werkgebieden van verschillende klanten kunnen elkaar overlappen.</p>
+            <p><span className="font-semibold text-slate-900">4.9.2</span> Het kan daardoor voorkomen dat een lead, ook binnen een afgesproken werkgebied of bij een afspraak over exclusiviteit, tevens bij een andere klant van Warmeleads.eu terechtkomt. Dit is uitdrukkelijk niet het streven van Warmeleads.eu. Wij doen wat redelijkerwijs mogelijk is om dit te voorkomen, maar kunnen het in een geautomatiseerd systeem niet in alle gevallen uitsluiten. Het maximum van drie klanten per lead (artikel 3.2) blijft daarbij altijd van toepassing.</p>
+            <p><span className="font-semibold text-slate-900">4.9.3</span> Ontvangt de Klant een lead die in strijd met een gemaakte afspraak over exclusiviteit of werkgebied ook aan een andere klant is geleverd, dan mag de Klant deze lead in de regel reclameren. Een goedgekeurde reclamatie wordt afgehandeld conform artikel 4.6.</p>
+            <p><span className="font-semibold text-slate-900">4.9.4</span> Warmeleads.eu denkt in zulke situaties altijd graag mee over een passende oplossing, zodat alle betrokken partijen tevreden zijn. De Klant kan hiervoor contact opnemen met zijn accountmanager of via de contactgegevens op de website.</p>
           </div>
         </section>
 
@@ -138,6 +153,10 @@ export default function AlgemeneVoorwaardenPage() {
             <p><span className="font-semibold text-slate-900">7.2</span> Warmeleads.eu bewaart en verwerkt deze gegevens alleen voor zover noodzakelijk voor de uitvoering van de overeenkomst en bewaart deze gegevens niet langer dan nodig is voor het doel waarvoor ze zijn verzameld.</p>
             <p><span className="font-semibold text-slate-900">7.3</span> De Klant is eveneens verplicht om te voldoen aan de AVG bij de verwerking van de leads die door Warmeleads.eu worden geleverd.</p>
             <p><span className="font-semibold text-slate-900">7.4</span> De Klant heeft het recht op inzage, correctie en verwijdering van zijn persoonsgegevens. Verzoeken hiertoe kunnen schriftelijk worden ingediend.</p>
+            <p><span className="font-semibold text-slate-900">7.5</span> Met de levering van een lead wordt de Klant voor de verdere verwerking van de gegevens van die lead zelfstandig verwerkingsverantwoordelijke in de zin van de AVG. De Klant is zelf verantwoordelijk voor een rechtmatige verwerking vanaf het moment van levering.</p>
+            <p><span className="font-semibold text-slate-900">7.6</span> De Klant gebruikt de gegevens van een lead uitsluitend om de lead te benaderen over de aanvraag waarvoor de lead is geleverd. Gebruik voor andere doeleinden, zoals marketing voor andere producten, het opbouwen van een eigen bestand voor later gebruik of het doorverkopen of doorgeven aan derden, is niet toegestaan.</p>
+            <p><span className="font-semibold text-slate-900">7.7</span> Meldt Warmeleads.eu dat een lead zijn toestemming heeft ingetrokken of om verwijdering van zijn gegevens heeft gevraagd, dan benadert de Klant deze lead niet meer en verwijdert hij de gegevens van de lead binnen vijf (5) werkdagen uit al zijn systemen. Ontvangt de Klant zelf zo&rsquo;n verzoek van een lead, dan volgt hij dit op en informeert hij Warmeleads.eu daarover.</p>
+            <p><span className="font-semibold text-slate-900">7.8</span> De Klant houdt zich bij het benaderen van leads aan de geldende wet- en regelgeving, waaronder de Telecommunicatiewet en, voor leads in Belgi&euml;, de Belgische regels voor telefonische marketing. De vrijwaring van artikel 6.3 is onverminderd van toepassing.</p>
           </div>
         </section>
 

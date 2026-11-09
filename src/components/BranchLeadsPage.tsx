@@ -195,7 +195,7 @@ export function BranchLeadsPageContent({ metadata, location, branchName }: Branc
                 <ul className="mb-8 space-y-3 text-left">
                   <li className="flex items-center gap-2">
                     <CheckCircleIcon className="h-5 w-5 shrink-0 text-brand-orange" />
-                    <span className="text-slate-700">100% exclusief, alleen voor jou</span>
+                    <span className="text-slate-700">Nooit met meer dan 3 installateurs gedeeld</span>
                   </li>
                   <li className="flex items-center gap-2">
                     <CheckCircleIcon className="h-5 w-5 shrink-0 text-brand-orange" />

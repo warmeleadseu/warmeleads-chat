@@ -257,7 +257,7 @@ WarmeLeads genereert exclusieve, verse leads voor jouw bedrijf.
             {[
               {
                 title: 'Exclusieve aanvragen',
-                description: 'Geen doorverkoop of bulk lijsten. Elke lead is van jou, in de afgesproken regio en niche. Op het moment dat jij een batch afneemt, starten wij de campagnes afgestemd op jouw targetgebied.',
+                description: 'Leads in de afgesproken regio en niche, nooit gedeeld met meer dan 3 installateurs. Op het moment dat jij een batch afneemt, starten wij de campagnes afgestemd op jouw targetgebied.',
                 icon: ShieldCheckIcon,
                 accent: 'bg-brand-purple',
               },

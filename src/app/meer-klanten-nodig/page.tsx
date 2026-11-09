@@ -448,7 +448,7 @@ export default function MeerKlantenNodigPage() {
             {[
               { q: 'Wat kost een strategiegesprek?', a: 'Niets. Het strategiegesprek is volledig gratis en vrijblijvend. We bespreken samen of er een match is en maken een concreet plan.' },
               { q: 'Hoelang duurt het voordat ik leads ontvang?', a: 'In de meeste gevallen binnen 24 tot 72 uur na goedkeuring van het plan. We starten campagnes zodra alles staat.' },
-              { q: 'Zijn de leads exclusief?', a: 'Ja. We starten campagnes specifiek voor jouw targetgebied. Leads worden niet doorverkocht aan andere partijen.' },
+              { q: 'Met hoeveel bedrijven wordt een lead gedeeld?', a: 'Met maximaal 3 installateurs, nooit meer. We starten campagnes specifiek voor jouw targetgebied, en de aanvrager weet vooraf dat maximaal 3 vakspecialisten contact opnemen.' },
               { q: 'Zit ik vast aan een contract?', a: 'Nee. We werken zonder lock-in. Je kunt maandelijks opschalen, afschalen of stoppen.' },
               { q: 'Kan ik eerst klein beginnen?', a: 'Zeker. Start gecontroleerd in één regio, bewijs rendement, en schaal dan uit. Wij schalen mee.' },
               { q: 'Hoe meld ik een slechte lead?', a: 'Via je portaal kun je per lead feedback geven. Bij gegronde klachten zorgen we voor vervanging of compensatie.' },
@@ -507,7 +507,7 @@ export default function MeerKlantenNodigPage() {
               </Link>
             </div>
             <p className="mt-5 text-[12px] font-medium text-white/40 md:mt-6">
-              Geen abonnement &bull; Geen vaste kosten &bull; 100% exclusief
+              Geen abonnement &bull; Geen vaste kosten &bull; Max. 3 installateurs per lead
             </p>
           </div>
         </div>

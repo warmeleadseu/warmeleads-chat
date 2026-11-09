@@ -66,8 +66,11 @@ const nextConfig = {
         destination: 'https://www.warmeleads.eu/:path*',
         permanent: true,
       },
+      // Leadformulieren in Meta linken naar /privacy; de pagina staat op /privacyverklaring.
+      { source: '/privacy', destination: '/privacyverklaring', permanent: true },
+      { source: '/privacybeleid', destination: '/privacyverklaring', permanent: true },
     ];
-    
+
     // Old city-specific URLs to new structure
     const oldCityUrls = [
       { from: 'leads-thuisbatterijen-amsterdam', to: 'leads/thuisbatterijen/amsterdam' },

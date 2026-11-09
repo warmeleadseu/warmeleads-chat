@@ -307,7 +307,7 @@ export function infoQualityBlock(): string {
   return [
     sectionTitle('Onze kwaliteitsgaranties'),
     bulletList([
-      '<strong>100% exclusief</strong>: leads worden niet doorverkocht of gedeeld. Jouw lead = jouw prospect.',
+      '<strong>Maximaal 3 installateurs per lead</strong>: nooit meer, en de aanvrager weet dat vooraf.',
       '<strong>Vers en realtime</strong>: direct uit onze eigen campagnes, geen recycled lijsten.',
       '<strong>Eerste levering binnen 24 uur</strong> na het live gaan van de campagne.',
       '<strong>Reclamatiebeleid</strong>: meld een lead in het portaal; bij gegronde klacht ontvang je vervanging of compensatie.',

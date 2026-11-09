@@ -18,7 +18,7 @@ export default function PrivacyverklaringPage() {
       <section className="bg-brand-navy py-16 sm:py-20">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h1 className="text-3xl sm:text-4xl font-bold text-white">Privacyverklaring</h1>
-          <p className="mt-3 text-base text-white/70">Laatst gewijzigd op 11 april 2026</p>
+          <p className="mt-3 text-base text-white/70">Versie 2.0 &middot; laatst gewijzigd op 9 november 2026</p>
         </div>
       </section>
 
@@ -30,6 +30,50 @@ export default function PrivacyverklaringPage() {
           <p className="text-sm leading-relaxed text-slate-600">
             Warmeleads.eu, hierna te noemen &ldquo;wij&rdquo; of &ldquo;ons&rdquo;, hecht grote waarde aan de bescherming van je persoonsgegevens. In deze privacyverklaring leggen wij uit welke persoonsgegevens wij verzamelen, waarom wij deze verzamelen, hoe wij deze gebruiken en wat je rechten zijn. Deze privacyverklaring is van toepassing op alle diensten die wij aanbieden via onze website en andere kanalen.
           </p>
+          <p className="mt-3 text-sm leading-relaxed text-slate-600">
+            Heb je via een formulier van WarmeLeads een aanvraag gedaan, bijvoorbeeld via Facebook of Instagram? Lees dan vooral het hoofdstuk <a href="#aanvragers" className="font-medium text-brand-purple underline decoration-brand-purple/30">&ldquo;Heb je een aanvraag gedaan?&rdquo;</a> hieronder.
+          </p>
+        </section>
+
+        {/* Aanvragers */}
+        <section id="aanvragers" className="mb-10 scroll-mt-24 rounded-2xl border border-brand-purple/20 bg-brand-purple/[0.03] p-5 sm:p-7">
+          <h2 className="text-lg font-bold text-slate-900 mb-1">Heb je een aanvraag gedaan? Zo gaan wij met je gegevens om</h2>
+          <p className="mb-5 text-sm text-slate-500">Dit hoofdstuk geldt voor iedereen die via een formulier van WarmeLeads een aanvraag doet voor informatie of een offerte.</p>
+          <div className="space-y-5 text-sm leading-relaxed text-slate-600">
+            <div>
+              <h3 className="font-semibold text-slate-900">A.1 Wat er gebeurt met je aanvraag</h3>
+              <p className="mt-1">Als je via een formulier van WarmeLeads (bijvoorbeeld op Facebook of Instagram) een aanvraag doet voor informatie of een offerte, brengen wij je in contact met vakspecialisten die het product of de dienst leveren waarvoor je interesse hebt. Denk aan installateurs van warmtepompen, thuisbatterijen, zonnepanelen of airco&rsquo;s.</p>
+            </div>
+            <div>
+              <h3 className="font-semibold text-slate-900">A.2 Met hoeveel vakspecialisten wij je gegevens delen</h3>
+              <p className="mt-1">Wij delen je gegevens met <span className="font-semibold text-slate-900">maximaal drie (3) vakspecialisten</span>. Dit maximum geldt voor de volledige periode waarin wij je aanvraag gebruiken (zie A.5), ongeacht de manier waarop de gegevens worden verstrekt. Wij selecteren deze vakspecialisten op basis van je regio en je wensen. Het gebruik van je gegevens binnen onze eigen organisatie, bijvoorbeeld voor administratie, kwaliteitscontrole of analyse, geldt niet als delen met een vakspecialist.</p>
+            </div>
+            <div>
+              <h3 className="font-semibold text-slate-900">A.3 Welke gegevens wij delen</h3>
+              <p className="mt-1">Je naam, telefoonnummer, e-mailadres, adres of woonplaats, en de antwoorden die je in het formulier hebt gegeven, zoals het type woning, je wensen en je budget.</p>
+            </div>
+            <div>
+              <h3 className="font-semibold text-slate-900">A.4 Grondslag: jouw toestemming</h3>
+              <p className="mt-1">Door het formulier te versturen geef je ons toestemming om je gegevens te delen met maximaal drie vakspecialisten. Je geeft deze vakspecialisten daarbij toestemming om je over je aanvraag te benaderen, telefonisch, per e-mail of via WhatsApp (artikel 6 lid 1 sub a AVG en artikel 11.7 Telecommunicatiewet). Je toestemming is vrijwillig: zonder deze toestemming kunnen wij je aanvraag niet in behandeling nemen.</p>
+            </div>
+            <div>
+              <h3 className="font-semibold text-slate-900">A.5 Hoe lang wij je aanvraag gebruiken</h3>
+              <p className="mt-1">Wij gebruiken je aanvraag en mogen deze aan vakspecialisten verstrekken <span className="font-semibold text-slate-900">tot twaalf (12) maanden na de datum van je aanvraag</span>. Een aanvraag voor bijvoorbeeld een warmtepomp of thuisbatterij is vaak een beslissing van langere adem; zo kun je ook later nog goed geholpen worden. Na deze termijn delen wij je gegevens niet meer.</p>
+              <p className="mt-2">Daarna bewaren wij je gegevens alleen, met beperkte toegang, voor zover dat nodig is om aan te tonen dat je toestemming hebt gegeven, om vragen, klachten en reclamaties af te handelen en om aan onze wettelijke verplichtingen te voldoen. Uiterlijk <span className="font-semibold text-slate-900">36 maanden</span> na je aanvraag verwijderen of anonimiseren wij je gegevens, tenzij een wettelijke verplichting of een lopend geschil langer bewaren noodzakelijk maakt.</p>
+            </div>
+            <div>
+              <h3 className="font-semibold text-slate-900">A.6 Toestemming intrekken</h3>
+              <p className="mt-1">Je kunt je toestemming altijd intrekken door een e-mail te sturen naar <a href="mailto:info@warmeleads.eu" className="text-brand-purple underline decoration-brand-purple/30">info@warmeleads.eu</a> of te bellen naar +31 85 047 7067. Wij delen je gegevens dan vanaf dat moment niet meer, ook niet binnen de termijn van twaalf maanden. Wij informeren de vakspecialisten die je gegevens al hebben ontvangen dat zij je niet meer mogen benaderen en je gegevens moeten verwijderen. Intrekken heeft geen gevolgen voor wat er v&oacute;&oacute;r je intrekking rechtmatig is gebeurd. Doe je later opnieuw een aanvraag, dan geldt dat als nieuwe toestemming.</p>
+            </div>
+            <div>
+              <h3 className="font-semibold text-slate-900">A.7 De vakspecialist is zelf verantwoordelijk</h3>
+              <p className="mt-1">Een vakspecialist die je gegevens van ons ontvangt, is daarna zelf verantwoordelijk voor de verwerking ervan (zelfstandig verwerkingsverantwoordelijke in de zin van de AVG). Wij verplichten vakspecialisten contractueel om je gegevens alleen voor jouw aanvraag te gebruiken, ze niet door te verkopen en een verzoek tot verwijdering of het intrekken van je toestemming op te volgen.</p>
+            </div>
+            <div>
+              <h3 className="font-semibold text-slate-900">A.8 Je rechten en klachten</h3>
+              <p className="mt-1">Je hebt de rechten die in hoofdstuk 9 staan, zoals inzage, correctie en verwijdering. Heb je een klacht, neem dan eerst contact met ons op. Je kunt ook een klacht indienen bij de Autoriteit Persoonsgegevens (zie hoofdstuk 10) of, als je in Belgi&euml; woont, bij de Gegevensbeschermingsautoriteit (GBA).</p>
+            </div>
+          </div>
         </section>
 
         {/* Artikel 1 */}
@@ -198,13 +242,11 @@ export default function PrivacyverklaringPage() {
               <li>WhatsApp Business API providers</li>
             </ul>
 
-            <h3 className="font-semibold text-slate-900 mt-4">5.2 Marketingpartners</h3>
-            <p>Met je toestemming kunnen wij je gegevens delen met partners voor marketingdoeleinden, zoals:</p>
-            <ul className="list-disc pl-8 space-y-1">
-              <li>Advertentienetwerken (Google, Facebook, LinkedIn)</li>
-              <li>Affiliatepartners</li>
-              <li>Samenwerkingspartners in de energiesector</li>
-            </ul>
+            <h3 className="font-semibold text-slate-900 mt-4">5.2 Vakspecialisten (bij een aanvraag)</h3>
+            <p>Heb je een aanvraag gedaan, dan delen wij je gegevens met je toestemming met maximaal drie vakspecialisten. Hoe dat werkt, lees je in het hoofdstuk <a href="#aanvragers" className="text-brand-purple underline decoration-brand-purple/30">&ldquo;Heb je een aanvraag gedaan?&rdquo;</a>.</p>
+
+            <h3 className="font-semibold text-slate-900 mt-4">5.2a Advertentienetwerken</h3>
+            <p>Met je toestemming kunnen wij gegevens delen met advertentienetwerken (zoals Google, Meta en LinkedIn) om onze advertenties te meten en te verbeteren.</p>
 
             <h3 className="font-semibold text-slate-900 mt-4">5.3 Wettelijke verplichtingen</h3>
             <p>Wij kunnen je gegevens delen indien wij hiertoe wettelijk verplicht zijn of dit noodzakelijk is voor:</p>
@@ -242,7 +284,7 @@ export default function PrivacyverklaringPage() {
             <ul className="list-disc pl-8 space-y-2">
               <li><span className="font-semibold text-slate-900">Accountgegevens:</span> Zolang je account actief is, en tot 3 maanden na sluiting</li>
               <li><span className="font-semibold text-slate-900">Transactiegegevens:</span> 7 jaar (wettelijke bewaarplicht)</li>
-              <li><span className="font-semibold text-slate-900">Leadgegevens:</span> Tot 2 jaar na levering, tenzij langer nodig voor klantrelatie</li>
+              <li><span className="font-semibold text-slate-900">Gegevens van aanvragers (leads):</span> Gebruik en verstrekking aan vakspecialisten tot 12 maanden na de aanvraag; daarna alleen bewaard voor bewijs, klachten en wettelijke verplichtingen, tot uiterlijk 36 maanden na de aanvraag (zie A.5)</li>
               <li><span className="font-semibold text-slate-900">Marketinggegevens:</span> Tot je je afmeldt of tot 3 jaar na laatste interactie</li>
               <li><span className="font-semibold text-slate-900">Cookies:</span> Maximaal 2 jaar, afhankelijk van het type cookie</li>
               <li><span className="font-semibold text-slate-900">Analysegegevens:</span> 26 maanden (Google Analytics standaard)</li>
@@ -306,6 +348,7 @@ export default function PrivacyverklaringPage() {
               <li>Website: www.autoriteitpersoonsgegevens.nl</li>
               <li>Telefoon: 088 - 1805 250</li>
             </ul>
+            <p className="mt-4">Woon je in Belgi&euml;, dan kun je ook terecht bij de Gegevensbeschermingsautoriteit (GBA), Drukpersstraat 35, 1000 Brussel, www.gegevensbeschermingsautoriteit.be.</p>
           </div>
         </section>
 
@@ -347,6 +390,7 @@ export default function PrivacyverklaringPage() {
           <div className="space-y-3 text-sm leading-relaxed text-slate-600">
             <p>Wij behouden ons het recht voor om deze privacyverklaring te wijzigen. Wijzigingen worden gepubliceerd op deze pagina met vermelding van de datum van laatste wijziging. Wij adviseren je om deze privacyverklaring regelmatig te raadplegen om op de hoogte te blijven van eventuele wijzigingen.</p>
             <p className="mt-4">Bij ingrijpende wijzigingen zullen wij je hiervan op de hoogte stellen via e-mail of een melding op onze website.</p>
+            <p className="mt-4">Wij archiveren alle eerdere versies van deze privacyverklaring. Voor een aanvraag geldt de versie die van kracht was op de datum van de aanvraag. Eerdere versies zijn op verzoek beschikbaar via info@warmeleads.eu.</p>
           </div>
         </section>
 

@@ -277,16 +277,16 @@ export default function HoeHetWerktPage() {
               <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-lg bg-brand-purple">
                 <ShieldCheckIcon className="h-5 w-5 text-white" />
               </div>
-              <h3 className="text-xl font-bold tracking-tight md:text-2xl">Exclusief = echt exclusief</h3>
+              <h3 className="text-xl font-bold tracking-tight md:text-2xl">Helder over wie je lead krijgt</h3>
               <p className="mt-2 text-[13px] leading-relaxed text-slate-600 md:mt-3 md:text-sm">
-                Als we zeggen dat een lead exclusief is, dan bedoelen we dat ook. We starten
-                campagnes specifiek afgestemd op jouw targetgebied. Leads worden niet doorverkocht
-                of verdubbeld. Jouw lead = jouw prospect.
+                We starten campagnes specifiek afgestemd op jouw targetgebied. Een lead gaat
+                nooit naar meer dan 3 installateurs, en de aanvrager weet dat vooraf. Zo weet
+                jij precies waar je aan toe bent.
               </p>
               <ul className="mt-4 space-y-2">
                 {[
-                  'Leads worden exclusief voor jou gegenereerd',
-                  'Geen doorverkoop aan andere partijen',
+                  'Leads uit eigen campagnes, voor jouw regio',
+                  'Nooit gedeeld met meer dan 3 installateurs',
                   'Campagnes op jouw postcodegebied afgestemd',
                   'Volledige transparantie over herkomst',
                 ].map((item) => (
