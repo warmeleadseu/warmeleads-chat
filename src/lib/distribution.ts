@@ -470,6 +470,16 @@ export async function distributeLead(
   // Double-check after DB fetch in case bron wasn't passed by caller
   if (fullLead.bron === 'demo') return result;
 
+  /* Toestemming ingetrokken: nooit meer delen, ook niet met het masterportaal.
+     De database weigert zo'n toewijzing ook (migratie 196); hier stoppen we
+     vóórdat er iets geprobeerd wordt. */
+  const { data: toestemming } = await supabase
+    .from('leads')
+    .select('toestemming_ingetrokken_op')
+    .eq('id', fullLead.id)
+    .maybeSingle();
+  if (toestemming?.toestemming_ingetrokken_op) return result;
+
   // Master-portaal mirror: bepaalde branches (bv. kozijnen) worden altijd in
   // een overkoepelend portaal getoond. Dit gebeurt vóór alle geo-/cap-checks
   // zodat ook leads zonder coördinaten meteen zichtbaar zijn. De mirror-rij

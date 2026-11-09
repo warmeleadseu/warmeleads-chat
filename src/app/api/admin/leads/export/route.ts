@@ -169,9 +169,11 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  /* Toestemming ingetrokken: nooit meer in een export, ook niet voor eigen gebruik. */
   let query = supabase
     .from('leads')
-    .select('*, customers(id, name)');
+    .select('*, customers(id, name)')
+    .is('toestemming_ingetrokken_op', null);
 
   const filterParams = bodyToLeadFilterParams({ ...body, branch: branchFilter.join(',') });
 
@@ -228,7 +230,7 @@ export async function POST(request: NextRequest) {
     const ID_CHUNK = 200;
     for (let i = 0; i < geselecteerdeIds.length; i += ID_CHUNK) {
       const chunk = geselecteerdeIds.slice(i, i + ID_CHUNK);
-      let chunkQuery = supabase.from('leads').select('*, customers(id, name)').in('id', chunk);
+      let chunkQuery = supabase.from('leads').select('*, customers(id, name)').in('id', chunk).is('toestemming_ingetrokken_op', null);
       if (admin.role === 'accountmanager') {
         const scoped = await applyAccountManagerScope(supabase, chunkQuery, admin.id);
         if (!scoped.allowed) { chunkQuery = null as never; break; }

@@ -112,7 +112,8 @@ export async function GET(request: NextRequest) {
           .select('id, naam_klant, plaatsnaam, provincie, postcode, land, branch, lat, lng, phone_valid, wervingsdatum, created_at, custom_fields, bron, meta_campaign_id, assigned_customer_ids')
           .gte('created_at', sinds)
           .neq('bron', 'excel_import')
-          .neq('bron', 'demo'),
+          .neq('bron', 'demo')
+          .is('toestemming_ingetrokken_op', null),
         databaseFilters,
         { plaatsRadius },
       )

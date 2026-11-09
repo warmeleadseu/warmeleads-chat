@@ -86,7 +86,8 @@ async function laadKandidaten(supabase: SupabaseClient, nu: Date, alleenIds?: st
       .from('leads')
       .select('id, branch, created_at, bron, phone_valid, plaatsnaam, provincie, land, custom_fields, meta_campaign_id, assigned_customer_ids')
       .in('branch', [...LOSSE_LEADS_BRANCHES])
-      .gte('created_at', sinds);
+      .gte('created_at', sinds)
+      .is('toestemming_ingetrokken_op', null);
     if (alleenIds) q = q.in('id', alleenIds);
     const { data, error } = await q.order('created_at', { ascending: false }).range(p * 1000, p * 1000 + 999);
     if (error) throw new Error(`Leads laden mislukt: ${error.message}`);

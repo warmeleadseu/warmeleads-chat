@@ -127,6 +127,10 @@ async function leverEenRij(supabase: SupabaseClient, rij: Rij, campagneRegels: C
     await markeer('overgeslagen', 'lead bestaat niet meer');
     return 'overgeslagen';
   }
+  if (lead.toestemming_ingetrokken_op) {
+    await markeer('overgeslagen', 'toestemming ingetrokken');
+    return 'overgeslagen';
+  }
 
   /* Exclusieve of uitgesloten campagne, op het moment van leveren. Is de
      lead nog maar tijdelijk exclusief voor een andere batch, dan schuift de

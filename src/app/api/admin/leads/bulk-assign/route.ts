@@ -219,15 +219,24 @@ export async function POST(request: NextRequest) {
     .select('id, branch, lat, lng, provincie, land, postcode, naam_klant, plaatsnaam')
     .in('id', leadIds.slice(0, HARD_LIMIT));
 
-  let eligibleIds = leadIds;
+  /* Toestemming ingetrokken: nooit meer toewijzen (de database weigert het ook).
+     Dat zijn er weinig, dus we halen die set apart op. */
+  const { data: ingetrokken } = await supabase
+    .from('leads')
+    .select('id')
+    .not('toestemming_ingetrokken_op', 'is', null);
+  const nietDelen = new Set((ingetrokken ?? []).map(r => r.id as string));
+  const rijen = (leadRows ?? []).filter(r => !nietDelen.has(r.id as string));
+
+  let eligibleIds = leadIds.filter(id => !nietDelen.has(id));
   let blockedCount = 0;
   let blockedSample: Array<{ lead_id: string; reasons: string[] }> = [];
 
-  if (!overrideGuardrails && leadRows?.length) {
+  if (!overrideGuardrails && rijen.length) {
     const preflight = await preflightManualAssignments(
       supabase,
       { id: customer.id, branches: customer.branches as string[] | null },
-      leadRows,
+      rijen,
     );
     eligibleIds = preflight.allowed;
     blockedCount = preflight.blocked.length;

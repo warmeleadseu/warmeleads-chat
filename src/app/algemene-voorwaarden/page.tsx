@@ -25,10 +25,6 @@ export default function AlgemeneVoorwaardenPage() {
       {/* Content */}
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
 
-        <div className="mb-10 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-relaxed text-amber-900">
-          <span className="font-semibold">Gewijzigde voorwaarden per 9 december 2026.</span> Op 9 november 2026 zijn de artikelen 3.2, 4.5a, 4.6.3, 4.9 en 7.5 tot en met 7.8 gewijzigd of toegevoegd. Conform artikel 11.2 gelden deze wijzigingen vanaf 9 december 2026; tot die datum geldt de vorige versie, die op verzoek beschikbaar is.
-        </div>
-
         {/* Artikel 1 */}
         <section className="mb-10">
           <h2 className="text-lg font-bold text-slate-900 mb-3">Artikel 1: Definities</h2>

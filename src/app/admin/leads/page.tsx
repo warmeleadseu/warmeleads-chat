@@ -19,6 +19,7 @@ import {
   UserPlusIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
+import { useAdmin } from '../adminContext';
 import { LEGE_LEADFILTERS, telActieveLeadFilters, type LeadFilterStand } from '@/lib/leadFilterState';
 import { standNaarFilterParams, filterParamsNaarStand } from '@/lib/leadFilterParams';
 import {
@@ -146,6 +147,10 @@ interface Lead {
   meta_adset_id?: string | null;
   meta_ad_id?: string | null;
   custom_fields?: Record<string, string>;
+  /** Toestemming ingetrokken: de lead wordt nooit meer gedeeld (migratie 196). */
+  toestemming_ingetrokken_op?: string | null;
+  toestemming_ingetrokken_door?: string | null;
+  toestemming_ingetrokken_reden?: string | null;
   [key: string]: unknown;
   created_at: string; updated_at: string;
 }
@@ -2533,6 +2538,7 @@ function LeadFormPanel({
         <div className="space-y-5 p-5">
           {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-600">{error}</div>}
 
+          {isEdit && lead && <ToestemmingBlok lead={lead} />}
           {isEdit && <UitdeelGeschiedenis lead={lead} />}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
@@ -2721,6 +2727,134 @@ const BRON_TEKST: Record<string, string> = {
  * toewijzingen hebben een klant-id en er ontbreekt niets. Er was alleen nooit
  * een scherm dat het liet zien, dus het terughalen kostte geen herstelactie.
  */
+/**
+ * Toestemming ingetrokken (bijv. per mail): de lead wordt daarna nooit meer
+ * gedeeld. Intrekken: admin en superadmin. Herstellen: alleen superadmin.
+ */
+function ToestemmingBlok({ lead }: { lead: Lead }) {
+  const { user } = useAdmin();
+  const [stand, setStand] = useState({
+    op: lead.toestemming_ingetrokken_op ?? null,
+    door: lead.toestemming_ingetrokken_door ?? null,
+    reden: lead.toestemming_ingetrokken_reden ?? null,
+  });
+  const [open, setOpen] = useState(false);
+  const [reden, setReden] = useState('');
+  const [mailen, setMailen] = useState(true);
+  const [bezig, setBezig] = useState(false);
+  const [melding, setMelding] = useState('');
+  const [fout, setFout] = useState('');
+
+  const magIntrekken = user.role === 'superadmin' || user.role === 'admin';
+  const magHerstellen = user.role === 'superadmin';
+
+  const verstuur = async (actie: 'intrekken' | 'herstellen') => {
+    if (!reden.trim()) { setFout('Geef een reden of bron op, bijvoorbeeld "mail van 9 november".'); return; }
+    if (actie === 'herstellen' && !confirm('Weet je zeker dat deze persoon opnieuw toestemming heeft gegeven? De lead kan daarna weer gedeeld worden.')) return;
+    setBezig(true); setFout(''); setMelding('');
+    try {
+      const res = await adminFetch('/api/admin/leads/toestemming', {
+        method: 'POST',
+        body: JSON.stringify({ lead_id: lead.id, actie, reden: reden.trim(), klanten_mailen: mailen }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) { setFout(d.error || 'Opslaan mislukt'); return; }
+      if (actie === 'intrekken') {
+        setStand({ op: new Date().toISOString(), door: user.name, reden: reden.trim() });
+        const klanten: string[] = d.klanten || [];
+        const gemaild: string[] = d.gemaild || [];
+        const mislukt: string[] = d.mislukt || [];
+        let tekst = 'Toestemming ingetrokken.';
+        if (klanten.length === 0) tekst += ' De lead was nog bij geen klant.';
+        else if (mailen) {
+          tekst += ` Gemaild: ${gemaild.join(', ') || 'niemand'}.`;
+          if (mislukt.length) tekst += ` Mail mislukt bij: ${mislukt.join(', ')}.`;
+        } else tekst += ` Klanten met deze lead (niet gemaild): ${klanten.join(', ')}.`;
+        setMelding(tekst);
+      } else {
+        setStand({ op: null, door: null, reden: null });
+        setMelding('Toestemming hersteld. De lead kan weer gedeeld worden.');
+      }
+      setOpen(false); setReden('');
+    } catch {
+      setFout('Opslaan mislukt');
+    } finally {
+      setBezig(false);
+    }
+  };
+
+  if (stand.op) {
+    return (
+      <div className="rounded-xl border border-red-200 bg-red-50 p-4">
+        <p className="text-xs font-semibold uppercase tracking-wider text-red-500">Toestemming ingetrokken</p>
+        <p className="mt-1 text-sm text-red-800">
+          Op {new Date(stand.op).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' })}
+          {stand.door ? ` door ${stand.door}` : ''}. Deze lead wordt nooit meer gedeeld.
+        </p>
+        {stand.reden && <p className="mt-1 text-xs text-red-700">Reden: {stand.reden}</p>}
+        {melding && <p className="mt-2 text-xs text-red-700">{melding}</p>}
+        {magHerstellen && (
+          open ? (
+            <div className="mt-3 space-y-2">
+              <input value={reden} onChange={e => setReden(e.target.value)} placeholder="Hoe gaf de persoon opnieuw toestemming?"
+                className="w-full rounded-lg border border-red-200 bg-white px-3 py-2 text-sm text-slate-900" />
+              {fout && <p className="text-xs text-red-600">{fout}</p>}
+              <div className="flex gap-2">
+                <button onClick={() => verstuur('herstellen')} disabled={bezig}
+                  className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50">
+                  {bezig ? 'Bezig…' : 'Toestemming herstellen'}
+                </button>
+                <button onClick={() => { setOpen(false); setFout(''); }} className="rounded-lg px-3 py-1.5 text-xs text-slate-600 hover:bg-white">Annuleren</button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={() => setOpen(true)} className="mt-2 text-xs font-medium text-red-700 underline">Opnieuw toestemming gegeven?</button>
+          )
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Toestemming</p>
+          <p className="mt-1 text-sm text-slate-600">Deze persoon mag gedeeld worden.</p>
+        </div>
+        {magIntrekken && !open && (
+          <button onClick={() => setOpen(true)}
+            className="shrink-0 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50">
+            Toestemming ingetrokken
+          </button>
+        )}
+      </div>
+      {melding && <p className="mt-2 text-xs text-slate-600">{melding}</p>}
+      {open && (
+        <div className="mt-3 space-y-2 rounded-lg bg-red-50/60 p-3">
+          <p className="text-xs text-slate-600">
+            De lead wordt daarna <span className="font-semibold">nooit meer</span> gedeeld: niet via de verdeling, Restleads, Extra leads, exports of handmatig toewijzen. Geplande leveringen vervallen.
+          </p>
+          <input value={reden} onChange={e => setReden(e.target.value)} placeholder='Reden of bron, bijv. "mail van 9 november"'
+            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900" />
+          <label className="flex items-center gap-2 text-xs text-slate-700">
+            <input type="checkbox" checked={mailen} onChange={e => setMailen(e.target.checked)} />
+            Klanten die deze lead al hebben mailen: niet meer benaderen en gegevens verwijderen
+          </label>
+          {fout && <p className="text-xs text-red-600">{fout}</p>}
+          <div className="flex gap-2">
+            <button onClick={() => verstuur('intrekken')} disabled={bezig}
+              className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50">
+              {bezig ? 'Bezig…' : 'Bevestigen'}
+            </button>
+            <button onClick={() => { setOpen(false); setFout(''); }} className="rounded-lg px-3 py-1.5 text-xs text-slate-600 hover:bg-white">Annuleren</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function UitdeelGeschiedenis({ lead }: { lead: Lead | null }) {
   const rijen = ((lead as unknown as { assignment_details?: Toewijzing[] })?.assignment_details) || [];
 
