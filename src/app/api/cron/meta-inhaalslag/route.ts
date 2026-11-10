@@ -141,6 +141,12 @@ async function ronde(supabase: ReturnType<typeof createServerClient>) {
     for (const r of data || []) if (r.meta_leadgen_id) inQuarantaine.add(String(r.meta_leadgen_id));
   }
 
+  /* Het tijdstip bij Meta vastleggen voor wat de inhaalslag eerder al
+     inlaadde: created_at is daar het moment van inladen, soms weken later.
+     De leadkosten horen bij de week waarin Meta de lead binnenkreeg
+     (migratie 200). Daarna die weken opnieuw doorrekenen. */
+  const metaMoment = await legMetaMomentVast(supabase, metaLeads);
+
   const ontbreekt = metaLeads.filter((l) => {
     if (inQuarantaine.has(String(l.id))) return false;
     const em = (veld(l, /email/i) ?? '').toLowerCase().trim();
@@ -149,7 +155,7 @@ async function ronde(supabase: ReturnType<typeof createServerClient>) {
   });
 
   if (ontbreekt.length === 0) {
-    return NextResponse.json({ ok: true, ontbreekt: 0, ingeladen: 0, klaar: true });
+    return NextResponse.json({ ok: true, ontbreekt: 0, ingeladen: 0, klaar: true, metaMoment });
   }
 
   const vandaag = new Date().toISOString().split('T')[0];
@@ -202,7 +208,7 @@ async function ronde(supabase: ReturnType<typeof createServerClient>) {
     }
 
     const quality_score = calculateQualityScore(lead);
-    const { error } = await supabase.from('leads').insert({ ...lead, quality_score });
+    const { error } = await supabase.from('leads').insert({ ...lead, quality_score, meta_aangemaakt_op: m.created_time });
     if (error) { console.error('[cron/meta-inhaalslag] inserten mislukt:', error.message); sla('inserten mislukt'); continue; }
     ingeladen++;
   }
@@ -213,6 +219,45 @@ async function ronde(supabase: ReturnType<typeof createServerClient>) {
     ingeladen,
     resterend: Math.max(0, ontbreekt.length - portie.length),
     overgeslagen,
+    metaMoment,
     timestamp: new Date().toISOString(),
   });
+}
+
+/**
+ * Vult leads.meta_aangemaakt_op voor ingeladen leads waarvan het moment van
+ * inladen meer dan een uur afwijkt van het moment bij Meta, en rekent daarna
+ * de leadkosten opnieuw door vanaf de vroegste week.
+ */
+async function legMetaMomentVast(
+  supabase: ReturnType<typeof createServerClient>,
+  metaLeads: MetaLead[],
+): Promise<{ bijgewerkt: number; herberekendVanaf: string | null; fout?: string }> {
+  const perId = new Map(metaLeads.map((l) => [String(l.id), l.created_time]));
+  const ids = [...perId.keys()];
+  let bijgewerkt = 0;
+  let vroegst: string | null = null;
+  for (let i = 0; i < ids.length; i += 150) {
+    const { data, error } = await supabase
+      .from('leads')
+      .select('id, meta_leadgen_id, created_at')
+      .in('meta_leadgen_id', ids.slice(i, i + 150))
+      .is('meta_aangemaakt_op', null);
+    if (error) return { bijgewerkt, herberekendVanaf: null, fout: error.message };
+    for (const r of data ?? []) {
+      const moment = perId.get(String(r.meta_leadgen_id));
+      if (!moment) continue;
+      const verschil = Math.abs(new Date(r.created_at as string).getTime() - new Date(moment).getTime());
+      if (!(verschil > 3_600_000)) continue;
+      const { error: fout } = await supabase.from('leads').update({ meta_aangemaakt_op: moment }).eq('id', r.id);
+      if (fout) continue;
+      bijgewerkt++;
+      const dag = new Date(moment).toISOString().slice(0, 10);
+      if (!vroegst || dag < vroegst) vroegst = dag;
+    }
+  }
+  if (bijgewerkt === 0 || !vroegst) return { bijgewerkt, herberekendVanaf: null };
+  const { error } = await supabase.rpc('herbereken_lead_kosten', { p_vanaf: vroegst });
+  if (error) return { bijgewerkt, herberekendVanaf: null, fout: `herberekenen: ${error.message}` };
+  return { bijgewerkt, herberekendVanaf: vroegst };
 }

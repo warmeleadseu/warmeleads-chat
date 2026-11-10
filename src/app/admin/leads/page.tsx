@@ -39,6 +39,7 @@ const PORTAAL_REDEN_TEKST: Record<string, string> = {
   branch_mismatch: 'branche hoort niet bij deze klant',
   recent_assignment: 'was al binnen 30 dagen aan deze klant toegewezen',
   al_toegewezen_binnen_30_dagen: 'was al binnen 30 dagen aan deze klant toegewezen',
+  uitsluiting: 'staat al bij een klant die deze klant uitsluit (of andersom)',
   insert_failed: 'kon niet worden opgeslagen',
 };
 

@@ -20,7 +20,7 @@ export function shouldCountAssignmentForAmTargetLead(
   bulkBatchIds: ReadonlySet<string>,
 ): boolean {
   const src = source || 'distribution';
-  if (src === 'bulk_export' || src === 'demo') return false;
+  if (src === 'bulk_export' || src === 'demo' || src === 'mirror') return false;
   if (batchId && bulkBatchIds.has(batchId)) return false;
   return true;
 }
@@ -108,20 +108,10 @@ export async function calculateAmTargetProgress(
         offset += rows.length;
       }
 
-      const { data: nicheRows } = await supabase
-        .from('customer_batches')
-        .select('leads_delivered')
-        .eq('account_manager_id', adminUserId)
-        .eq('batch_kind', 'niche_research')
-        .gte('created_at', periodStart)
-        .lt('created_at', endISO);
-
-      const nicheCount = (nicheRows || []).reduce(
-        (sum: number, b: { leads_delivered?: unknown }) => sum + (Number(b.leads_delivered) || 0),
-        0,
-      );
-
-      return pipelineCount + nicheCount;
+      /* Leveringen aan niche-onderzoeksbatches staan al in lead_assignments en
+         zitten dus in de telling hierboven. Daar telde ook leads_delivered van
+         die batches nog eens bij op, waardoor niche-leads dubbel meetelden. */
+      return pipelineCount;
     }
     default:
       return 0;

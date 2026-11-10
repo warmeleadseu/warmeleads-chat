@@ -5,6 +5,8 @@ import { matchLeadToTargets } from './matchLeadToTargets';
 import {
   checkBranchGuardrail,
   checkRecentAssignmentGuardrail,
+  laadUitsluitingConflicten,
+  uitsluitingIssue,
   type LeadGuardrailInput,
   type CustomerGuardrailInput,
 } from './manualAssignmentGuardrails';
@@ -31,6 +33,8 @@ export type AssignLeadToBatchInput = {
   status?: string | null;
   notities?: string | null;
   portalUserId?: string | null;
+  /** Klanten die niet meetellen voor uitsluitingen, zoals de klant van wie de lead wordt verplaatst. */
+  negeerKlanten?: string[];
 };
 
 export type AssignLeadToBatchResult =
@@ -95,6 +99,9 @@ export async function assignLeadToBatch(
 
     const recentIssue = checkRecentAssignmentGuardrail(recent?.assigned_at);
     if (recentIssue) return { ok: false, reason: recentIssue.message, code: recentIssue.code };
+
+    const uitIssue = uitsluitingIssue((await laadUitsluitingConflicten(supabase, customer.id, [lead.id], input.negeerKlanten ?? [])).get(lead.id));
+    if (uitIssue) return { ok: false, reason: uitIssue.message, code: uitIssue.code };
   }
 
   let distance_km = input.distance_km ?? null;

@@ -239,6 +239,8 @@ export async function POST(request: NextRequest) {
         batchId,
         source: 'bulk_assign',
         skipGuardrails: overrideGuardrails,
+        /* De lead gaat weg bij de oude klant: die telt niet mee voor uitsluitingen. */
+        negeerKlanten: [fromCustomerId],
         // Behoud portaal-"Datum" (received_at ← assigned_at), niet de verplaatsdag
         assignedAt: sourceMeta?.assigned_at ?? null,
         status: sourceMeta?.status ?? null,

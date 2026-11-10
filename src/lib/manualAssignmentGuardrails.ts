@@ -3,7 +3,7 @@ import { matchLeadToTargets } from './matchLeadToTargets';
 import type { GeoTargetRow } from './batchTargets';
 
 export type ManualAssignmentGuardrailIssue = {
-  code: 'branch_mismatch' | 'geo_mismatch' | 'recent_assignment' | 'batch_full';
+  code: 'branch_mismatch' | 'geo_mismatch' | 'recent_assignment' | 'batch_full' | 'uitsluiting';
   message: string;
 };
 
@@ -87,6 +87,53 @@ export function checkRecentAssignmentGuardrail(
   return null;
 }
 
+/**
+ * Uitsluitingen tussen klanten (customers.exclude_customers), beide kanten op:
+ * per lead de naam van een klant die de lead al heeft en met wie de nieuwe
+ * klant niet samen op een lead mag. De verdeling en Restleads hielden hier al
+ * rekening mee; handmatig toewijzen, bulk toewijzen en verplaatsen niet.
+ * Een fout bij het laden blokkeert niets (handwerk mag niet vastlopen op een
+ * storing); de verdeling controleert zelf al.
+ */
+export async function laadUitsluitingConflicten(
+  supabase: SupabaseClient,
+  klantId: string,
+  leadIds: string[],
+  /** Klanten die niet meetellen, zoals de klant van wie de lead wordt weggehaald. */
+  negeer: string[] = [],
+): Promise<Map<string, string>> {
+  const uit = new Map<string, string>();
+  if (leadIds.length === 0) return uit;
+  const bestaand: { lead_id: string; customer_id: string }[] = [];
+  for (let i = 0; i < leadIds.length; i += 200) {
+    const { data, error } = await supabase
+      .from('lead_assignments')
+      .select('lead_id, customer_id')
+      .in('lead_id', leadIds.slice(i, i + 200))
+      .neq('customer_id', klantId)
+      .neq('source', 'mirror');
+    if (error) return uit;
+    bestaand.push(...((data ?? []) as { lead_id: string; customer_id: string }[]).filter(b => !negeer.includes(b.customer_id)));
+  }
+  if (bestaand.length === 0) return uit;
+  const klantIds = [...new Set([klantId, ...bestaand.map(b => b.customer_id)])];
+  const { data: klanten, error } = await supabase.from('customers').select('id, name, exclude_customers').in('id', klantIds);
+  if (error) return uit;
+  const info = new Map((klanten ?? []).map(k => [k.id as string, { naam: (k.name as string) ?? 'een andere klant', uit: Array.isArray(k.exclude_customers) ? (k.exclude_customers as string[]) : [] }]));
+  const eigen = info.get(klantId)?.uit ?? [];
+  for (const b of bestaand) {
+    if (uit.has(b.lead_id)) continue;
+    const ander = info.get(b.customer_id);
+    if (eigen.includes(b.customer_id) || (ander?.uit ?? []).includes(klantId)) uit.set(b.lead_id, ander?.naam ?? 'een andere klant');
+  }
+  return uit;
+}
+
+export function uitsluitingIssue(andereKlant: string | undefined): ManualAssignmentGuardrailIssue | null {
+  if (!andereKlant) return null;
+  return { code: 'uitsluiting', message: `Lead staat al bij ${andereKlant}; deze klanten sluiten elkaar uit` };
+}
+
 export type PreflightResult = {
   allowed: string[];
   blocked: Array<{ lead_id: string; issues: ManualAssignmentGuardrailIssue[] }>;
@@ -129,6 +176,8 @@ export async function preflightManualAssignments(
     }
   }
 
+  const conflicten = await laadUitsluitingConflicten(supabase, customer.id, leadIds);
+
   const allowed: string[] = [];
   const blocked: PreflightResult['blocked'] = [];
 
@@ -142,6 +191,8 @@ export async function preflightManualAssignments(
     }
     const recentIssue = checkRecentAssignmentGuardrail(recentByLead.get(lead.id));
     if (recentIssue) issues.push(recentIssue);
+    const uitIssue = uitsluitingIssue(conflicten.get(lead.id));
+    if (uitIssue) issues.push(uitIssue);
 
     if (issues.length === 0) allowed.push(lead.id);
     else blocked.push({ lead_id: lead.id, issues });

@@ -34,6 +34,7 @@ import {
 } from '@/lib/leadPlaatsRadius';
 import { assignLeadToBatch } from '@/lib/assignLeadToBatch';
 import { onLeadAssignedToCustomer } from '@/lib/integrations/onLeadAssigned';
+import { laadUitsluitingConflicten, uitsluitingIssue } from '@/lib/manualAssignmentGuardrails';
 
 async function attachAssignmentMeta(
   supabase: ReturnType<typeof createServerClient>,
@@ -476,6 +477,16 @@ export async function PUT(request: NextRequest) {
     const prevCustomerId = updates.customer_id !== undefined
       ? (await supabase.from('leads').select('customer_id').eq('id', id).single()).data?.customer_id
       : undefined;
+
+    /* Uitsluitingen tussen klanten gelden ook bij handmatig toewijzen. De
+       klant van wie de lead nu wordt weggehaald, telt niet mee. Vóór het
+       bijwerken, zodat er bij een weigering niets verandert. */
+    if (updates.customer_id && updates.customer_id !== prevCustomerId) {
+      const uitIssue = uitsluitingIssue(
+        (await laadUitsluitingConflicten(supabase, updates.customer_id as string, [id], prevCustomerId ? [prevCustomerId] : [])).get(id),
+      );
+      if (uitIssue) return NextResponse.json({ error: `Niet toegewezen: ${uitIssue.message}.` }, { status: 409 });
+    }
 
     const { data, error } = await supabase.from('leads').update(updates).eq('id', id).select().single();
 

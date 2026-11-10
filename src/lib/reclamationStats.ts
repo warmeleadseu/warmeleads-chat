@@ -83,7 +83,9 @@ export async function getApprovedReclamationStats(
 ): Promise<ApprovedReclamationStats> {
   const supabase = supabaseInput ?? createServerClient();
   // We selecteren met inner join op leads via embed; PostgREST doet
-  // de filter op leads-velden automatisch goed bij `!inner`.
+  // de filter op leads-velden automatisch goed bij `!inner`. Per pagina van
+  // 1000: de database geeft nooit meer rijen per vraag terug.
+  const bouw = () => {
   let query = supabase
     .from('lead_reclamations')
     .select(
@@ -118,12 +120,19 @@ export async function getApprovedReclamationStats(
     // wel meetellen. Bron-filter op join-tabel.
     query = query.neq('leads.bron', 'demo').neq('leads.bron', 'excel_import');
   }
+  return query;
+  };
 
-  const { data, error } = await query;
-  if (error) {
-    // Bij DB-fout liever 0 aftrekken (= huidige gedrag) dan crash; loggen.
-    console.warn('[reclamationStats] query faalde — return lege set', error.message);
-    return emptyStats();
+  const data: unknown[] = [];
+  for (let p = 0; p < 50; p++) {
+    const { data: pagina, error } = await bouw().order('id').range(p * 1000, p * 1000 + 999);
+    if (error) {
+      // Bij DB-fout liever 0 aftrekken (= huidige gedrag) dan crash; loggen.
+      console.warn('[reclamationStats] query faalde — return lege set', error.message);
+      return emptyStats();
+    }
+    data.push(...(pagina ?? []));
+    if (!pagina || pagina.length < 1000) break;
   }
 
   const stats = emptyStats();

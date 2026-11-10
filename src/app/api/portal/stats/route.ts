@@ -62,13 +62,13 @@ export async function GET(request: NextRequest) {
     ? branchParam
     : null;
 
-  let assignQuery = supabase.from('lead_assignments').select('lead_id, status, source').eq('customer_id', customer.id).order('assigned_at', { ascending: false });
+  let assignQuery = supabase.from('lead_assignments').select('lead_id, status, source, assigned_at').eq('customer_id', customer.id).order('assigned_at', { ascending: false });
   if (demoMode) {
     assignQuery = assignQuery.eq('source', 'demo');
   } else {
     assignQuery = assignQuery.neq('source', 'demo');
   }
-  const assignRes = await paginateQuery<{ lead_id: string; status: string | null; source: string | null }>(assignQuery);
+  const assignRes = await paginateQuery<{ lead_id: string; status: string | null; source: string | null; assigned_at: string | null }>(assignQuery);
   let assignments = assignRes.rows;
   let partial = assignRes.truncated;
 
@@ -76,11 +76,11 @@ export async function GET(request: NextRequest) {
     await repairDemoAssignmentsIfNeeded(supabase, customer.id, customerBranches);
     const retryQ = supabase
       .from('lead_assignments')
-      .select('lead_id, status, source')
+      .select('lead_id, status, source, assigned_at')
       .eq('customer_id', customer.id)
       .eq('source', 'demo')
       .order('assigned_at', { ascending: false });
-    const retryRes = await paginateQuery<{ lead_id: string; status: string | null; source: string | null }>(retryQ);
+    const retryRes = await paginateQuery<{ lead_id: string; status: string | null; source: string | null; assigned_at: string | null }>(retryQ);
     assignments = retryRes.rows;
     partial ||= retryRes.truncated;
   }
@@ -92,6 +92,9 @@ export async function GET(request: NextRequest) {
   partial ||= directRes.truncated;
 
   const assignmentStatusMap: Record<string, string> = {};
+  /* Wanneer deze klant de lead ontving: een lead uit Restleads of een
+     lookback kan dagen oud zijn, maar is voor de klant wel nieuw. */
+  const ontvangenOp: Record<string, string> = {};
   const bulkLeadIds = new Set<string>();
   const leadIds = new Set<string>();
   assignments.forEach(a => {
@@ -100,6 +103,7 @@ export async function GET(request: NextRequest) {
       assignmentStatusMap[a.lead_id] = a.status || 'nieuw';
     }
     if (a.source === 'bulk_export') bulkLeadIds.add(a.lead_id);
+    if (a.assigned_at && (!ontvangenOp[a.lead_id] || a.assigned_at > ontvangenOp[a.lead_id])) ontvangenOp[a.lead_id] = a.assigned_at;
   });
   directLeads.forEach(l => leadIds.add(l.id));
 
@@ -151,7 +155,8 @@ export async function GET(request: NextRequest) {
   weekAgo.setDate(weekAgo.getDate() - 7);
 
   const totalLeads = scoped.length;
-  const newThisWeek = scoped.filter(l => new Date(l.created_at) >= weekAgo).length;
+  /* Op ontvangstdatum bij deze klant; demo-leads en directe leads zonder toewijzing op aanmaakdatum. */
+  const newThisWeek = scoped.filter(l => new Date(demoMode ? l.created_at : (ontvangenOp[l.id] ?? l.created_at)) >= weekAgo).length;
   const contacted = scoped.filter(l => l.status === 'gecontacteerd').length;
   const sold = scoped.filter(l => l.status === 'verkocht').length;
 
