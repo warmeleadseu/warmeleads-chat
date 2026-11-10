@@ -6,6 +6,7 @@ import { isInboundLeadBranchSlug } from './nicheResearch';
 import { leadMatchesAnyProvinceTarget } from './provinceTargetMatch';
 import { targetCountryAllowsLead } from './targetCountryMatch';
 import { effectiveMaxAssignments, recentDistinctCustomerIds } from './assignmentCap';
+import { laadInterneKlantIds, zonderInterneKlanten } from './interneKlanten';
 import { MIRROR_ASSIGNMENT_SOURCE } from './masterPortalMirror';
 
 type NicheResearchBatch = {
@@ -129,7 +130,7 @@ export async function tryAssignLeadToNicheResearchBatch(
 
   // Globale cap: niche-onderzoek mag een lead nooit boven het max. aantal
   // klanten tillen (zelfde regel als de reguliere pipeline-distributie).
-  if (recentDistinctCustomerIds(existing || []).size >= effectiveMaxAssignments(lead)) {
+  if (recentDistinctCustomerIds(zonderInterneKlanten(existing || [], await laadInterneKlantIds(supabase))).size >= effectiveMaxAssignments(lead)) {
     return null;
   }
 

@@ -6,6 +6,7 @@ import { campagneWeigering, laadCampagneRegels } from '@/lib/campagneExclusivite
 import { MAX_UITDELINGEN, RESTLEAD_REDEN } from '@/lib/restleads';
 import { planMomenten, dagSleutel } from '@/lib/restleadPlanning';
 import { herverdeelRestleadWachtrij } from '@/lib/restleadWachtrij';
+import { laadInterneKlantIds } from '@/lib/interneKlanten';
 
 /**
  * Een restlead alsnog uitdelen aan een of meer klanten.
@@ -103,6 +104,10 @@ export async function POST(request: NextRequest) {
 
   const echte = (bestaand || []).filter(a => a.source !== MIRROR);
   const al = new Set(echte.map(a => a.customer_id));
+  /* Plafond en wachttijd zonder interne klanten (interneKlanten.ts). */
+  const interneKlanten = await laadInterneKlantIds(supabase);
+  const extern = echte.filter(a => !interneKlanten.has(a.customer_id));
+  const telt = new Set(extern.map(a => a.customer_id));
 
   /* Al iets in de wachtrij voor deze lead? Dat telt mee voor het plafond,
      anders plan je er drie in terwijl er al twee stonden. */
@@ -112,10 +117,13 @@ export async function POST(request: NextRequest) {
     .eq('lead_id', leadId)
     .eq('status', 'gepland');
 
-  for (const g of gepland || []) al.add(g.customer_id);
+  for (const g of gepland || []) {
+    al.add(g.customer_id);
+    if (!interneKlanten.has(g.customer_id)) telt.add(g.customer_id);
+  }
 
-  const laatste = echte.length > 0
-    ? new Date(Math.max(...echte.map(a => new Date(a.assigned_at).getTime())))
+  const laatste = extern.length > 0
+    ? new Date(Math.max(...extern.map(a => new Date(a.assigned_at).getTime())))
     : null;
 
   /* Exclusieve en uitgesloten campagnes gelden ook bij handwerk: een lead die
@@ -134,7 +142,7 @@ export async function POST(request: NextRequest) {
       uitkomsten.push({ customer_id: doel.customer_id, ok: false, reden: `Niet toegestaan: ${campagneNee}` });
       continue;
     }
-    if (al.size + teDoen.length >= 3) {
+    if (telt.size + teDoen.filter(d => !interneKlanten.has(d.customer_id)).length >= 3) {
       uitkomsten.push({ customer_id: doel.customer_id, ok: false, reden: 'Plafond van 3 klanten bereikt' });
       continue;
     }
@@ -171,7 +179,7 @@ export async function POST(request: NextRequest) {
         return planMomenten({
           laatsteToewijzing: laatste,
           aantal: i + 1,
-          klantenAl: al.size,
+          klantenAl: telt.size,
           dagplafond: p?.plafond ?? 0,
           alGepland: p?.bezet ?? {},
         })[i];

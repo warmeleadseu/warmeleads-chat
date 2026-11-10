@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { herverdeel, type WachtrijItem } from './restleadPlanning';
 import { wachttijdUren } from './wachttijdKlanten';
 import { RESTLEAD_REDEN } from './restleads';
+import { laadInterneKlantIds } from './interneKlanten';
 
 /**
  * Smeert de openstaande Restleads-leveringen per klant per dag opnieuw uit.
@@ -44,6 +45,8 @@ export async function herverdeelRestleadWachtrij(
   const leadIds = [...new Set(rijen.map(r => r.lead_id))];
   const laatstePerLead = new Map<string, number>();
   const klantenPerLead = new Map<string, Set<string>>();
+  /* Interne klanten tellen niet mee voor de wachttijd (interneKlanten.ts). */
+  const interneKlanten = await laadInterneKlantIds(supabase);
   for (let i = 0; i < leadIds.length; i += 200) {
     const { data: toewijzingen } = await supabase
       .from('lead_assignments')
@@ -51,6 +54,7 @@ export async function herverdeelRestleadWachtrij(
       .in('lead_id', leadIds.slice(i, i + 200));
     for (const t of toewijzingen || []) {
       if (t.source === 'mirror') continue;
+      if (interneKlanten.has((t as { customer_id?: string }).customer_id ?? '')) continue;
       const set = klantenPerLead.get(t.lead_id) ?? new Set<string>();
       if ((t as { customer_id?: string }).customer_id) set.add((t as { customer_id: string }).customer_id);
       klantenPerLead.set(t.lead_id, set);

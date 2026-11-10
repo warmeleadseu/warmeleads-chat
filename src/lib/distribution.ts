@@ -25,6 +25,7 @@ import { INHAALSLAG_VENSTER_UREN, planInhaalslag, planInhaalslagSpoed, vroegsteM
 import { isVers, kiesLevering, kiesMoment } from './leverSpreiding';
 import { zetInWachtrij } from './wachtrijPlannen';
 import { wachttijdUren } from './wachttijdKlanten';
+import { laadInterneKlantIds, zonderInterneKlanten } from './interneKlanten';
 import { teLangGewacht, toegestaanTotNu } from './dagDosering';
 import { GEEN_REGELS, campagneStaatToe, laadCampagneRegels, type CampagneRegels } from './campagneExclusiviteit';
 import { effectiefDirect, vergelijkKandidaten } from './directLeveren';
@@ -519,13 +520,18 @@ export async function distributeLead(
     .neq('source', MIRROR_ASSIGNMENT_SOURCE)
     .eq('lead_id', lead.id);
 
-  const pipelineCooldownAssignments = (existingAssignments || []).filter((a) => {
+  /* Interne klanten tellen niet mee voor het maximum en de wachttijd
+     (interneKlanten.ts); ze blijven wel meetellen om dezelfde klant geen
+     tweede keer te kiezen. */
+  const interneKlanten = await laadInterneKlantIds(supabase);
+  const externeAssignments = zonderInterneKlanten(existingAssignments || [], interneKlanten);
+  const pipelineCooldownAssignments = externeAssignments.filter((a) => {
     const kind = (a as { customer_batches?: { batch_kind?: string } | null }).customer_batches?.batch_kind;
     return kind !== 'niche_research';
   });
 
   const recentAssignedIds = recentDistinctCustomerIds(existingAssignments || []);
-  if (recentAssignedIds.size >= effectiveMaxAssignments(fullLead as LeadForDistribution)) return result;
+  if (recentDistinctCustomerIds(externeAssignments).size >= effectiveMaxAssignments(fullLead as LeadForDistribution)) return result;
 
   /* Wachttijd tussen klanten: 12 uur voor de tweede klant, 8 uur voor de
      derde (zie wachttijdKlanten.ts). Alleen pipeline-toewijzingen tellen;
@@ -1210,6 +1216,8 @@ export async function backfillBatch(
     supabase,
     leads.map((l) => l.id),
   );
+  /* Interne klanten tellen niet mee voor het maximum en de wachttijd. */
+  const interneKlanten = await laadInterneKlantIds(supabase);
   const nowCap = new Date();
 
   const filters: LeadFilter[] = Array.isArray(batch.lead_filters) ? batch.lead_filters : [];
@@ -1290,7 +1298,7 @@ export async function backfillBatch(
     if (excludedLeadIds.has(lead.id)) continue;
     if (!matchesAllFilters(lead as LeadForDistribution, filters)) continue;
 
-    const bestaand = assignmentsByLead.get(lead.id) || [];
+    const bestaand = zonderInterneKlanten(assignmentsByLead.get(lead.id) || [], interneKlanten);
     if (!canAssignWithinCap(lead as LeadForDistribution, bestaand, batch.customer_id, nowCap)) { skippedByCap++; continue; }
     if (!leadPastInBatchVenster(lead as { created_at?: string | null }, batch)) { skippedByVenster++; continue; }
     /* Exclusief voor een andere batch, of door deze batch uitgesloten. */
@@ -1410,7 +1418,12 @@ export async function distributeUnassignedLeads(): Promise<DistributeRunResult> 
   }
 
   const leadIds = leads.map(l => l.id);
-  const existingAssignments = await fetchAssignmentsForLeadIds(supabase, leadIds);
+  /* Interne klanten tellen niet mee voor het aantal klanten en de wachttijd;
+     dezelfde klant twee keer kiezen voorkomt distributeLead zelf. */
+  const existingAssignments = zonderInterneKlanten(
+    await fetchAssignmentsForLeadIds(supabase, leadIds),
+    await laadInterneKlantIds(supabase),
+  );
 
   const reassignWindowCutoff = new Date(Date.now() - REASSIGNMENT_COOLDOWN_DAYS * 24 * 60 * 60 * 1000);
 

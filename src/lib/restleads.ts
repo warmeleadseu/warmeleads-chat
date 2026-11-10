@@ -335,6 +335,8 @@ export interface KandidaatOpties {
   uitsluitingenPerKlant?: Map<string, string[]>;
   /** Plafond voor deze lead; lager dan drie als dat op de lead is ingesteld. */
   maxKlanten?: number;
+  /** Hoeveel klanten tellen voor het plafond en de wachttijd: zonder interne klanten (interneKlanten.ts). Standaard alle. */
+  aantalKlanten?: number;
   laatsteToewijzing?: Date | null;
   nu?: Date;
 }
@@ -363,7 +365,8 @@ export function vindKandidaten(
   /* Een ongeldig telefoonnummer is precies de reden dat een lead blijft
      liggen; hem alsnog uitdelen lost niets op. */
   if (lead.phone_valid === false) return [];
-  if (alToegewezenAan.size >= (opties.maxKlanten ?? 3)) return [];
+  const aantal = opties.aantalKlanten ?? alToegewezenAan.size;
+  if (aantal >= (opties.maxKlanten ?? 3)) return [];
 
   const uit: Kandidaat[] = [];
 
@@ -388,7 +391,7 @@ export function vindKandidaten(
     const buiten = afstandBuitenGebied(lead, batch.doelen);
     if (buiten === null) continue;
 
-    const marge = geldendeMarge(instellingen, batch, alToegewezenAan.size);
+    const marge = geldendeMarge(instellingen, batch, aantal);
     if (buiten > marge.km) continue;
 
     uit.push({
@@ -400,7 +403,7 @@ export function vindKandidaten(
       reden: beschrijfKandidaat(buiten, buiten > instellingen.marge_km ? marge.waarom : null),
       distribution_priority: batch.distribution_priority,
       kleinste_straal: kleinsteStraalDieDekt(lead, batch.doelen),
-      automatisch: automatischeStatus(buiten, batch, opties.laatsteToewijzing ?? null, opties.nu, lead.created_at, alToegewezenAan.size),
+      automatisch: automatischeStatus(buiten, batch, opties.laatsteToewijzing ?? null, opties.nu, lead.created_at, aantal),
     });
   }
 

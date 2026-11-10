@@ -3,6 +3,7 @@ import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { matchesAllFilters } from '@/lib/distribution';
 import { effectiveMaxAssignments } from '@/lib/assignmentCap';
+import { laadInterneKlantIds } from '@/lib/interneKlanten';
 import { batchIsAtCapacity, isCappedDeliveryModel } from '@/lib/batchDeliveryModel';
 import { getLeadLimitPeriodAnchors } from '@/lib/batchAssignmentCaps';
 import { fetchActiveBatchTargetsByBatch } from '@/lib/batchTargets';
@@ -133,13 +134,21 @@ export async function GET(request: NextRequest) {
         .gte('assigned_at', sinds)
         .range(van, tot));
 
+    /* perLead: alle klanten (om niemand twee keer te kiezen). Het plafond en
+       de wachttijd tellen zonder interne klanten (interneKlanten.ts). */
+    const interneKlanten = await laadInterneKlantIds(supabase);
     const perLead = new Map<string, Set<string>>();
+    const externPerLead = new Map<string, Set<string>>();
     const laatstePerLead = new Map<string, number>();
     for (const a of toewijzingen) {
       if (a.source === MIRROR) continue;
       const set = perLead.get(a.lead_id) ?? new Set<string>();
       set.add(a.customer_id);
       perLead.set(a.lead_id, set);
+      if (interneKlanten.has(a.customer_id)) continue;
+      const ext = externPerLead.get(a.lead_id) ?? new Set<string>();
+      ext.add(a.customer_id);
+      externPerLead.set(a.lead_id, ext);
       const ms = new Date(a.assigned_at).getTime();
       if (ms > (laatstePerLead.get(a.lead_id) ?? 0)) laatstePerLead.set(a.lead_id, ms);
     }
@@ -183,7 +192,7 @@ export async function GET(request: NextRequest) {
 
     /* Alleen wat nog te redden valt: nul of één uitdeling, en niet al afgehandeld. */
     const onderbedeeld = leads.filter(
-      l => (perLead.get(l.id)?.size ?? 0) < MAX_UITDELINGEN && !uitLijst.has(l.id),
+      l => (externPerLead.get(l.id)?.size ?? 0) < MAX_UITDELINGEN && !uitLijst.has(l.id),
     );
 
     /* Dezelfde batches als de verdeling bekijkt. Deze lijst nam ook onbetaalde
@@ -338,6 +347,7 @@ export async function GET(request: NextRequest) {
       if (!lijst) continue;
 
       const al = perLead.get(lead.id) ?? new Set<string>();
+      const aantalExtern = externPerLead.get(lead.id)?.size ?? 0;
       const alleKandidaten = vindKandidaten(
         lead,
         batches,
@@ -349,6 +359,7 @@ export async function GET(request: NextRequest) {
           uitsluitingenPerKlant,
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           maxKlanten: effectiveMaxAssignments(lead as any),
+          aantalKlanten: aantalExtern,
           laatsteToewijzing: laatstePerLead.has(lead.id) ? new Date(laatstePerLead.get(lead.id)!) : null,
           nu,
         },
@@ -357,7 +368,7 @@ export async function GET(request: NextRequest) {
       const excl = exclusiviteitVan(lead, campagneRegels, nu);
       const plan = planVolgendeKlanten({
         laatsteToewijzing: laatstePerLead.has(lead.id) ? new Date(laatstePerLead.get(lead.id)!) : null,
-        aantalKlanten: al.size,
+        aantalKlanten: aantalExtern,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         maxKlanten: effectiveMaxAssignments(lead as any),
         nu,
@@ -373,7 +384,7 @@ export async function GET(request: NextRequest) {
         wervingsdatum: lead.wervingsdatum,
         created_at: lead.created_at,
         dagen_oud: Math.floor((nu.getTime() - new Date(lead.created_at).getTime()) / 86_400_000),
-        uitgedeeld: al.size,
+        uitgedeeld: aantalExtern,
         phone_valid: lead.phone_valid,
         /* Staat hij al ergens klaar? Dan hoort hij hier niet te staan, en als
            dat tóch gebeurt wil je dat meteen zien in plaats van te moeten

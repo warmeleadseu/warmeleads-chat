@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { assignLeadToBatch } from './assignLeadToBatch';
 import { batchIsAtCapacity } from './batchDeliveryModel';
 import { effectiveMaxAssignments, recentDistinctCustomerIds } from './assignmentCap';
+import { laadInterneKlantIds, zonderInterneKlanten } from './interneKlanten';
 import { MIRROR_ASSIGNMENT_SOURCE } from './masterPortalMirror';
 import { sendLeadNotification } from './email';
 import { sendNewLeadPush } from './pushNotification';
@@ -170,11 +171,13 @@ async function leverEenRij(supabase: SupabaseClient, rij: Rij, campagneRegels: C
     .neq('source', MIRROR_ASSIGNMENT_SOURCE)
     .eq('lead_id', rij.lead_id);
 
-  const distinct = recentDistinctCustomerIds(bestaand || []);
-  if (distinct.has(rij.customer_id)) {
+  if (recentDistinctCustomerIds(bestaand || []).has(rij.customer_id)) {
     await markeer('overgeslagen', 'lead was al aan deze klant toegewezen');
     return 'overgeslagen';
   }
+  /* Interne klanten tellen niet mee voor het plafond en de wachttijd (interneKlanten.ts). */
+  const extern = zonderInterneKlanten(bestaand || [], await laadInterneKlantIds(supabase));
+  const distinct = recentDistinctCustomerIds(extern);
   if (distinct.size >= effectiveMaxAssignments(lead)) {
     await markeer('overgeslagen', `plafond bereikt: lead staat al bij ${distinct.size} klanten`);
     return 'overgeslagen';
@@ -186,7 +189,7 @@ async function leverEenRij(supabase: SupabaseClient, rij: Rij, campagneRegels: C
      eerste moment dat het mag. */
   if (rij.soort === 'inhaalslag' || rij.soort === 'spreiding') {
     const nu = new Date();
-    const weigering = inhaalslagWeigering(bestaand || [], rij.customer_id, nu);
+    const weigering = inhaalslagWeigering(extern, rij.customer_id, nu);
     /* Alleen een inhaalslag maakt nooit een derde klant; een verspreide
        levering uit de verdeelronde mag dat wel (die koos de ronde zelf). */
     if (weigering === 'derde_klant' && rij.soort === 'inhaalslag') {
@@ -194,7 +197,7 @@ async function leverEenRij(supabase: SupabaseClient, rij: Rij, campagneRegels: C
       return 'overgeslagen';
     }
     if (weigering === 'pauze') {
-      const vrij = vroegsteMoment(bestaand || [], rij.customer_id, nu);
+      const vrij = vroegsteMoment(extern, rij.customer_id, nu);
       if (vrij) {
         /* Kort na het einde van de wachttijd, op een willekeurige minuut, en
            niet midden in de nacht. */

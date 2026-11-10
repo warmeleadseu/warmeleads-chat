@@ -4,6 +4,7 @@ import { createServerClient } from '@/lib/supabase';
 import { planMomenten, dagSleutel } from '@/lib/restleadPlanning';
 import { RESTLEAD_REDEN, STANDAARD_INSTELLINGEN } from '@/lib/restleads';
 import { herverdeelRestleadWachtrij } from '@/lib/restleadWachtrij';
+import { laadInterneKlantIds } from '@/lib/interneKlanten';
 
 /**
  * Alle restleads in één keer uitdelen aan de klanten die ervoor in aanmerking
@@ -109,6 +110,8 @@ export async function POST(request: NextRequest) {
   const supabase = createServerClient();
 
   const plafondCache = new Map<string, { plafond: number; bezet: Record<string, number> }>();
+  /* Plafond en wachttijd zonder interne klanten (interneKlanten.ts). */
+  const interneKlanten = await laadInterneKlantIds(supabase);
 
   let leadsGeraakt = 0;
   let leveringen = 0;
@@ -157,22 +160,27 @@ export async function POST(request: NextRequest) {
 
     const echte = (bestaand || []).filter(a => a.source !== 'mirror');
     const bezet = new Set(echte.map(a => a.customer_id));
+    const extern = echte.filter(a => !interneKlanten.has(a.customer_id));
+    const telt = new Set(extern.map(a => a.customer_id));
 
     const { data: gepland } = await supabase
       .from('geplande_leadleveringen')
       .select('customer_id')
       .eq('lead_id', opdracht.lead_id)
       .eq('status', 'gepland');
-    for (const g of gepland || []) bezet.add(g.customer_id);
+    for (const g of gepland || []) {
+      bezet.add(g.customer_id);
+      if (!interneKlanten.has(g.customer_id)) telt.add(g.customer_id);
+    }
 
-    const ruimte = 3 - bezet.size;
+    const ruimte = 3 - telt.size;
     if (ruimte <= 0) continue;
 
     const kiezen = gesorteerd.filter(k => !bezet.has(k.customer_id)).slice(0, ruimte);
     if (kiezen.length === 0) continue;
 
-    const laatste = echte.length > 0
-      ? new Date(Math.max(...echte.map(a => new Date(a.assigned_at).getTime())))
+    const laatste = extern.length > 0
+      ? new Date(Math.max(...extern.map(a => new Date(a.assigned_at).getTime())))
       : null;
 
     /* Per klant het dagplafond aanhouden. De bezetting wordt per ronde
@@ -194,7 +202,7 @@ export async function POST(request: NextRequest) {
         laatsteToewijzing: i === 0 ? laatste : momenten[i - 1],
         aantal: 1,
         /* Wachttijd hangt af van hoeveel klanten de lead dan al heeft. */
-        klantenAl: new Set(echte.map(a => a.customer_id)).size + i,
+        klantenAl: new Set(extern.map(a => a.customer_id)).size + i,
         dagplafond: p.plafond,
         alGepland: p.bezet,
       });
