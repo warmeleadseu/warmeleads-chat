@@ -2,6 +2,8 @@
  * Profanity filter for incoming leads.
  * Blocks leads containing swear words in Dutch and English.
  * Uses whole-word matching to avoid false positives on names like "Hoernaert".
+ * "dick" staat er bewust niet in: Dick is in Nederland een gewone voornaam
+ * (10 nov 2026, er belandden steeds echte leads in quarantaine).
  */
 
 const PROFANITY_NL = [
@@ -19,7 +21,7 @@ const PROFANITY_NL = [
 
 const PROFANITY_EN = [
   'fuck', 'fucking', 'fucker', 'fucked', 'motherfucker', 'shit', 'shitty',
-  'bullshit', 'asshole', 'bitch', 'bastard', 'dick', 'dickhead', 'pussy',
+  'bullshit', 'asshole', 'bitch', 'bastard', 'dickhead', 'pussy',
   'cunt', 'whore', 'slut', 'nigger', 'nigga', 'faggot', 'retard',
   'retarded', 'dumbass', 'jackass', 'piss off', 'screw you',
 ];
