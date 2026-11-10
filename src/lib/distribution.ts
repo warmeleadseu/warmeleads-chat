@@ -457,8 +457,11 @@ export async function distributeLead(
 ): Promise<DistributionResult> {
   const result: DistributionResult = { lead_id: lead.id, assignments: [] };
 
-  // Never distribute demo leads to real customers (early check before DB fetch)
-  if (lead.bron === 'demo') return result;
+  /* Nooit verdelen: demo-leads, en Excel-imports (die zijn al van een klant
+     of bewust ingeladen voorraad; de verdeelronde slaat ze ook over). Via
+     "Verrijken" en het handmatig toevoegen kwamen er toch 175 bij klanten. */
+  const nietVerdelen = (bron: string | null | undefined) => bron === 'demo' || bron === 'excel_import';
+  if (nietVerdelen(lead.bron)) return result;
 
   const supabase = ctx?.supabase ?? createServerClient();
 
@@ -469,7 +472,7 @@ export async function distributeLead(
   }
 
   // Double-check after DB fetch in case bron wasn't passed by caller
-  if (fullLead.bron === 'demo') return result;
+  if (nietVerdelen(fullLead.bron)) return result;
 
   /* Toestemming ingetrokken: nooit meer delen, ook niet met het masterportaal.
      De database weigert zo'n toewijzing ook (migratie 196); hier stoppen we
@@ -1259,13 +1262,24 @@ export async function backfillBatch(
   const alGeplandIds = new Set((alGepland || []).map(g => g.lead_id as string));
   /* Leads die al voor een andere klant in de wachtrij staan, laten we met rust:
      die zijn al onderweg. */
-  const { data: elders } = await supabase
-    .from('geplande_leadleveringen')
-    .select('lead_id')
-    .in('lead_id', leads.map(l => l.id))
-    .neq('customer_id', batch.customer_id)
-    .eq('status', 'gepland');
-  const eldersGepland = new Set((elders || []).map(g => g.lead_id as string));
+  /* In stukken: tot 2000 lead-ids in één .in() maakt de URL te lang, de
+     vraag faalt en zonder fout-afhandeling leek dan niets elders gepland. */
+  const eldersGepland = new Set<string>();
+  const leadIdsScan = leads.map(l => l.id);
+  for (let i = 0; i < leadIdsScan.length; i += LEAD_ID_IN_CHUNK) {
+    const { data: elders, error: eldersFout } = await supabase
+      .from('geplande_leadleveringen')
+      .select('lead_id')
+      .in('lead_id', leadIdsScan.slice(i, i + LEAD_ID_IN_CHUNK))
+      .neq('customer_id', batch.customer_id)
+      .eq('status', 'gepland');
+    if (eldersFout) {
+      /* Niet weten wat elders klaarstaat: dan nu niets inplannen. */
+      console.error('[distribution] lookback: wachtrij elders niet geladen', { batchId: batch.id, fout: eldersFout.message });
+      return { assigned: 0, gepland: 0 };
+    }
+    for (const g of elders || []) eldersGepland.add(g.lead_id as string);
+  }
   const { dayStart: vandaagStart } = getLeadLimitPeriodAnchors(new Date());
   const morgenStart = new Date(vandaagStart.getTime() + 86_400_000);
   const geplandVandaag = (alGepland || []).filter(g => {

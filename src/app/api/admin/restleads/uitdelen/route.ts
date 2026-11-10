@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { amsterdamWallTimeToUtc, amsterdamYmd } from '@/lib/appointmentSlots';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { assignLeadToBatch } from '@/lib/assignLeadToBatch';
@@ -36,10 +37,9 @@ async function bezettingPerDag(
   supabase: ReturnType<typeof createServerClient>,
   customerId: string,
 ): Promise<Record<string, number>> {
-  const vanaf = new Date();
-  vanaf.setHours(0, 0, 0, 0);
-  const tot = new Date(vanaf);
-  tot.setDate(tot.getDate() + 60);
+  /* Vanaf middernacht Nederlandse tijd; de server draait in UTC. */
+  const vanaf = amsterdamWallTimeToUtc(amsterdamYmd(new Date()), '00:00');
+  const tot = new Date(vanaf.getTime() + 60 * 86_400_000);
 
   const [geleverd, gepland] = await Promise.all([
     supabase

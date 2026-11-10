@@ -183,11 +183,12 @@ async function leverEenRij(supabase: SupabaseClient, rij: Rij, campagneRegels: C
     return 'overgeslagen';
   }
 
-  /* Inhaalslag: dezelfde regels als bij het inplannen, opnieuw getoetst. Een
-     andere klant kan de lead intussen hebben gekregen. Geen derde klant; en
-     binnen 12 uur na een andere klant schuift de levering door naar het
-     eerste moment dat het mag. */
-  if (rij.soort === 'inhaalslag' || rij.soort === 'spreiding') {
+  /* Dezelfde regels als bij het inplannen, opnieuw getoetst. Een andere klant
+     kan de lead intussen hebben gekregen. Binnen de wachttijd na een andere
+     klant schuift de levering door naar het eerste moment dat het mag. Dat
+     geldt voor elke rij, ook handwerk uit Restleads (soort leeg): op 19 okt
+     2026 kreeg een tweede klant een restlead al na 3u45. */
+  {
     const nu = new Date();
     const weigering = inhaalslagWeigering(extern, rij.customer_id, nu);
     /* Alleen een inhaalslag maakt nooit een derde klant; een verspreide
@@ -235,8 +236,12 @@ async function leverEenRij(supabase: SupabaseClient, rij: Rij, campagneRegels: C
        deze niet meer. */
     const max = Number((batch as { leads_per_day?: number | null } | null)?.leads_per_day) || 0;
     const maxWeek = Number((batch as { leads_per_week?: number | null } | null)?.leads_per_week) || 0;
-    const metRegels = rij.soort === 'inhaalslag' || rij.soort === 'spreiding';
-    if (metRegels && (max > 0 || maxWeek > 0)) {
+    /* Handwerk (Restleads, soort leeg) is bij het inplannen al over de dagen
+       verdeeld; is de dag bij leveren toch vol (de gewone verdeling vulde hem),
+       dan naar de volgende ochtend in plaats van weggooien. Op 19 okt 2026
+       kreeg Ventasol zo 9 leads bij een maximum van 5. */
+    const handwerk = rij.soort !== 'inhaalslag' && rij.soort !== 'spreiding';
+    if (max > 0 || maxWeek > 0) {
       const { dayStart, weekStart } = getLeadLimitPeriodAnchors(new Date());
       if (max > 0) {
         const { count } = await supabase
@@ -245,6 +250,13 @@ async function leverEenRij(supabase: SupabaseClient, rij: Rij, campagneRegels: C
           .eq('batch_id', rij.batch_id)
           .gte('assigned_at', dayStart.toISOString());
         if ((count ?? 0) >= max) {
+          if (handwerk) {
+            const morgen = buitenDeNacht(new Date(dayStart.getTime() + 86_400_000));
+            await supabase.from('geplande_leadleveringen')
+              .update({ gepland_voor: morgen.toISOString(), laatste_reden: `uitgesteld: dagmaximum van ${max} vandaag bereikt` })
+              .eq('id', rij.id);
+            return 'uitgesteld';
+          }
           await markeer('overgeslagen', `dagmaximum van ${max} bereikt`);
           return 'overgeslagen';
         }

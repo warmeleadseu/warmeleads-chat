@@ -47,7 +47,18 @@ export async function assignLeadToBatch(
   const { supabase, lead, customer, batchId, source, skipGuardrails, negeerGeo } = input;
 
   if (!skipGuardrails) {
-    const branchIssue = checkBranchGuardrail(lead, customer);
+    /* Branche: een batch in de branche van de lead is genoeg bewijs dat de
+       klant die branche koopt, ook als de klantkaart hem (nog) niet noemt.
+       De gewone verdeling kiest batches op branche en leverde zo wél direct,
+       terwijl de wachtrij dezelfde lead daarna weigerde (Energiekompas,
+       thuisbatterij, nov 2026). Zonder passende batch telt de klantkaart. */
+    let batchDektBranche = false;
+    if (batchId && lead.branch) {
+      const { data: b } = await supabase.from('customer_batches').select('branch, lead_branch_slug').eq('id', batchId).maybeSingle();
+      const leadBranche = lead.branch.trim();
+      batchDektBranche = !!b && (b.branch === leadBranche || b.lead_branch_slug === leadBranche);
+    }
+    const branchIssue = batchDektBranche ? null : checkBranchGuardrail(lead, customer);
     if (branchIssue) return { ok: false, reason: branchIssue.message, code: branchIssue.code };
 
     const { data: targets } = await supabase

@@ -341,4 +341,9 @@ describe('distributeLead met direct leveren', () => {
     await distributeLead({ ...LEAD, bron: 'demo' } as never, { supabase: db as never });
     expect(inserts()).toHaveLength(0);
   });
+  it('Excel-import: nooit verdeeld (ook niet via Verrijken)', async () => {
+    const { db, inserts } = nepDb({ batches: [klantDirect('B')], targets: TARGETS });
+    await distributeLead({ ...LEAD, bron: 'excel_import' } as never, { supabase: db as never });
+    expect(inserts()).toHaveLength(0);
+  });
 });

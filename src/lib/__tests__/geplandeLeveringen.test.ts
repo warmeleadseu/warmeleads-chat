@@ -23,6 +23,8 @@ type Opzet = {
   batch?: Record<string, unknown> | null;
   /** Batches met campagneregels (exclusief / uitgesloten). */
   regelBatches?: Record<string, unknown>[];
+  /** Wat de batch vandaag al kreeg (telling voor het dagmaximum). */
+  vandaag?: number;
 };
 
 /** Een gewone, actieve batch met ruimte: de toestand waarin leveren mag. */
@@ -61,7 +63,9 @@ function maakClient(o: Opzet) {
     }
     if (tabel === 'lead_assignments') {
       return {
-        select: () => ({
+        select: (_k?: string, opties?: { count?: string }) => opties?.count ? ({
+          eq: () => ({ gte: () => Promise.resolve({ count: o.vandaag ?? 0 }) }),
+        }) : ({
           neq: () => ({
             eq: () => Promise.resolve({
               data: (o.bestaandeToewijzingen ?? []).map(a => ({ ...a, assigned_at: a.assigned_at || nu })),
@@ -105,7 +109,7 @@ describe('verwerkGeplandeLeveringen', () => {
   it('levert een rij die aan de beurt is', async () => {
     assignMock.mockResolvedValue({ ok: true, assignmentId: 'a1', distance_km: 5 });
     const r = await verwerkGeplandeLeveringen(
-      maakClient({ rijen: [RIJ], lead: LEAD, klant: KLANT, bestaandeToewijzingen: [{ customer_id: 'k2', assigned_at: '' }] }),
+      maakClient({ rijen: [RIJ], lead: LEAD, klant: KLANT, bestaandeToewijzingen: [{ customer_id: 'k2', assigned_at: new Date(Date.now() - 13 * 3_600_000).toISOString() }] }),
     );
     expect(r).toEqual({ bekeken: 1, geleverd: 1, overgeslagen: 0 });
     expect(updates[0]).toMatchObject({ status: 'geleverd', assignment_id: 'a1' });
@@ -205,6 +209,35 @@ describe('verwerkGeplandeLeveringen', () => {
     expect(assignMock).not.toHaveBeenCalled();
     expect(String(updates[0].laatste_reden)).toContain('uitgesteld');
     expect(new Date(updates[0].gepland_voor as string).getTime()).toBeGreaterThan(Date.now() + 9 * 3_600_000);
+  });
+
+  it('restlead (soort leeg) binnen de wachttijd na een andere klant: schuift door', async () => {
+    const r = await verwerkGeplandeLeveringen(maakClient({
+      rijen: [RIJ], lead: LEAD, klant: KLANT,
+      bestaandeToewijzingen: [{ customer_id: 'k2', assigned_at: new Date(Date.now() - 3.75 * 3_600_000).toISOString() }],
+    }));
+    expect(r.geleverd).toBe(0);
+    expect(assignMock).not.toHaveBeenCalled();
+    expect(String(updates[0].laatste_reden)).toContain('uitgesteld');
+  });
+
+  it('restlead bij een vol dagmaximum: naar de volgende ochtend, niet weggegooid', async () => {
+    const r = await verwerkGeplandeLeveringen(maakClient({
+      rijen: [RIJ], lead: LEAD, klant: KLANT, batch: { ...RUIME_BATCH, leads_per_day: 5 }, vandaag: 5,
+    }));
+    expect(r).toEqual({ bekeken: 1, geleverd: 0, overgeslagen: 0 });
+    expect(assignMock).not.toHaveBeenCalled();
+    expect(String(updates[0].laatste_reden)).toContain('dagmaximum van 5');
+    expect(updates[0].status).toBeUndefined();
+    expect(new Date(updates[0].gepland_voor as string).getTime()).toBeGreaterThan(Date.now());
+  });
+
+  it('verspreide levering bij een vol dagmaximum: overgeslagen', async () => {
+    const r = await verwerkGeplandeLeveringen(maakClient({
+      rijen: [{ ...RIJ, soort: 'spreiding' }], lead: LEAD, klant: KLANT, batch: { ...RUIME_BATCH, leads_per_day: 5 }, vandaag: 5,
+    }));
+    expect(r.overgeslagen).toBe(1);
+    expect(assignMock).not.toHaveBeenCalled();
   });
 
   it('alleen de rijen van één batch (meteen na een lookback met spoed)', async () => {
