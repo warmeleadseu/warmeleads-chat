@@ -24,41 +24,70 @@ export async function GET(request: NextRequest) {
   /** Safety caps voor debug-tool. Voorkomt dat een per-ongeluk-geklikte refresh de DB plat trekt. */
   const DEBUG_LIMIT = 2000;
 
-  const [leadsRes, assignRes, batchRes, targetRes, custRes, batchTargetRes] = await Promise.all([
-    supabase
+  /* Per pagina van 1000: de database geeft nooit meer dan 1000 rijen per
+     vraag. Met één .limit(2000) kwamen er stilletjes 1000 terug, en vielen de
+     toewijzingen van de oudere leads weg: 321 leads stonden hier onterecht
+     als "niet toegewezen". */
+  async function alle<T>(haal: (van: number, tot: number) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>): Promise<{ rijen: T[]; fout: boolean }> {
+    const rijen: T[] = [];
+    for (let van = 0; van < DEBUG_LIMIT; van += 1000) {
+      const { data, error: f } = await haal(van, Math.min(van + 999, DEBUG_LIMIT - 1));
+      if (f) return { rijen, fout: true };
+      rijen.push(...((data ?? []) as T[]));
+      if (!data || data.length < 1000) break;
+    }
+    return { rijen, fout: false };
+  }
+
+  type LeadRij = { id: string; naam_klant: string | null; email: string | null; branch: string; postcode: string | null; plaatsnaam: string | null; lat: number | null; lng: number | null; land: string | null; provincie: string | null; created_at: string };
+  const [leadsRes, batchRes, targetRes, custRes, batchTargetRes] = await Promise.all([
+    alle<LeadRij>((van, tot) => supabase
       .from('leads')
       .select('id, naam_klant, email, branch, postcode, plaatsnaam, lat, lng, land, provincie, created_at')
       .order('created_at', { ascending: false })
-      .limit(DEBUG_LIMIT),
-    supabase
-      .from('lead_assignments')
-      .select('id, lead_id, customer_id, batch_id, distance_km, assigned_at, customers(name)')
-      .order('assigned_at', { ascending: false })
-      .limit(DEBUG_LIMIT),
-    supabase
+      .order('id')
+      .range(van, tot)),
+    alle<{ id: string; customer_id: string; branch: string; batch_size: number; leads_delivered: number; leads_per_day: number | null; leads_per_week: number | null; status: string; is_paid: boolean | null; customers: unknown }>((van, tot) => supabase
       .from('customer_batches')
       .select('id, customer_id, branch, batch_size, leads_delivered, leads_per_day, leads_per_week, status, is_paid, customers(name)')
-      .limit(DEBUG_LIMIT),
-    supabase
+      .order('id')
+      .range(van, tot)),
+    alle<{ id: string; customer_id: string; label: string; lat: number; lng: number; radius_km: number; marge_km: number | null; is_active: boolean; target_type: string | null; provinces: string[] | null }>((van, tot) => supabase
       .from('customer_targets')
       .select('id, customer_id, label, lat, lng, radius_km, marge_km, is_active, target_type, provinces')
-      .limit(DEBUG_LIMIT),
-    supabase
+      .order('id')
+      .range(van, tot)),
+    alle<{ id: string; name: string; is_active: boolean | null; portal_active: boolean | null }>((van, tot) => supabase
       .from('customers')
       .select('id, name, is_active, portal_active')
-      .limit(DEBUG_LIMIT),
+      .order('id')
+      .range(van, tot)),
     supabase
       .from('batch_targets')
       .select('id, batch_id, label, lat, lng, radius_km, is_active, target_type, provinces')
       .eq('is_active', true)
-      .limit(DEBUG_LIMIT),
+      .limit(1000),
   ]);
 
-  const leads = leadsRes.data || [];
-  const assignments = assignRes.data || [];
-  const batches = batchRes.data || [];
-  const targets = targetRes.data || [];
-  const customers = custRes.data || [];
+  const leads = leadsRes.rijen;
+  /* De toewijzingen van precies deze leads, niet de laatste 1000 van allemaal. */
+  type ToewijzingRij = { id: string; lead_id: string; customer_id: string; batch_id: string | null; distance_km: number | null; assigned_at: string; customers: unknown };
+  const assignments: ToewijzingRij[] = [];
+  let assignFout = false;
+  for (let i = 0; i < leads.length; i += 200) {
+    const { data, error: f } = await supabase
+      .from('lead_assignments')
+      .select('id, lead_id, customer_id, batch_id, distance_km, assigned_at, customers(name)')
+      .in('lead_id', leads.slice(i, i + 200).map(l => l.id));
+    if (f) { assignFout = true; break; }
+    assignments.push(...((data ?? []) as ToewijzingRij[]));
+  }
+  if (leadsRes.fout || assignFout) {
+    return NextResponse.json({ error: 'Leads of toewijzingen konden niet volledig worden geladen; probeer het opnieuw' }, { status: 500 });
+  }
+  const batches = batchRes.rijen;
+  const targets = targetRes.rijen;
+  const customers = custRes.rijen;
   // batch_targets kan ontbreken vóór migratie 144 → dan gewoon lege lijst.
   const batchTargets = batchTargetRes.error ? [] : (batchTargetRes.data || []);
 

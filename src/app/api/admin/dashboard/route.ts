@@ -44,8 +44,11 @@ export async function GET(request: NextRequest) {
   const supabase = createServerClient();
   const t0 = Date.now();
   const now = new Date();
-  const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
-  const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  /* "Deze week" en "Deze maand" op het dashboard: de kalenderweek (vanaf
+     maandag) en kalendermaand in Nederlandse tijd. Dit waren rollende 7 en
+     30 dagen, terwijl het label een kalenderperiode suggereert. */
+  const weekAgo = getPeriodStart('week', now).toISOString();
+  const monthAgo = getPeriodStart('month', now).toISOString();
 
   const isAM = admin.role === 'accountmanager';
   let amCustomerIds: string[] = [];

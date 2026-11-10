@@ -84,7 +84,7 @@ export default function BatchHerkomstBlok({ batchId }: { batchId: string }) {
                     </p>
                     <p className="mt-0.5 text-slate-600">
                       {k.naar_batch} van de {k.binnen} leads naar deze batch
-                      {k.uitgaven > 0 && <> · {EURO.format(k.uitgaven)} uitgegeven{k.kosten_per_lead_naar_batch !== null && <> · <span className="font-medium text-slate-800">{EURO2.format(k.kosten_per_lead_naar_batch)}</span> per lead voor deze batch</>}</>}
+                      {k.uitgaven > 0 && <> · {EURO.format(k.uitgaven)} uitgegeven{k.gedeeld_met > 0 && <> (gedeeld met {k.gedeeld_met} andere {k.gedeeld_met === 1 ? 'batch' : 'batches'}, deel {EURO.format(k.uitgaven_aandeel)})</>}{k.kosten_per_lead_naar_batch !== null && <> · <span className="font-medium text-slate-800">{EURO2.format(k.kosten_per_lead_naar_batch)}</span> per lead voor deze batch</>}</>}
                     </p>
                   </div>
                 ))}

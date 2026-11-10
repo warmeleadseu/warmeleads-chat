@@ -35,6 +35,14 @@ describe('reden waarom een lead niet bij de gekoppelde klant kwam', () => {
     expect(redenVoorBatch(lead(), batch({ starts_at: '2026-11-12T00:00:00Z' }), ctx)).toBe('nog_niet_gestart');
     expect(redenVoorBatch(lead({ phone_valid: false }), batch(), ctx)).toBe('ongeldig_nummer');
   });
+  it('batch gepauzeerd of wacht op betaling', () => {
+    expect(redenVoorBatch(lead(), batch({ status: 'paused' }), ctx)).toBe('batch_niet_actief');
+    expect(redenVoorBatch(lead(), batch({ status: 'pending' }), ctx)).toBe('batch_niet_actief');
+    expect(redenVoorBatch(lead(), batch({ status: 'active' }), ctx)).toBe('andere_klant_eerst');
+  });
+  it('campagne hing aan geen batch: niet "andere branche"', () => {
+    expect(redenNietGekoppeld(lead(), [], ctx)).toBe('geen_batch');
+  });
   it('campagne uitgesloten voor de batch', () => {
     const regels = { ...GEEN_REGELS, uitgesloten: new Map([['B1', new Set(['C1'])]]) };
     expect(redenVoorBatch(lead(), batch(), { ...ctx, regels })).toBe('campagne_regel');

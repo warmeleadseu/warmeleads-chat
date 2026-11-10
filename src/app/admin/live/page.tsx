@@ -116,6 +116,8 @@ interface LiveData {
   costMetrics?: CostMetrics;
   recentPaidBatches?: PaidBatch[];
   amLeaderboard?: AMLeaderboardEntry[];
+  /** Omzet deze maand zonder (actieve) accountmanager: telt niet op het podium. */
+  amLeaderboardZonderAm?: number;
   actie?: ActieSamenvatting | null;
   timestamp: string;
 }
@@ -1010,7 +1012,7 @@ function StaffelRegel({ s }: { s: StaffelWeergave }) {
   );
 }
 
-function SlideTeam({ targets, leaderboard }: { targets: AMTargetLive[]; leaderboard: AMLeaderboardEntry[] }) {
+function SlideTeam({ targets, leaderboard, zonderAm = 0 }: { targets: AMTargetLive[]; leaderboard: AMLeaderboardEntry[]; zonderAm?: number }) {
   /* Staffels (zie src/lib/amStaffel.ts) als één regel; andere targets los, beste voortgang eerst. */
   const regels = groepeerStaffels([...targets].sort((a, b) => b.progress_pct - a.progress_pct));
   const beide = targets.length > 0 && leaderboard.length > 0;
@@ -1115,6 +1117,12 @@ function SlideTeam({ targets, leaderboard }: { targets: AMTargetLive[]; leaderbo
               })}
               {leaderboard.length > MAX_LEADERBOARD && (
                 <p className={`${TYPE.meta} text-center tabular-nums text-white/35`}>+{leaderboard.length - MAX_LEADERBOARD} niet getoond</p>
+              )}
+              {zonderAm > 0 && (
+                <p className={`${TYPE.meta} flex justify-between gap-4 px-5 tabular-nums text-white/40`}>
+                  <span className="truncate">Zonder accountmanager</span>
+                  <span className="shrink-0">{euro(zonderAm)}</span>
+                </p>
               )}
             </div>
           </div>
@@ -2142,7 +2150,7 @@ export default function LiveDashboard() {
                 />
               )}
               {slide.id === 'geld' && data.costMetrics && <SlideGeld data={data} costMetrics={data.costMetrics} />}
-              {slide.id === 'team' && <SlideTeam targets={amTargets} leaderboard={data.amLeaderboard ?? []} />}
+              {slide.id === 'team' && <SlideTeam targets={amTargets} leaderboard={data.amLeaderboard ?? []} zonderAm={data.amLeaderboardZonderAm ?? 0} />}
               {slide.id === 'actie' && data.actie && <SlideActie actie={data.actie} nu={clock} />}
             </motion.div>
           </AnimatePresence>

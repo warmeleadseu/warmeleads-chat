@@ -92,6 +92,8 @@ export type CampagneRij = {
   /** Klanten met aantallen, meeste eerst. */
   per_klant: { klant: string; leads: number; gekoppeld: boolean }[];
   geschat: boolean;
+  /** Aanmeldingen van installateurs (partnerwerving): die komen bij Prospects binnen, niet als lead. */
+  partner_aanmeldingen?: number;
 };
 
 const rond = (n: number) => Math.round(n * 100) / 100;
@@ -188,6 +190,9 @@ export type Signaal = { soort: 'rood' | 'oranje'; tekst: string };
 /** Waar je naar moet kijken. */
 export function signalen(r: CampagneRij): Signaal[] {
   const uit: Signaal[] = [];
+  /* Partnerwerving: geen consumentenleads en geen batch, dus de gewone
+     signalen zeggen hier niets. */
+  if ((r.partner_aanmeldingen ?? 0) > 0 && r.binnen === 0) return uit;
   if (r.gekoppeld_aan.length > 0 && r.binnen >= 10 && r.gekoppeld_pct !== null && r.gekoppeld_pct < 50) {
     uit.push({ soort: 'rood', tekst: `Maar ${r.gekoppeld_pct.toLocaleString('nl-NL')}% naar de gekoppelde klant` });
   }
@@ -216,7 +221,12 @@ export type BatchHerkomst = {
   koppelingen: {
     campaign_id: string; naam: string; van: string; tot: string | null; geschat: boolean;
     /** Leads van deze campagne binnen in de koppelperiode, en hoeveel daarvan naar deze batch gingen. */
-    binnen: number; naar_batch: number; uitgaven: number; kosten_per_lead_naar_batch: number | null;
+    binnen: number; naar_batch: number; uitgaven: number;
+    /** Andere batches die in dezelfde periode aan deze campagne hingen. */
+    gedeeld_met: number;
+    /** Deel van de uitgaven voor deze batch: gelijk verdeeld over de gekoppelde batches. */
+    uitgaven_aandeel: number;
+    kosten_per_lead_naar_batch: number | null;
   }[];
 };
 
@@ -275,6 +285,13 @@ export function berekenHerkomst(opts: {
           if (d >= vanDag && d <= totDag) uitgaven += s;
         }
         uitgaven = rond(uitgaven);
+        /* Hangt de campagne ook aan andere batches, dan telde elke batch de
+           volledige uitgaven: samen meer dan er werd uitgegeven. */
+        const gedeeldMet = new Set(opts.koppelingen
+          .filter(o => o.campaign_id === k.campaign_id && o.batch_id !== opts.batchId)
+          .filter(o => new Date(o.van).getTime() < totMs && (o.tot ? new Date(o.tot).getTime() : opts.nu.getTime()) > vanMs)
+          .map(o => o.batch_id)).size;
+        const aandeel = rond(uitgaven / (1 + gedeeldMet));
         return {
           campaign_id: k.campaign_id,
           naam: opts.namen.get(k.campaign_id) ?? k.campaign_id,
@@ -284,7 +301,9 @@ export function berekenHerkomst(opts: {
           binnen: binnen.length,
           naar_batch: naar,
           uitgaven,
-          kosten_per_lead_naar_batch: naar > 0 && uitgaven > 0 ? rond(uitgaven / naar) : null,
+          gedeeld_met: gedeeldMet,
+          uitgaven_aandeel: aandeel,
+          kosten_per_lead_naar_batch: naar > 0 && aandeel > 0 ? rond(aandeel / naar) : null,
         };
       })
       .sort((a, b) => b.van.localeCompare(a.van)),

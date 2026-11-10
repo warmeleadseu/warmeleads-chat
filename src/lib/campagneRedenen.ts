@@ -22,8 +22,10 @@ import type { GeoTargetRow } from './batchTargets';
  */
 
 export const REDENEN = {
+  geen_batch: 'Campagne hing op dat moment aan geen batch',
   andere_branche: 'Andere branche dan de gekoppelde batch',
   nog_niet_gestart: 'Gekoppelde batch was nog niet gestart',
+  batch_niet_actief: 'Gekoppelde batch staat gepauzeerd of wacht op betaling',
   campagne_regel: 'Campagne uitgesloten of exclusief voor een andere batch',
   ongeldig_nummer: 'Ongeldig telefoonnummer',
   geen_gebied: 'Gekoppelde klant heeft geen werkgebied ingesteld',
@@ -45,6 +47,8 @@ export type RedenBatch = {
   id: string;
   customer_id: string;
   branch: string;
+  /** Huidige status; gepauzeerd of in afwachting van betaling krijgt geen leads. */
+  status?: string | null;
   batch_size: number;
   leads_per_day: number | null;
   leads_per_week: number | null;
@@ -107,6 +111,9 @@ export function redenVoorBatch(
   const ms = t.getTime();
   if (lead.branch !== batch.branch) return 'andere_branche';
   if ((batch.starts_at && new Date(batch.starts_at).getTime() > ms) || !leadPastInBatchVenster(lead, batch)) return 'nog_niet_gestart';
+  /* Alleen de huidige status is bekend: een batch die nu gepauzeerd is of op
+     betaling wacht, kreeg ook toen niets (zo VDZ Brigade, nov 2026). */
+  if (batch.status === 'paused' || batch.status === 'pending') return 'batch_niet_actief';
   if (!campagneStaatToe(batch.id, lead, ctx.regels, t)) return 'campagne_regel';
   if (lead.phone_valid === false) return 'ongeldig_nummer';
   if (batch.targets.length === 0) return 'geen_gebied';
@@ -139,7 +146,7 @@ export function redenNietGekoppeld(
   batches: RedenBatch[],
   ctx: { regels: CampagneRegels; uitsluitingen: Map<string, string[]> },
 ): RedenCode {
-  let beste: RedenCode = 'andere_branche';
+  let beste: RedenCode = 'geen_batch';
   for (const b of batches) {
     const r = redenVoorBatch(lead, b, ctx);
     if (VOLGORDE.indexOf(r) > VOLGORDE.indexOf(beste)) beste = r;

@@ -419,10 +419,10 @@ export default function AdminDashboard() {
               </div>
               <div
                 className="rounded-lg bg-slate-50 p-4"
-                title="Aantal verse uitdelingen gedeeld door het aantal verse leads in deze periode. Streven is 2,0x, het plafond is 3,0x."
+                title="Hoe vaak een lead uit deze periode gemiddeld is geleverd (zonder bulk, demo en goedgekeurde reclamaties). Zelfde cijfer als de verdeelfactor bij de kosten en op de liveslide. Streven is 2,0x, het plafond is 3,0x."
               >
                 <p className="text-2xl font-bold text-slate-900">
-                  {ps.leads > 0 ? (ps.assigned / ps.leads).toFixed(2) : '0.00'}x
+                  {costData ? costData.avgAssignments.toFixed(2) : ps.leads > 0 ? (ps.assigned / ps.leads).toFixed(2) : '0.00'}x
                 </p>
                 <p className="mt-1 text-xs text-slate-500">Gem. keer uitgedeeld</p>
                 <p className="text-[11px] text-slate-400">Streven 2,0x &middot; max 3,0x</p>

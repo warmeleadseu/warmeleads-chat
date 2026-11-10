@@ -227,9 +227,11 @@ export default function CampagnesPage() {
                         <div className="min-w-0">
                           <p className="truncate font-medium text-slate-900" title={c.naam}>{c.naam}</p>
                           <p className="truncate text-xs text-slate-500">
-                            {c.gekoppeld_aan.length > 0
-                              ? [...new Set(c.gekoppeld_aan.map(g => g.klant))].join(', ')
-                              : 'Niet gekoppeld'}
+                            {(c.partner_aanmeldingen ?? 0) > 0 && c.binnen === 0
+                              ? `Partnerwerving: ${c.partner_aanmeldingen} ${c.partner_aanmeldingen === 1 ? 'aanmelding' : 'aanmeldingen'} bij Prospects`
+                              : c.gekoppeld_aan.length > 0
+                                ? [...new Set(c.gekoppeld_aan.map(g => g.klant))].join(', ')
+                                : 'Niet gekoppeld'}
                             {c.geschat && <span className="ml-1 text-slate-400">(geschat)</span>}
                           </p>
                           {c.signalen.length > 0 && (

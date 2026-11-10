@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { amsterdamWallTimeToUtc } from './appointmentSlots';
 import { fetchActiveBatchTargetsByBatch, type GeoTargetRow } from './batchTargets';
 import { laadCampagneRegels } from './campagneExclusiviteit';
 import { REDENEN, redenNietGekoppeld, type RedenBatch, type RedenCode } from './campagneRedenen';
@@ -96,8 +97,8 @@ async function laadBatchKlant(supabase: SupabaseClient, batchIds: string[]): Pro
 
 /** Alle campagnes met uitgaven of leads in de periode (datums yyyy-mm-dd, tot en met). */
 export async function laadCampagneOverzicht(supabase: SupabaseClient, van: string, tot: string): Promise<CampagneRij[]> {
-  const totExcl = new Date(`${tot}T00:00:00Z`);
-  totExcl.setUTCDate(totExcl.getUTCDate() + 1);
+  /* Dagen in Nederlandse tijd, zoals de uitgaven van Meta (meta_ad_spend.date). */
+  const totExcl = nlDagGrens(tot, 1);
   const [spend, leads, koppelingen] = await Promise.all([
     alles<{ campaign_id: string; campaign_name: string | null; spend: number | string | null; leads_count: number | null }>((a, b) =>
       supabase.from('meta_ad_spend').select('campaign_id, campaign_name, spend, leads_count').gte('date', van).lte('date', tot).range(a, b)),
@@ -105,13 +106,24 @@ export async function laadCampagneOverzicht(supabase: SupabaseClient, van: strin
       supabase.from('leads').select('id, meta_campaign_id, created_at, phone_valid')
         .not('meta_campaign_id', 'is', null)
         .or(ECHTE_LEAD)
-        .gte('created_at', `${van}T00:00:00Z`).lt('created_at', totExcl.toISOString())
+        .gte('created_at', nlDagGrens(van, 0).toISOString()).lt('created_at', totExcl.toISOString())
         .order('created_at').range(a, b)),
     laadKoppelingen(supabase),
   ]);
   const ctx = await laadContext(supabase, leads.map(l => l.id), koppelingen);
-  const batches = await laadBatchKlant(supabase, [...new Set(koppelingen.map(k => k.batch_id))]);
-  return berekenCampagnes({
+  const [batches, partners] = await Promise.all([
+    laadBatchKlant(supabase, [...new Set(koppelingen.map(k => k.batch_id))]),
+    alles<{ source_metadata: { meta_campaign_id?: string | null } | null }>((a, b) =>
+      supabase.from('prospects').select('source_metadata').eq('source', 'meta_partner')
+        .gte('created_at', nlDagGrens(van, 0).toISOString()).lt('created_at', totExcl.toISOString())
+        .order('id').range(a, b)),
+  ]);
+  const partnerPerCampagne = new Map<string, number>();
+  for (const p of partners) {
+    const c = p.source_metadata?.meta_campaign_id;
+    if (c) partnerPerCampagne.set(c, (partnerPerCampagne.get(c) ?? 0) + 1);
+  }
+  const rijen = berekenCampagnes({
     uitgaven: spend.map<Uitgaven>(s => ({ campaign_id: s.campaign_id, naam: s.campaign_name, spend: Number(s.spend) || 0, meta_leads: Number(s.leads_count) || 0 })),
     leads: leads.map<CampagneLead>(l => ({ id: l.id, campaign_id: l.meta_campaign_id, created_at: l.created_at, phone_valid: l.phone_valid })),
     ctx,
@@ -120,6 +132,7 @@ export async function laadCampagneOverzicht(supabase: SupabaseClient, van: strin
     van,
     tot,
   });
+  return rijen.map(r => (partnerPerCampagne.has(r.campaign_id) ? { ...r, partner_aanmeldingen: partnerPerCampagne.get(r.campaign_id) } : r));
 }
 
 /** Waar de leads van één batch vandaan kwamen, met de koppelingen in de tijd. */
@@ -176,13 +189,13 @@ export type RedenGroep = {
  * niet bij de gekoppelde klant kwamen (zie campagneRedenen.ts).
  */
 export async function laadRedenen(supabase: SupabaseClient, campaignId: string, van: string, tot: string): Promise<{ totaal: number; groepen: RedenGroep[] }> {
-  const totExcl = new Date(`${tot}T00:00:00Z`);
-  totExcl.setUTCDate(totExcl.getUTCDate() + 1);
+  /* Dagen in Nederlandse tijd, zoals de uitgaven van Meta (meta_ad_spend.date). */
+  const totExcl = nlDagGrens(tot, 1);
   const [leads, alleKoppelingen, regels] = await Promise.all([
     alles<{ id: string; branch: string; created_at: string; lat: number | null; lng: number | null; provincie: string | null; land: string | null; postcode: string | null; plaatsnaam: string | null; phone_valid: boolean | null; custom_fields: Record<string, string> | null; meta_campaign_id: string }>((a, b) =>
       supabase.from('leads').select('id, branch, created_at, lat, lng, provincie, land, postcode, plaatsnaam, phone_valid, custom_fields, meta_campaign_id')
         .eq('meta_campaign_id', campaignId).or(ECHTE_LEAD)
-        .gte('created_at', `${van}T00:00:00Z`).lt('created_at', totExcl.toISOString())
+        .gte('created_at', nlDagGrens(van, 0).toISOString()).lt('created_at', totExcl.toISOString())
         .order('created_at').range(a, b)),
     laadKoppelingen(supabase),
     laadCampagneRegels(supabase),
@@ -195,8 +208,8 @@ export async function laadRedenen(supabase: SupabaseClient, campaignId: string, 
 
   const batchIds = [...new Set(koppelingen.map(k => k.batch_id))];
   const [batches, batchTargets, toewMomenten, leadToew] = await Promise.all([
-    inDelen<{ id: string; customer_id: string; branch: string; batch_size: number | null; leads_per_day: number | null; leads_per_week: number | null; dagdosering: boolean | null; starts_at: string | null; created_at: string; lookback_days: number | null; lead_filters: unknown }>(batchIds, deel =>
-      supabase.from('customer_batches').select('id, customer_id, branch, batch_size, leads_per_day, leads_per_week, dagdosering, starts_at, created_at, lookback_days, lead_filters').in('id', deel)),
+    inDelen<{ id: string; customer_id: string; branch: string; status: string | null; batch_size: number | null; leads_per_day: number | null; leads_per_week: number | null; dagdosering: boolean | null; starts_at: string | null; created_at: string; lookback_days: number | null; lead_filters: unknown }>(batchIds, deel =>
+      supabase.from('customer_batches').select('id, customer_id, branch, status, batch_size, leads_per_day, leads_per_week, dagdosering, starts_at, created_at, lookback_days, lead_filters').in('id', deel)),
     fetchActiveBatchTargetsByBatch(supabase, batchIds),
     alles<{ batch_id: string; assigned_at: string; source: string | null }>((a, b) =>
       supabase.from('lead_assignments').select('batch_id, assigned_at, source').in('batch_id', batchIds).range(a, b)),
@@ -221,7 +234,7 @@ export async function laadRedenen(supabase: SupabaseClient, campaignId: string, 
   const redenBatches = new Map<string, RedenBatch>(batches.map(b => {
     const eigen = batchTargets.get(b.id);
     return [b.id, {
-      id: b.id, customer_id: b.customer_id, branch: b.branch, batch_size: Number(b.batch_size) || 0,
+      id: b.id, customer_id: b.customer_id, branch: b.branch, status: b.status, batch_size: Number(b.batch_size) || 0,
       leads_per_day: b.leads_per_day, leads_per_week: b.leads_per_week, dagdosering: b.dagdosering,
       starts_at: b.starts_at, created_at: b.created_at, lookback_days: b.lookback_days,
       lead_filters: Array.isArray(b.lead_filters) ? (b.lead_filters as RedenBatch['lead_filters']) : null,
@@ -252,4 +265,11 @@ export async function laadRedenen(supabase: SupabaseClient, campaignId: string, 
     groepen.set(code, g);
   }
   return { totaal: andere.length, groepen: [...groepen.values()].sort((a, b) => b.aantal - a.aantal) };
+}
+
+/** Middernacht Nederlandse tijd van dag `ymd` plus `plusDagen`. */
+function nlDagGrens(ymd: string, plusDagen: number): Date {
+  const d = new Date(`${ymd}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + plusDagen);
+  return amsterdamWallTimeToUtc(d.toISOString().slice(0, 10), '00:00');
 }

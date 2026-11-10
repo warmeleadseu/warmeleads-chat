@@ -351,7 +351,7 @@ export async function GET(request: NextRequest) {
       .gte('leads.created_at', MAAND_START_ISO)
       .neq('leads.bron', 'excel_import')
       .neq('leads.bron', 'demo')
-      .or('source.is.null,source.not.in.("bulk_export","demo")')
+      .or('source.is.null,source.not.in.("bulk_export","demo","mirror")')
       .or('source.is.null,source.neq.bulk_assign,batch_id.not.is.null');
     if (leadExclusion) {
       c = (c as unknown as { or(f: string, o: { foreignTable: string }): unknown }).or(
@@ -563,6 +563,13 @@ export async function GET(request: NextRequest) {
       avatarUrl: am.avatar_url,
     }))
     .sort((a, b) => b.revenue + b.bulkRevenue - (a.revenue + a.bulkRevenue));
+  /* Omzet zonder (actieve) accountmanager, zoals een batch of factuur van
+     iemand die geen accountmanager is. Stond nergens op het podium, waardoor
+     het podium niet optelde tot de maandomzet. */
+  const amIds = new Set((allAMs || []).map(am => am.id as string));
+  let zonderAm = 0;
+  for (const [amId, r] of perAm) if (!amId || !amIds.has(amId)) zonderAm += Number(r.totaal) || 0;
+  const amLeaderboardZonderAm = Math.round(zonderAm * 100) / 100;
 
   const periodStats: Record<
     string,
@@ -666,6 +673,7 @@ export async function GET(request: NextRequest) {
     aiSpend: await loadAiSpendSummary(supabase),
     recentPaidBatches,
     amLeaderboard,
+    amLeaderboardZonderAm,
     /* Najaarsactie: de stand van de pot; een fout mag het dashboard niet breken. */
     actie: await laadActieSamenvatting(supabase).catch(err => {
       console.error('[live-stats] actie', err instanceof Error ? err.message : err);

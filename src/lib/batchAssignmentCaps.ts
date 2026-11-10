@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { amsterdamWallTimeToUtc, amsterdamYmd } from './appointmentSlots';
 
 const AMSTERDAM_TZ = 'Europe/Amsterdam';
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Wall-clock componenten van een instant in Europe/Amsterdam (incl. weekdag).
@@ -42,12 +42,16 @@ function amsterdamWallParts(now: Date): {
  */
 export function getLeadLimitPeriodAnchors(now: Date = new Date()): { dayStart: Date; weekStart: Date } {
   const p = amsterdamWallParts(now);
-  // Start van de Amsterdamse dag = nu minus de lokale tijd-van-de-dag.
-  const timeOfDayMs = ((p.hour * 60 + p.minute) * 60 + p.second) * 1000;
-  const dayStart = new Date(now.getTime() - timeOfDayMs);
+  /* Middernacht Nederlandse tijd via de kalender, niet via "nu min de
+     kloktijd" of "min n keer 24 uur": op de dag en in de week van de
+     wisseling naar zomer- of wintertijd zat die grens anders een uur verkeerd. */
+  const vandaag = amsterdamYmd(now);
+  const dayStart = amsterdamWallTimeToUtc(vandaag, '00:00');
   // Maandag-gebaseerde week: dagen sinds maandag = (weekday + 6) % 7.
   const daysSinceMonday = (p.weekday + 6) % 7;
-  const weekStart = new Date(dayStart.getTime() - daysSinceMonday * DAY_MS);
+  const maandag = new Date(`${vandaag}T12:00:00Z`);
+  maandag.setUTCDate(maandag.getUTCDate() - daysSinceMonday);
+  const weekStart = amsterdamWallTimeToUtc(maandag.toISOString().slice(0, 10), '00:00');
   return { dayStart, weekStart };
 }
 

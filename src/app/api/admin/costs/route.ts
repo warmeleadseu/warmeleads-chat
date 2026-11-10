@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
 
   const supabase = createServerClient();
   const now = new Date();
-  const today = now.toISOString().split('T')[0];
+  const today = amsterdamYmd(now);
   const t0 = Date.now();
 
   const COSTS_LOOKBACK_DAYS = 730;
@@ -186,7 +186,16 @@ export async function GET(request: NextRequest) {
     return true;
   }
 
-  const assignmentsForCpl = assignmentsInPeriod.filter(isCplPoolAssignment);
+  /* Assignments die bij de CPL horen: alle leveringen van de leads die in de
+     periode binnenkwamen, ongeacht wanneer geleverd. Dezelfde definitie als de
+     liveslide; voorheen telde hier "geleverd in de periode", ook van oudere
+     leads, en kwam de verdeelfactor anders uit (1,60x tegen 1,69x). */
+  const cplLeadIdsInPeriod = new Set(
+    allLeads
+      .filter(l => l.created_at >= periodStartIso && (!l.meta_campaign_id || !excludedCampaignIds.has(l.meta_campaign_id)))
+      .map(l => l.id),
+  );
+  const assignmentsForCpl = allAssignments.filter(a => cplLeadIdsInPeriod.has(a.lead_id) && isCplPoolAssignment(a));
 
   /* Noemer voor de CPL: alle echte leads in de periode. Leads zonder
      campagne-attributie tellen mee (73% van de instroom); leads uit

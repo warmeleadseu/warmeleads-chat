@@ -108,6 +108,9 @@ describe('campagne-overzicht', () => {
     expect(signalen(basis).map(s => s.soort)).toEqual(['rood', 'oranje', 'oranje']);
     expect(signalen({ ...basis, gekoppeld_aan: [], gekoppeld_pct: null }).map(s => s.tekst)).toContain('Niet gekoppeld aan een batch');
   });
+  it('partnerwerving zonder consumentenleads: geen signalen', () => {
+    expect(signalen({ ...r, binnen: 0, meta_leads: 30, binnen_pct: 0, gekoppeld_aan: [], uitgaven: 100, partner_aanmeldingen: 12 })).toEqual([]);
+  });
 });
 
 describe('herkomst van een batch', () => {
@@ -141,4 +144,22 @@ describe('herkomst van een batch', () => {
       ['OUD', 2, 1, 40, 40],
     ]);
   });
+
+  it('gedeelde campagne: elke batch telt zijn deel van de uitgaven, niet alles', () => {
+    const h = berekenHerkomst({
+      batchId: 'B1',
+      geleverd: [{ lead_id: 'L1', campaign_id: 'C', created_at: '2026-11-05T10:00:00Z' }],
+      campagneLeads: new Map([['C', [{ lead_id: 'L1', campaign_id: 'C', created_at: '2026-11-05T10:00:00Z' }]]]),
+      koppelingen: [
+        k({ campaign_id: 'C', van: '2026-11-01T00:00:00Z' }),
+        k({ campaign_id: 'C', batch_id: 'B2', van: '2026-11-03T00:00:00Z' }),
+        k({ campaign_id: 'C', batch_id: 'B3', van: '2026-10-01T00:00:00Z', tot: '2026-10-20T00:00:00Z' }),
+      ],
+      uitgavenPerDag: new Map([['C', new Map([['2026-11-04', 100]])]]),
+      namen: new Map(),
+      nu,
+    });
+    expect(h.koppelingen[0]).toMatchObject({ uitgaven: 100, gedeeld_met: 1, uitgaven_aandeel: 50, kosten_per_lead_naar_batch: 50 });
+  });
+
 });
