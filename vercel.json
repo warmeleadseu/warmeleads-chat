@@ -41,6 +41,10 @@
       "schedule": "15 */2 * * *"
     },
     {
+      "path": "/api/cron/meta-lekken",
+      "schedule": "30 6 * * *"
+    },
+    {
       "path": "/api/cron/meta-inhaalslag",
       "schedule": "0 7 * * *"
     },

@@ -7,6 +7,7 @@ import { ensureInvoiceMollieCheckout } from '@/lib/invoiceCheckout';
 import { betaalUiterlijk, volgendeDoorloopStap, VANGNET_DAGEN, type DoorloopStapSoort } from '@/lib/doorlopenRegels';
 import { startDoorloop, verwerkDoorloopBetaling, zetDoorlopend } from '@/lib/doorlopen';
 import { logAudit } from '@/lib/audit';
+import { reconcileBatchMetaCampaigns } from '@/lib/metaBatchCampaignSync';
 
 /**
  * Elk uur: doorlopend op factuur bijhouden.
@@ -148,6 +149,11 @@ export async function GET(request: NextRequest) {
           await supabase.from('customer_batches')
             .update({ status: 'paused', gepauzeerd_reden: 'onbetaald' })
             .eq('id', r.id).eq('status', 'active');
+          /* Ook de Meta-campagnes van deze batch stilzetten; een campagne die
+             nog voor een andere actieve batch loopt, blijft aan. De
+             reconcile-cron kijkt alleen naar actieve en voltooide batches. */
+          await reconcileBatchMetaCampaigns(supabase, r.id, 'cron')
+            .catch(e => console.error('[doorlopen] meta pauzeren', r.id, e instanceof Error ? e.message : e));
         }
         await zetDoorlopend(supabase, k.id, false, { soort: 'systeem', naam: 'Systeem (factuur niet betaald)' });
         void logAudit({

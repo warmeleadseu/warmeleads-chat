@@ -261,8 +261,10 @@ async function laadAfspraakBatches(supabase: ReturnType<typeof createServerClien
 
 /**
  * Advertentiekosten per dag van de leads die deze klanten kregen: per lead de
- * kosten gedeeld door het aantal klanten dat hem kreeg, maal het aantal van
- * deze klanten daaronder. Zelfde verdeling als de winst per batch.
+ * kosten gedeeld door het aantal betalende klanten dat hem kreeg, maal het
+ * aantal van deze klanten daaronder. Zelfde verdeling als de winst per batch
+ * (batch_winst_kosten, migratie 194): interne klanten en afspraakpartners
+ * dragen geen kosten, dus wie zo'n klant uitsluit, haalt geen kosten weg.
  */
 async function laadKostenVanKlanten(supabase: ReturnType<typeof createServerClient>, klanten: Set<string>): Promise<Map<string, number>> {
   const leadIds = new Set<string>();
@@ -279,6 +281,13 @@ async function laadKostenVanKlanten(supabase: ReturnType<typeof createServerClie
     if (!data || data.length < 1000) break;
   }
   const ids = [...leadIds];
+  const geenKostendeel = new Set<string>();
+  for (let p = 0; p < 20; p++) {
+    const { data, error } = await supabase.from('customers').select('id').or('intern.eq.true,afspraakpartner.eq.true').order('id').range(p * 1000, p * 1000 + 999);
+    if (error) throw new LaadFout(`klanten zonder kostendeel: ${error.message}`);
+    for (const c of data ?? []) geenKostendeel.add(c.id as string);
+    if (!data || data.length < 1000) break;
+  }
   const klantenPerLead = new Map<string, Set<string>>();
   const kosten = new Map<string, { kosten: number; dag: string }>();
   for (let i = 0; i < ids.length; i += 200) {
@@ -290,6 +299,7 @@ async function laadKostenVanKlanten(supabase: ReturnType<typeof createServerClie
     if (toew.error) throw new LaadFout(`toewijzingen leads: ${toew.error.message}`);
     if (lk.error) throw new LaadFout(`leadkosten: ${lk.error.message}`);
     for (const a of toew.data ?? []) {
+      if (geenKostendeel.has(a.customer_id as string)) continue;
       const set = klantenPerLead.get(a.lead_id as string) ?? new Set<string>();
       set.add(a.customer_id as string);
       klantenPerLead.set(a.lead_id as string, set);

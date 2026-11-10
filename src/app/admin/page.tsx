@@ -491,10 +491,13 @@ export default function AdminDashboard() {
                   : ''}
               </p>
             </div>
-            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div
+              className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+              title="Betaalde omzet op de dag van betalen, met losse facturen, creditnota's en externe facturen; zonder interne klanten en afspraken. Zelfde cijfer als op de liveslide en in Winst en verlies."
+            >
               <p className="text-xl font-bold text-slate-900">&euro;{costData.totalRevenue.toFixed(0)}</p>
               <p className="mt-0.5 text-[11px] text-slate-500">Omzet ({costPhrase})</p>
-              <p className="text-[11px] text-slate-400">{costData.totalAssignments} toewijzingen</p>
+              <p className="text-[11px] text-slate-400">betaald</p>
             </div>
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <p className={`text-xl font-bold ${costData.totalProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>

@@ -15,6 +15,9 @@ import {
 } from '@/lib/reclamationStats';
 import { batchRevenueForCosts } from '@/lib/batchRevenue';
 import { MIRROR_ASSIGNMENT_SOURCE } from '@/lib/masterPortalMirror';
+import { telOmzet } from '@/lib/omzetPerMaand';
+import { laadOmzetMetAm, OMZET_LADEN_VANAF } from '@/lib/omzetPerMaandLaden';
+import { amsterdamYmd } from '@/lib/appointmentSlots';
 
 /** Na zware wijzigingen: Supabase → Query Performance + advisors (indexes i.c.m. costs-vensters). */
 
@@ -417,8 +420,6 @@ export async function GET(request: NextRequest) {
   }
 
   const customerMargins: Record<string, { name: string; revenue: number; cost: number; margin: number; leads: number; marginPct: number }> = {};
-  let batchRevenue = 0;
-  let bulkRevenue = 0;
   const bulkByCustomer: Record<string, { name: string; count: number; revenue: number }> = {};
 
   for (const a of assignmentsInPeriod) {
@@ -434,7 +435,6 @@ export async function GET(request: NextRequest) {
       const cm = customerMargins[a.customer_id];
       cm.revenue += bp.price;
       cm.leads += 1;
-      bulkRevenue += bp.price;
       if (!bulkByCustomer[a.customer_id]) bulkByCustomer[a.customer_id] = { name: bp.name, count: 0, revenue: 0 };
       bulkByCustomer[a.customer_id].count++;
       bulkByCustomer[a.customer_id].revenue += bp.price;
@@ -466,7 +466,6 @@ export async function GET(request: NextRequest) {
       if (isCplPoolAssignment(a)) cm.cost += costPerAssignment;
       if (b.batch_kind !== 'niche_research' && b.price_per_lead) {
         cm.revenue += Number(b.price_per_lead);
-        batchRevenue += Number(b.price_per_lead);
       }
       continue;
     }
@@ -479,7 +478,6 @@ export async function GET(request: NextRequest) {
     const cm = customerMargins[a.customer_id];
     cm.revenue += bp.price;
     cm.leads += 1;
-    bulkRevenue += bp.price;
     if (!bulkByCustomer[a.customer_id]) bulkByCustomer[a.customer_id] = { name: bp.name, count: 0, revenue: 0 };
     bulkByCustomer[a.customer_id].count++;
     bulkByCustomer[a.customer_id].revenue += bp.price;
@@ -500,7 +498,6 @@ export async function GET(request: NextRequest) {
     }
     const cm = customerMargins[b.customer_id];
     cm.revenue += Number(b.total_price);
-    batchRevenue += Number(b.total_price);
   }
 
   for (const cm of Object.values(customerMargins)) {
@@ -508,8 +505,15 @@ export async function GET(request: NextRequest) {
     cm.marginPct = cm.revenue > 0 ? Math.round(((cm.revenue - cm.cost) / cm.revenue) * 100) : 0;
   }
 
-  // ── Totals ──
-  const totalRevenue = batchRevenue + bulkRevenue;
+  /* ── Totalen ──
+     Omzet: dezelfde definitie als de liveslide en Winst en verlies
+     (src/lib/omzetPerMaand.ts): betaald, op de dag van betalen, met losse
+     facturen, creditnota's en externe facturen, zonder interne klanten en
+     afspraken. Het oude model (geleverde leads × prijs) telde ook onbetaalde
+     en interne levering; dat blijft alleen in de marges per klant en batch. */
+  const omzetBron = await laadOmzetMetAm(supabase, OMZET_LADEN_VANAF);
+  const omzet = telOmzet(omzetBron.posten, periodStartDateStr, amsterdamYmd(now));
+  const totalRevenue = omzet.totaal;
   const totalProfit = totalRevenue - totalAdSpend;
   const roi = totalAdSpend > 0 ? Math.round(((totalRevenue - totalAdSpend) / totalAdSpend) * 100) : 0;
 
@@ -555,8 +559,9 @@ export async function GET(request: NextRequest) {
     avgAssignments,
     approvedReclamations: approvedReclamationsInPeriod,
     netAssignments: netAssignmentCount,
-    batchRevenue: Math.round(batchRevenue * 100) / 100,
-    bulkRevenue: Math.round(bulkRevenue * 100) / 100,
+    batchRevenue: omzet.perSoort.leads,
+    bulkRevenue: omzet.perSoort.bulk,
+    omzetPerSoort: omzet.perSoort,
     bulkByCustomer: Object.values(bulkByCustomer),
     totalRevenue: Math.round(totalRevenue * 100) / 100,
     totalCost: Math.round(totalAdSpend * 100) / 100,
