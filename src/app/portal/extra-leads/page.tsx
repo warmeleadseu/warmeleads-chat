@@ -5,6 +5,7 @@ import { CheckCircleIcon, MapPinIcon, SparklesIcon, ArrowPathIcon, CreditCardIco
 import { portalFetch } from '@/lib/portalAuth';
 import { formatCurrency } from '@/lib/portalFormat';
 import { EmptyState, PageHeader, Skeleton, StickyCheckoutBar, T } from '../_ui';
+import { VoorwaardenRegel } from '../_ui/VoorwaardenRegel';
 
 /**
  * Extra leads: leads die buiten de regio's van onze klanten vielen en nog
@@ -294,6 +295,7 @@ export default function ExtraLeadsPage() {
                 <p className={T.helper}>
                   {aanbod.verlegd ? 'BTW verlegd' : `Incl. ${aanbod.btw_percentage}% btw`} · maximaal {aanbod.max_per_aankoop} per keer
                 </p>
+                <VoorwaardenRegel className="mt-1" />
               </div>
               <div className="flex items-center gap-4">
                 <p className="text-lg font-bold text-brand-purple">{formatCurrency(totaal)}</p>

@@ -9,6 +9,7 @@ export { PricingTierLegend } from './PricingTierLegend';
 export { OrderSummaryCard } from './OrderSummaryCard';
 export type { OrderLine } from './OrderSummaryCard';
 export { StickyCheckoutBar } from './StickyCheckoutBar';
+export { VoorwaardenRegel } from './VoorwaardenRegel';
 export { StatusBadge } from './StatusBadge';
 export { EmptyState } from './EmptyState';
 export { Skeleton } from './Skeleton';

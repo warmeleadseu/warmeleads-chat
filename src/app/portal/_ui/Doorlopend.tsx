@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ArrowPathRoundedSquareIcon } from '@heroicons/react/24/outline';
 import { portalFetch } from '@/lib/portalAuth';
+import { VoorwaardenRegel } from './VoorwaardenRegel';
 
 /**
  * Doorlopend op factuur in het portaal. Altijd een eigen keuze van de klant:
@@ -99,6 +100,7 @@ export function DoorlopendKaart() {
         )}
       </div>
       <p className="mt-3 text-xs leading-relaxed text-slate-500">{DOORLOPEN_UITLEG}</p>
+      {stand.magWijzigen && !stand.aan && <VoorwaardenRegel soort="aanzetten" className="mt-2" />}
       {!stand.aan && stand.uitleg && <p className="mt-2 text-xs text-amber-700">{stand.uitleg}</p>}
       {stand.openFactuur && (
         <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">

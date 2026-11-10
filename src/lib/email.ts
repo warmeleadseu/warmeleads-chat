@@ -1,4 +1,5 @@
 import { Resend } from 'resend';
+import { voorwaardenMailRegel } from './voorwaardenBijBetalen';
 import { herbestelUrl } from './herbestelToken';
 import { createServerClient } from '@/lib/supabase';
 import { computeInvoiceVat } from '@/lib/invoiceVat';
@@ -557,6 +558,7 @@ export async function sendBatchMilestoneEmail(
   const content = `
     <p style="margin:0 0 20px">${milestoneBadges[milestone]}</p>
     ${bodies[milestone]}
+    ${voorwaardenMailRegel('bestellen')}
     ${cta('Opnieuw bestellen &rarr;', orderUrl)}
     <p style="margin:12px 0 0;font-size:13px;color:#94a3b8">Zelfde voorwaarden, je kiest alleen het aantal. Liever iets aanpassen? <a href="${portalUrl}" style="color:#3B2F75">Bestel via je portaal</a>.</p>`;
 
@@ -639,7 +641,7 @@ export function buildUnpaidBatchReminderEmailContent(
       'Openstaande batch',
     )}
     ${options?.directCheckoutUrl
-      ? `${cta('Direct online betalen (Mollie) &rarr;', options.directCheckoutUrl)}`
+      ? `${voorwaardenMailRegel('betalen')}${cta('Direct online betalen (Mollie) &rarr;', options.directCheckoutUrl)}`
       : ''}
     ${cta('Factuur openen in je portaal &rarr;', portalAccountInvoicesUrl)}
     <p style="margin:12px 0 0;font-size:13px;color:#94a3b8">Na betaling gaat je batch direct live.</p>`;
@@ -694,6 +696,7 @@ export async function sendOfferteVerlopenEmail(
     <p style="margin:0 0 16px;font-size:16px;font-weight:600;color:#0f172a">Hallo ${greeting},</p>
     <p style="margin:0 0 8px">Je batch van <strong style="color:#0f172a">${batch.batch_size} ${branchLabel}-leads</strong> is niet betaald en daarom verlopen. De factuur vervalt, je hoeft niets te doen.</p>
     <p style="margin:0">Wil je toch leads ontvangen? Met de knop hieronder bestel je hem alsnog, en de levering start direct na betaling.</p>
+    ${voorwaardenMailRegel('bestellen')}
     ${cta('Alsnog bestellen &rarr;', alsnogUrl)}
     <p style="margin:12px 0 0;font-size:13px;color:#94a3b8">Vragen? Beantwoord deze mail, dan nemen we contact met je op.</p>`;
   return sendEmail(customer.email, titel, layout(titel, content), {
@@ -837,6 +840,7 @@ export async function sendDoorloopAankondigingEmail(customer: Customer, info: Do
     )}
     ${info.verkleind ? `<p style="margin:0 0 12px;font-size:13px;color:#64748b">Doorlopen gaat tot ${euro(2500)} excl. btw per keer, daarom is deze batch kleiner dan je vorige. Wil je een grotere? Bestel hem dan in je portaal.</p>` : ''}
     <p style="margin:0">Wil je dit niet? Dan hoef je alleen op de knop te drukken, er start dan niets.</p>
+    ${voorwaardenMailRegel('doorlopen')}
     ${cta('Niet doorlopen', info.stopUrl)}`;
   return sendEmail(customer.email, titel, layout(titel, content), {
     type: 'doorloop_aankondiging',
@@ -862,6 +866,7 @@ export async function sendDoorloopGestartEmail(
       row('Graag betaald voor', nlDatum(info.uiterlijk)),
       'Factuur',
     )}
+    ${voorwaardenMailRegel('betalen')}
     ${cta('Factuur betalen &rarr;', info.betaalUrl)}
     <p style="margin:12px 0 0;font-size:13px;color:#64748b">Is de factuur na 7 dagen niet betaald, dan pauzeren we de levering tot de betaling binnen is.</p>
     ${stopRegel(info.stopUrl)}`;
@@ -883,6 +888,7 @@ export async function sendDoorloopHerinneringEmail(
     <p style="margin:0 0 20px">${statusBadge('HERINNERING', 'orange')}</p>
     <p style="margin:0 0 16px;font-size:16px;font-weight:600;color:#0f172a">Hallo ${greeting},</p>
     <p style="margin:0 0 12px">Je doorlopende batch ${info.branche} levert gewoon door, maar factuur <strong style="color:#0f172a">${info.factuurnummer}</strong> (${euro(info.totaalIncl)}) is nog niet betaald. Is hij op ${nlDatum(info.pauzeOp)} niet betaald, dan pauzeren we de levering.</p>
+    ${voorwaardenMailRegel('betalen')}
     ${cta('Factuur betalen &rarr;', info.betaalUrl)}
     <p style="margin:12px 0 0;font-size:13px;color:#94a3b8">Al betaald? Dan kruisen onze berichten elkaar en kun je deze mail negeren.</p>`;
   return sendEmail(customer.email, titel, layout(titel, content), {
@@ -907,6 +913,7 @@ export async function sendDoorloopGepauzeerdEmail(
     <p style="margin:0 0 12px">Factuur <strong style="color:#0f172a">${info.factuurnummer}</strong> (${euro(info.totaalIncl)}) is na 7 dagen nog niet betaald. ${info.alGeleverd
       ? 'De batch was al volledig geleverd.'
       : 'We hebben de levering daarom gepauzeerd. Na betaling gaat hij vanzelf verder, je mist geen leads uit je batch.'} Doorlopende levering staat tot die tijd uit.</p>
+    ${voorwaardenMailRegel('betalen')}
     ${cta('Factuur betalen &rarr;', info.betaalUrl)}
     <p style="margin:12px 0 0;font-size:13px;color:#94a3b8">Klopt er iets niet? Beantwoord deze mail, dan kijken we met je mee.</p>`;
   return sendEmail(customer.email, titel, layout(titel, content), {

@@ -2,6 +2,7 @@ import { ReactNode } from 'react';
 import { ArrowPathIcon, CreditCardIcon } from '@heroicons/react/24/outline';
 import { formatCurrency } from '@/lib/portalFormat';
 import { T } from './tokens';
+import { VoorwaardenRegel } from './VoorwaardenRegel';
 
 export interface OrderLine {
   label: ReactNode;
@@ -82,6 +83,7 @@ export function OrderSummaryCard({
               </>
             )}
           </button>
+          <VoorwaardenRegel className="mt-2 px-1 text-center" />
           {helper && <div className="mt-3 px-1">{helper}</div>}
         </div>
       )}

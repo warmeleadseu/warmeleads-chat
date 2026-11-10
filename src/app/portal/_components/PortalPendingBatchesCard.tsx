@@ -8,6 +8,7 @@ import {
 } from '@/lib/portalBatches';
 import { formatCurrency, roundMoney } from '@/lib/portalFormat';
 import { isReverseChargeRate, vatTotalSuffix, vatUnitSuffix } from '@/lib/invoiceVat';
+import { VoorwaardenRegel } from '../_ui/VoorwaardenRegel';
 
 type Props = {
   batches: PortalBatchLike[];
@@ -87,6 +88,7 @@ export function PortalPendingBatchesCard({
           );
         })}
       </ul>
+      <VoorwaardenRegel className="mt-3" />
     </div>
   );
 }

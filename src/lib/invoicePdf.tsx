@@ -2,6 +2,7 @@ import React from 'react';
 import { Document, Page, Text, View, Image, StyleSheet } from '@react-pdf/renderer';
 import type { InvoiceVatMode } from '@/lib/invoiceVat';
 import { customerRegistryShortLabel } from '@/lib/beEnterprise';
+import { voorwaardenFactuurRegel } from './voorwaardenBijBetalen';
 
 const BRAND = '#7C3AED';
 const BRAND_LIGHT = '#F5F3FF';
@@ -216,6 +217,11 @@ export function InvoicePdf({ data }: { data: InvoiceData }) {
             </Text>
           </View>
         )}
+
+        {/* Algemene voorwaarden: op elke factuur vermeld (zie voorwaardenBijBetalen.ts). */}
+        <View style={{ marginTop: 20 }}>
+          <Text style={{ fontSize: 8, color: '#64748B' }}>{voorwaardenFactuurRegel()}</Text>
+        </View>
 
         {/* Footer */}
         <View style={s.footer} fixed>

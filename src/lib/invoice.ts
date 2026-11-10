@@ -1,6 +1,7 @@
 import { createServerClient } from '@/lib/supabase';
 import { betaaldViaUitBetaalId } from './factuurBetaling';
 import { sendEmail } from '@/lib/email';
+import { voorwaardenMailRegel } from '@/lib/voorwaardenBijBetalen';
 import type { InvoiceLineItem } from '@/lib/invoicePdf';
 import { ensureInvoiceMollieCheckout } from '@/lib/invoiceCheckout';
 import { computeInvoiceVat } from '@/lib/invoiceVat';
@@ -499,6 +500,7 @@ export function buildOpenInvoiceEmailContent(
               </table>
               ${openReverseNote}
               <p style="margin:0 0 24px;font-size:14px;color:#64748b;line-height:1.7">Betaal veilig online via de knop hieronder, of open je portaal onder het tabblad Facturen. Na betaling wordt een gekoppelde lead-batch direct geactiveerd.</p>
+              ${voorwaardenMailRegel('betalen').replace('margin:16px 0 0', 'margin:-12px 0 20px')}
               ${directCheckoutUrl ? `
               <table cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:12px">
                 <tr><td style="border-radius:10px;background:linear-gradient(135deg,#FF6B35,#FF4757)">

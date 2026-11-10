@@ -1,6 +1,7 @@
 import { ArrowPathIcon, CreditCardIcon } from '@heroicons/react/24/outline';
 import { formatCurrency } from '@/lib/portalFormat';
 import { T } from './tokens';
+import { VoorwaardenRegel } from './VoorwaardenRegel';
 
 interface StickyCheckoutBarProps {
   total: number;
@@ -44,6 +45,7 @@ export function StickyCheckoutBar({
           </>
         )}
       </button>
+      <VoorwaardenRegel className="mt-1.5 text-center" />
     </div>
   );
 }

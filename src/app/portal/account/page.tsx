@@ -41,6 +41,7 @@ import { ActieKaart } from '../_ui/Actie';
 import { IntegrationsTab } from './IntegrationsTab';
 import { WebhookIntegration } from './WebhookIntegration';
 import { PartnerKoppelingen } from './PartnerKoppelingen';
+import { VoorwaardenRegel } from '../_ui/VoorwaardenRegel';
 
 /* ─── Types ────────────────────────────────────────────────── */
 
@@ -1020,6 +1021,7 @@ function InvoicesTab({ data, loading, onDownload, onPay, payingInvoiceId, totalS
           )}
         </button>
       )}
+      {inv.status === 'open' && <VoorwaardenRegel className="mt-1.5 text-center" />}
     </div>
   );
 
