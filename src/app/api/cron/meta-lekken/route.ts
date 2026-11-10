@@ -4,6 +4,7 @@ import { createServerClient } from '@/lib/supabase';
 import { layout, sendEmail } from '@/lib/email';
 import { amsterdamWallTimeToUtc, amsterdamYmd } from '@/lib/appointmentSlots';
 import { bouwLekMail, LEK_DAGEN, zoekLekken, type SpendRij } from '@/lib/metaLekken';
+import { alarmeerSuperadmins } from '@/lib/superadminAlarm';
 
 /**
  * Elke ochtend: advertenties die geld uitgeven en volgens Meta leads krijgen,
@@ -56,6 +57,20 @@ export async function GET(request: NextRequest) {
       if (error) throw new Error(`partneraanmeldingen: ${error.message}`);
       for (const r of data ?? []) tel((r.source_metadata as { meta_ad_id?: unknown } | null)?.meta_ad_id);
       if (!data || data.length < 1000) break;
+    }
+
+    /* Draait de uitgaven-sync helemaal niet meer (geen foutmelding, gewoon
+       niets), dan zou het lek-overzicht leeg en dus geruststellend zijn. */
+    const { data: laatsteSync } = await supabase.from('meta_ad_spend').select('synced_at').order('synced_at', { ascending: false }).limit(1).maybeSingle();
+    const syncUren = laatsteSync?.synced_at ? (Date.now() - new Date(laatsteSync.synced_at as string).getTime()) / 3_600_000 : Infinity;
+    if (syncUren > 14 && request.nextUrl.searchParams.get('proef') !== '1') {
+      await alarmeerSuperadmins(
+        supabase,
+        'meta_sync_stil',
+        'De Meta-uitgaven zijn al lang niet bijgewerkt',
+        `<p style="font-size:14px;color:#334155;line-height:1.6">${Number.isFinite(syncUren) ? `De laatste sync van de Meta-uitgaven was ${Math.round(syncUren)} uur geleden.` : 'Er is nog nooit een sync van de Meta-uitgaven gelukt.'} Normaal draait die zes keer per dag. Zolang dit zo blijft, kloppen de advertentiekosten en de winst niet. Kijk onder Koppelingen of het Meta-token nog geldig is.</p>`,
+        { uren: Number.isFinite(syncUren) ? Math.round(syncUren) : null },
+      ).catch(e => console.error('[cron/meta-lekken] sync-alarm mislukt', e));
     }
 
     const lekken = zoekLekken(spend, binnen);

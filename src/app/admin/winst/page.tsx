@@ -262,9 +262,9 @@ export default function WinstPage() {
   const lek = data?.lekkage;
   const lekRegels: [string, number, string][] = lek ? [
     ['Leads in batches', lek.aan_batches, 'naar rato verdeeld over de batches hierboven (alle batches, niet alleen deze selectie)'],
-    ['Leads buiten een batch', lek.buiten_batch, 'bulktoewijzingen en -exports; de betaalde losse facturen staan hieronder bij "omzet buiten batches"'],
+    ['Leads buiten een batch', lek.buiten_batch, 'bulktoewijzingen en bestanden die naar een klant zijn geëxporteerd; de betaalde losse facturen staan hieronder bij "omzet buiten batches"'],
     ['Intern en afspraken', Number(lek.intern) || 0, 'leads die alleen naar WarmeLeads zelf (masterportaal, verzameling voor afspraken) of naar een afspraakpartner (Infinite Scale) gingen; geen omzet van buiten'],
-    ['Onverkochte leads', lek.onverkocht, 'leads die naar geen enkele klant gingen'],
+    ['Onverkochte leads', lek.onverkocht, 'leads die naar geen enkele klant gingen, ook niet als export'],
     ['Acquisitie', lek.acquisitie, 'campagnes zonder leads, zoals de partnercampagnes die nieuwe klanten werven'],
     ['Overig', lek.rest, 'uitgaven zonder lead, en verschil door de weekverdeling aan de randen van de periode'],
   ] : [];

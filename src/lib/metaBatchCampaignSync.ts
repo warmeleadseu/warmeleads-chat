@@ -364,6 +364,11 @@ export async function reconcileBatchMetaCampaigns(
       continue;
     }
     if (normActId(info.account_id) !== expectedAccount) {
+      /* Een afgeronde of gepauzeerde batch met campagnes uit het vorige
+         advertentieaccount: daar valt niets meer te beheren, en de melding
+         bleef er anders voor altijd staan. Bij een actieve batch is het wel
+         een fout: dan stuurt het CRM die campagne niet aan. */
+      if (!batchDrivesSync) { okCount++; continue; }
       errors.push(`${campaignId}: campagne hoort niet bij ad account ${expectedAccount}`);
       continue;
     }
