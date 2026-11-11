@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { buildUnpaidBatchReminderEmailContent } from '@/lib/email';
-import { ensureInvoiceMollieCheckout } from '@/lib/invoiceCheckout';
+import { ensureFactuurBetaallink } from '@/lib/invoiceCheckout';
 
 /**
  * Preview-variant van `POST /api/admin/batches/[id]/payment-reminder`.
@@ -83,7 +83,7 @@ export async function GET(
   let directCheckoutUrl: string | undefined;
   if (openInvoice) {
     try {
-      const { checkoutUrl } = await ensureInvoiceMollieCheckout({
+      const { checkoutUrl } = await ensureFactuurBetaallink({
         id: openInvoice.id,
         invoice_number: openInvoice.invoice_number,
         description: openInvoice.description,

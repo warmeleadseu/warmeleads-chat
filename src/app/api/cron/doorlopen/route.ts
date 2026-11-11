@@ -3,7 +3,7 @@ import { verifyCronAuth } from '@/lib/cronAuth';
 import { createServerClient } from '@/lib/supabase';
 import { accountmanagerOntvanger } from '@/lib/accountmanagerOntvanger';
 import { sendDoorloopGepauzeerdEmail, sendDoorloopHerinneringEmail, sendDoorloopSignaalEmail } from '@/lib/email';
-import { ensureInvoiceMollieCheckout } from '@/lib/invoiceCheckout';
+import { ensureFactuurBetaallink } from '@/lib/invoiceCheckout';
 import { betaalUiterlijk, volgendeDoorloopStap, VANGNET_DAGEN, type DoorloopStapSoort } from '@/lib/doorlopenRegels';
 import { startDoorloop, verwerkDoorloopBetaling, zetDoorlopend } from '@/lib/doorlopen';
 import { logAudit } from '@/lib/audit';
@@ -132,7 +132,7 @@ export async function GET(request: NextRequest) {
       grootte: r.batch_size, bedragIncl: Number(f.total_incl_btw), factuurnummer: f.invoice_number as string, batchId: r.id, customerId: k.id,
     };
     try {
-      const betaalUrl = await ensureInvoiceMollieCheckout(f as Parameters<typeof ensureInvoiceMollieCheckout>[0])
+      const betaalUrl = await ensureFactuurBetaallink(f as Parameters<typeof ensureFactuurBetaallink>[0])
         .then(x => x.checkoutUrl)
         .catch(() => `${process.env.NEXT_PUBLIC_SITE_URL || 'https://www.warmeleads.eu'}/portal/account?tab=invoices`);
 

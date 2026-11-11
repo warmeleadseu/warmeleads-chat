@@ -13,7 +13,7 @@ import {
 } from './email';
 import { oorspronkelijkeGrootte } from './herbestelling';
 import { createInvoice } from './invoice';
-import { ensureInvoiceMollieCheckout } from './invoiceCheckout';
+import { ensureFactuurBetaallink } from './invoiceCheckout';
 import { computeInvoiceVat } from './invoiceVat';
 import { resolveMetaCampaignFieldsForNewLeadBatch } from './metaCampaignInheritance';
 import { reconcileBatchMetaCampaigns } from './metaBatchCampaignSync';
@@ -352,7 +352,7 @@ export async function startDoorloop(
       factuurnummer = f.invoice_number as string;
       totaalIncl = Number(f.total_incl_btw);
       try {
-        betaalUrl = (await ensureInvoiceMollieCheckout(f)).checkoutUrl || betaalUrl;
+        betaalUrl = (await ensureFactuurBetaallink(f)).checkoutUrl || betaalUrl;
       } catch (e) {
         console.error('[doorlopen] betaallink mislukt, portaal als terugval', e);
       }

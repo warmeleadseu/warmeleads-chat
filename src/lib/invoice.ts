@@ -3,7 +3,7 @@ import { betaaldViaUitBetaalId } from './factuurBetaling';
 import { sendEmail } from '@/lib/email';
 import { voorwaardenMailRegel } from '@/lib/voorwaardenBijBetalen';
 import type { InvoiceLineItem } from '@/lib/invoicePdf';
-import { ensureInvoiceMollieCheckout } from '@/lib/invoiceCheckout';
+import { ensureFactuurBetaallink } from '@/lib/invoiceCheckout';
 import { computeInvoiceVat } from '@/lib/invoiceVat';
 import { sanitizeInvoiceWritePayload } from '@/lib/customerCountrySupport';
 
@@ -226,7 +226,7 @@ export async function createInvoice(params: CreateInvoiceParams) {
   } else {
     let checkoutUrl: string | undefined;
     try {
-      const ensured = await ensureInvoiceMollieCheckout({
+      const ensured = await ensureFactuurBetaallink({
         id: invoice.id,
         invoice_number: invoice.invoice_number,
         description: invoice.description,
@@ -401,7 +401,7 @@ export async function resendOpenInvoiceWithPaymentLinks(invoiceId: string): Prom
     .single();
   if (!customer?.email) throw new Error('Klant heeft geen e-mailadres');
 
-  const { checkoutUrl } = await ensureInvoiceMollieCheckout({
+  const { checkoutUrl } = await ensureFactuurBetaallink({
     id: invoice.id,
     invoice_number: invoice.invoice_number,
     description: invoice.description,
@@ -454,7 +454,7 @@ export function buildOpenInvoiceEmailContent(
     : `Nieuwe factuur ${invoice.invoice_number} - WarmeLeads`;
   const introBlock = nb
     ? `<p style="margin:0 0 12px;font-size:15px;color:#475569;line-height:1.7">We hebben zojuist een <strong>nieuwe lead-batch</strong> voor je aangemaakt: <strong>${nb.batch_size} leads</strong> voor <strong>${esc(nb.branch_name)}</strong>.</p>
-              <p style="margin:0 0 28px;font-size:15px;color:#475569;line-height:1.7">Hieronder vind je de bijbehorende openstaande factuur. Betaal direct via de oranje knop (${paymentMethodCopy}), of open je portaal onder het tabblad Facturen — allebei dezelfde veilige Mollie-betaallink.</p>`
+              <p style="margin:0 0 28px;font-size:15px;color:#475569;line-height:1.7">Hieronder vind je de bijbehorende openstaande factuur. Betaal direct via de oranje knop (${paymentMethodCopy}), zonder in te loggen, of open je portaal onder het tabblad Facturen.</p>`
     : `<p style="margin:0 0 28px;font-size:15px;color:#475569;line-height:1.7">Er staat een nieuwe factuur voor je klaar.</p>`;
 
   const openReverseNote =
@@ -499,7 +499,7 @@ export function buildOpenInvoiceEmailContent(
                 </td></tr>
               </table>
               ${openReverseNote}
-              <p style="margin:0 0 24px;font-size:14px;color:#64748b;line-height:1.7">Betaal veilig online via de knop hieronder, of open je portaal onder het tabblad Facturen. Na betaling wordt een gekoppelde lead-batch direct geactiveerd.</p>
+              <p style="margin:0 0 24px;font-size:14px;color:#64748b;line-height:1.7">Betaal veilig online via de oranje knop hieronder, zonder in te loggen, of open je portaal onder het tabblad Facturen. Na betaling wordt een gekoppelde lead-batch direct geactiveerd.</p>
               ${voorwaardenMailRegel('betalen').replace('margin:16px 0 0', 'margin:-12px 0 20px')}
               ${directCheckoutUrl ? `
               <table cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:12px">

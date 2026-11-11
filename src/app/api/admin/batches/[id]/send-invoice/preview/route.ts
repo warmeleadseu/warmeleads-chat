@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { buildOpenInvoiceEmailContent } from '@/lib/invoice';
-import { ensureInvoiceMollieCheckout } from '@/lib/invoiceCheckout';
+import { ensureFactuurBetaallink } from '@/lib/invoiceCheckout';
 import { computeInvoiceVat } from '@/lib/invoiceVat';
 
 /**
@@ -103,7 +103,7 @@ export async function GET(
       vat_mode: existingOpen.vat_mode || 'domestic_nl',
     };
     try {
-      const ensured = await ensureInvoiceMollieCheckout({
+      const ensured = await ensureFactuurBetaallink({
         id: existingOpen.id,
         invoice_number: existingOpen.invoice_number,
         description: existingOpen.description,

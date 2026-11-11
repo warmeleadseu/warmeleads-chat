@@ -1,5 +1,6 @@
 import { createServerClient } from '@/lib/supabase';
 import { createBatchPayment, getPayment } from '@/lib/mollie';
+import { factuurBedankUrl, factuurBetaalUrl } from '@/lib/factuurBetaallink';
 
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://warmeleads.eu';
 
@@ -25,7 +26,17 @@ export interface InvoiceRowMinimal {
  * Maakt (of hergebruikt openstaande) Mollie-sessie voor een openstaande factuur.
  * Webhook gebruikt metadata.orderId = "invoice:<uuid>".
  */
-export async function ensureInvoiceMollieCheckout(invoice: InvoiceRowMinimal): Promise<{
+export async function ensureInvoiceMollieCheckout(
+  invoice: InvoiceRowMinimal,
+  opties: {
+    /**
+     * Waar Mollie na betalen heen stuurt. Standaard het portaal; de betaallink
+     * uit de mail stuurt naar een bedankpagina zonder inlog. Een openstaande
+     * betaling wordt alleen hergebruikt als hij naar dezelfde plek terugkeert.
+     */
+    terugUrl?: string;
+  } = {},
+): Promise<{
   checkoutUrl: string;
   paymentId: string;
 }> {
@@ -35,8 +46,9 @@ export async function ensureInvoiceMollieCheckout(invoice: InvoiceRowMinimal): P
     try {
       const existing = await getPayment(invoice.mollie_payment_id);
       const openish = ['open', 'pending', 'authorized'].includes(String(existing.status));
+      const zelfdeTerug = !opties.terugUrl || (existing as { redirectUrl?: string | null }).redirectUrl === opties.terugUrl;
       const checkoutUrl = mollieCheckoutUrl(existing as { getCheckoutUrl?: () => string; _links?: { checkout?: { href?: string } } });
-      if (openish && checkoutUrl) {
+      if (openish && zelfdeTerug && checkoutUrl) {
         return { checkoutUrl, paymentId: existing.id };
       }
     } catch {
@@ -63,7 +75,7 @@ export async function ensureInvoiceMollieCheckout(invoice: InvoiceRowMinimal): P
     orderId: `invoice:${invoice.id}`,
     amount,
     description: `WarmeLeads factuur ${invoice.invoice_number}`,
-    redirectUrl: `${BASE_URL}/portal/account?tab=invoices&paid=invoice`,
+    redirectUrl: opties.terugUrl || `${BASE_URL}/portal/account?tab=invoices&paid=invoice`,
     webhookUrl: `${BASE_URL}/api/webhooks/mollie`,
     customerEmail: cust.email,
     customerName: cust.name,
@@ -80,4 +92,19 @@ export async function ensureInvoiceMollieCheckout(invoice: InvoiceRowMinimal): P
 
   if (!checkoutUrl) throw new Error('Geen Mollie checkout-URL');
   return { checkoutUrl, paymentId: payment.id };
+}
+
+/**
+ * Voor mails: zet een betaling klaar die na betalen naar de bedankpagina gaat,
+ * en geeft onze eigen betaallink terug in plaats van de Mollie-link. Die link
+ * maakt bij een klik zo nodig een verse betaling, dus hij blijft werken zolang
+ * de factuur openstaat, en de klant hoeft nergens in te loggen
+ * (src/lib/factuurBetaallink.ts).
+ */
+export async function ensureFactuurBetaallink(invoice: InvoiceRowMinimal): Promise<{
+  checkoutUrl: string;
+  paymentId: string;
+}> {
+  const { paymentId } = await ensureInvoiceMollieCheckout(invoice, { terugUrl: factuurBedankUrl(invoice.id) });
+  return { checkoutUrl: factuurBetaalUrl(invoice.id), paymentId };
 }

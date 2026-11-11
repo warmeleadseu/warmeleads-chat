@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyCronAuth } from '@/lib/cronAuth';
 import { createServerClient } from '@/lib/supabase';
 import { EMAIL_BASE_URL, sendBetaalBelactieEmail, sendOfferteVerlopenEmail, sendUnpaidBatchReminderEmail } from '@/lib/email';
-import { ensureInvoiceMollieCheckout } from '@/lib/invoiceCheckout';
+import { ensureFactuurBetaallink } from '@/lib/invoiceCheckout';
 import { VERLOOP_DAGEN, dagenOud, volgendeHerinnerStap, type HerinnerStap } from '@/lib/betaalHerinnering';
 import { laatBatchVerlopen } from '@/lib/offerteVerloop';
 import { herbestelUrl } from '@/lib/herbestelToken';
@@ -122,7 +122,7 @@ export async function GET(request: NextRequest) {
           .maybeSingle();
         if (factuur) {
           try {
-            ({ checkoutUrl: directCheckoutUrl } = await ensureInvoiceMollieCheckout({
+            ({ checkoutUrl: directCheckoutUrl } = await ensureFactuurBetaallink({
               id: factuur.id, invoice_number: factuur.invoice_number, description: factuur.description,
               customer_id: factuur.customer_id, total_incl_btw: Number(factuur.total_incl_btw), mollie_payment_id: factuur.mollie_payment_id,
             }));

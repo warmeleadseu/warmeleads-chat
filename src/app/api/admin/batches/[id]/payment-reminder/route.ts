@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { sendUnpaidBatchReminderEmail } from '@/lib/email';
-import { ensureInvoiceMollieCheckout } from '@/lib/invoiceCheckout';
+import { ensureFactuurBetaallink } from '@/lib/invoiceCheckout';
 
 export async function POST(
   request: NextRequest,
@@ -72,7 +72,7 @@ export async function POST(
   let directCheckoutUrl: string | undefined;
   if (openInvoice) {
     try {
-      const { checkoutUrl } = await ensureInvoiceMollieCheckout({
+      const { checkoutUrl } = await ensureFactuurBetaallink({
         id: openInvoice.id,
         invoice_number: openInvoice.invoice_number,
         description: openInvoice.description,
