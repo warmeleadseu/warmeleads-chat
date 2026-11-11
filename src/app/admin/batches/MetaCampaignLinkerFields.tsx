@@ -51,7 +51,8 @@ export function MetaCampaignLinkerFields({
 }: Props) {
   const uitgesloten = campagneRegels?.uitgesloten ?? [];
   const setUitgesloten = campagneRegels?.setUitgesloten;
-  const uitIdsKey = uitgesloten.map(p => p.id).join(',');
+  /* Opnieuw ophalen zodra er een campagne alleen met zijn nummer staat (ook na opslaan of verversen). */
+  const uitIdsKey = uitgesloten.filter(p => p.name === p.id).map(p => p.id).join(',');
   const [metaSearchQuery, setMetaSearchQuery] = useState('');
   const [metaSearchResults, setMetaSearchResults] = useState<{ id: string; name: string; effective_status?: string }[]>(
     [],
@@ -62,11 +63,11 @@ export function MetaCampaignLinkerFields({
   const [manualMetaId, setManualMetaId] = useState('');
   const metaSearchWrapRef = useRef<HTMLDivElement>(null);
 
-  const idsKey = picks.map(p => p.id).join(',');
+  const idsKey = `${picks.map(p => p.id).join(',')}|${picks.filter(p => p.name === p.id).map(p => p.id).join(',')}`;
 
   useEffect(() => {
     const ids = picks.map(p => p.id).filter(id => /^\d+$/.test(id));
-    if (ids.length === 0) return;
+    if (ids.length === 0 || !picks.some(p => p.name === p.id)) return;
     let cancelled = false;
     adminFetch(`/api/admin/meta-campaigns/lookup?ids=${encodeURIComponent(ids.join(','))}`)
       .then(r => (r.ok ? r.json() : Promise.reject(new Error('lookup failed'))))
@@ -224,16 +225,13 @@ export function MetaCampaignLinkerFields({
             return (
               <div
                 key={p.id}
-                className={`flex max-w-full items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] ${
+                className={`flex max-w-full flex-wrap items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] ${
                   isPaused
                     ? 'border-slate-200 bg-slate-100 text-slate-600'
                     : 'border-indigo-200 bg-white text-indigo-950'
                 }`}
               >
-                <span className="min-w-0 flex-1 truncate font-medium" title={p.name}>
-                  {p.name}
-                </span>
-                <span className="hidden shrink-0 font-mono text-[10px] text-slate-500 sm:inline">({p.id})</span>
+                <CampagneNaam naam={p.name} id={p.id} idKleur="text-slate-500" />
                 {isPaused && (
                   <span className="shrink-0 rounded bg-slate-200 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-600">
                     Uit
@@ -313,8 +311,7 @@ export function MetaCampaignLinkerFields({
             <div className="mt-1.5 flex flex-col gap-1">
               {uitgesloten.map(p => (
                 <div key={p.id} className="flex items-center gap-1.5 rounded border border-rose-200 bg-rose-50/60 px-2 py-1 text-[11px] text-rose-900">
-                  <span className="min-w-0 flex-1 truncate" title={p.name}>{p.name}</span>
-                  <span className="hidden shrink-0 font-mono text-[10px] text-rose-700/70 sm:inline">({p.id})</span>
+                  <CampagneNaam naam={p.name} id={p.id} idKleur="text-rose-700/70" />
                   {campagneRegels.magWijzigen && setUitgesloten && (
                     <button type="button" onClick={() => setUitgesloten(prev => prev.filter(x => x.id !== p.id))}
                       className="rounded p-1 text-rose-400 hover:bg-rose-100 hover:text-rose-700" aria-label="Weer toestaan">
@@ -366,5 +363,20 @@ export function MetaCampaignLinkerFields({
 
       {syncStatusSlot}
     </div>
+  );
+}
+
+/** Campagnenaam zoals in Meta, met het campagne-ID klein eronder om hem terug te vinden. */
+function CampagneNaam({ naam, id, idKleur }: { naam: string; id: string; idKleur: string }) {
+  const zonderNaam = !naam || naam === id;
+  return (
+    <span className="flex min-w-[10rem] flex-1 flex-col leading-tight">
+      <span className={`truncate font-medium ${zonderNaam ? 'font-mono' : ''}`} title={zonderNaam ? id : naam}>
+        {zonderNaam ? id : naam}
+      </span>
+      <span className={`truncate font-mono text-[10px] font-normal ${idKleur}`}>
+        {zonderNaam ? 'Naam niet gevonden in Meta' : `ID ${id}`}
+      </span>
+    </span>
   );
 }

@@ -70,12 +70,24 @@ export function mergeMetaCampaignLookupNames(
   const nameById = new Map<string, string>();
   for (const c of campaigns) {
     const id = String(c.id).trim();
-    if (/^\d+$/.test(id)) nameById.set(id, c.name || id);
+    if (/^\d+$/.test(id) && c.name && c.name !== id) nameById.set(id, c.name);
   }
+  /* Levert de lookup alleen het nummer, houd dan een eerder gevonden naam. */
+  const vorigeNaam = new Map((previous ?? []).filter(p => p.name && p.name !== p.id).map(p => [p.id, p.name] as const));
   return orderedIds.map(id => ({
     id,
-    name: nameById.get(id) || id,
+    name: nameById.get(id) || vorigeNaam.get(id) || id,
     ...(pausedById.has(id) ? { paused: true as const } : {}),
     ...(exclusiefById.has(id) ? { exclusief: exclusiefById.get(id) } : {}),
   }));
+}
+
+/**
+ * Bij het opnieuw opzetten van de lijst (na opslaan of verversen van de batch)
+ * komen de campagnes binnen met alleen hun nummer. Neem de al bekende namen
+ * over, zodat het scherm niet terugvalt op nummers.
+ */
+export function behoudCampagneNamen(nieuw: MetaCampaignPick[], vorige: MetaCampaignPick[]): MetaCampaignPick[] {
+  const namen = new Map(vorige.filter(p => p.name && p.name !== p.id).map(p => [p.id, p.name] as const));
+  return nieuw.map(p => (p.name === p.id && namen.has(p.id) ? { ...p, name: namen.get(p.id)! } : p));
 }

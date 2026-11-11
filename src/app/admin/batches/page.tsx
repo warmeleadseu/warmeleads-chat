@@ -44,7 +44,7 @@ import BatchTargetsEditor from '@/components/admin/BatchTargetsEditor';
 import { useAdmin } from '../adminContext';
 import { isPipelineBatchKind } from '@/lib/batchKind';
 import { isSellableLeadBranch } from '@/lib/branchPolicy';
-import { coerceCustomerBatchMetaCampaignIds, type MetaCampaignPick } from '@/lib/metaCampaignIds';
+import { behoudCampagneNamen, coerceCustomerBatchMetaCampaignIds, type MetaCampaignPick } from '@/lib/metaCampaignIds';
 import { batchMatchesBranchDefault } from '@/lib/metaCampaignDefaults';
 import { MetaCampaignLinkerFields } from './MetaCampaignLinkerFields';
 import { BatchTargetAreaBadges } from '@/components/admin/BatchTargetAreaBadges';
@@ -692,8 +692,8 @@ function BatchDetailMetaBlock({
 
   useEffect(() => {
     if (!supportsBatchMetaCampaigns(batch.batch_kind)) return;
-    setMetaCampaignPicks(picksFromBatchMeta(batch));
-    setCampagneUitgesloten(uitgeslotenVanBatch(batch));
+    setMetaCampaignPicks(prev => behoudCampagneNamen(picksFromBatchMeta(batch), prev));
+    setCampagneUitgesloten(prev => behoudCampagneNamen(uitgeslotenVanBatch(batch), prev));
   }, [batch.batch_kind, batch.id, serverIdsKey, batch.meta_campaign_paused_ids, JSON.stringify(batch.meta_campagne_exclusief ?? {}), (batch.meta_campagne_uitgesloten ?? []).join(',')]);
 
   useEffect(() => {
@@ -1700,8 +1700,8 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
 
   useEffect(() => {
     if (!supportsBatchMetaCampaigns(batch.batch_kind)) return;
-    setMetaCampaignPicks(picksFromBatchMeta(batch));
-    setCampagneUitgesloten(uitgeslotenVanBatch(batch));
+    setMetaCampaignPicks(prev => behoudCampagneNamen(picksFromBatchMeta(batch), prev));
+    setCampagneUitgesloten(prev => behoudCampagneNamen(uitgeslotenVanBatch(batch), prev));
   }, [batch.batch_kind, batch.id, editServerMetaKey, batch.meta_campaign_paused_ids, JSON.stringify(batch.meta_campagne_exclusief ?? {}), (batch.meta_campagne_uitgesloten ?? []).join(',')]);
 
   // Stabiele fingerprint (zie BatchDetailMetaBlock).

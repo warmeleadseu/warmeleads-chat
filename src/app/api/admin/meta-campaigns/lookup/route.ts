@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { getMetaCredentials, META_GRAPH_URL } from '@/lib/meta';
+import { createServerClient } from '@/lib/supabase';
+import { laadOpgeslagenCampagneNamen } from '@/lib/metaCampagneNamen';
 
 const MAX_IDS = 10;
 
@@ -12,6 +14,9 @@ function normActId(id: string): string {
 /**
  * Haal campagnenamen op voor bestaande Graph campaign-ID's (batch detail / editor init).
  * GET ?ids=id1,id2,...
+ *
+ * Eerst de actuele naam bij Meta; lukt dat niet, de laatst bekende naam uit
+ * onze eigen kostendata. Alleen als beide niets opleveren blijft het nummer.
  */
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
@@ -26,9 +31,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ campaigns: [] });
   }
 
-  const credentials = await getMetaCredentials();
+  const opgeslagen = await laadOpgeslagenCampagneNamen(createServerClient(), ids);
+  const terugval = (id: string) => ({ id, name: opgeslagen.get(id) || id });
+
+  const credentials = await getMetaCredentials().catch(() => null);
   if (!credentials) {
-    return NextResponse.json({ error: 'Meta API niet geconfigureerd' }, { status: 400 });
+    return NextResponse.json({ campaigns: ids.map(terugval) });
   }
 
   const expected = normActId(credentials.adAccountId);
@@ -36,22 +44,22 @@ export async function GET(request: NextRequest) {
   const campaigns: { id: string; name: string }[] = [];
 
   for (const id of ids) {
-    const res = await fetch(`${META_GRAPH_URL}/${id}?fields=id,name,account_id&access_token=${token}`);
-    const json = (await res.json().catch(() => ({}))) as {
+    const res = await fetch(`${META_GRAPH_URL}/${id}?fields=id,name,account_id&access_token=${token}`).catch(() => null);
+    const json = (res ? await res.json().catch(() => ({})) : {}) as {
       id?: string;
       name?: string;
       account_id?: string;
       error?: { message?: string };
     };
-    if (!res.ok || json.error || !json.id) {
-      campaigns.push({ id, name: id });
+    if (!res || !res.ok || json.error || !json.id) {
+      campaigns.push(terugval(id));
       continue;
     }
     if (normActId(json.account_id || '') !== expected) {
-      campaigns.push({ id, name: `${id} (ander ad account)` });
+      campaigns.push({ id, name: `${opgeslagen.get(id) || id} (ander ad account)` });
       continue;
     }
-    campaigns.push({ id: json.id, name: json.name || json.id });
+    campaigns.push({ id: json.id, name: json.name || opgeslagen.get(id) || json.id });
   }
 
   return NextResponse.json({ campaigns });
