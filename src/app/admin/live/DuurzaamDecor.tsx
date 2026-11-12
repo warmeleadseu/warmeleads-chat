@@ -16,16 +16,17 @@ import type { SlideId } from '@/lib/liveSlides';
 const W = 1920;
 const H = 1080;
 
-/* Pastelkleuren; de lage dekking zit op de hele laag. */
+/* Vrolijke, verzadigde kleuren (12 nov 2026: de pastels werden op de donkere
+   achtergrond grijs). De lage dekking zit op de hele laag. */
 const KLEUR = {
-  blad: '#a7f3d0',
-  bladDonker: '#6ee7b7',
-  heuvel: '#34d399',
-  wit: '#f8fafc',
-  zon: '#fde68a',
-  paneel: '#93c5fd',
-  dak: '#c4b5fd',
-  oranje: '#fdba74',
+  blad: '#6ee7b7',
+  bladDonker: '#10b981',
+  heuvel: '#059669',
+  wit: '#e0f2fe',
+  zon: '#fcd34d',
+  paneel: '#38bdf8',
+  dak: '#a78bfa',
+  oranje: '#fb923c',
 };
 
 function Zon({ x, y, r, stralen = true }: { x: number; y: number; r: number; stralen?: boolean }) {
@@ -168,7 +169,7 @@ function Tafereel({ id, beweging }: { id: SlideId; beweging: boolean }) {
     case 'vandaag':
       return (
         <>
-          <Zon x={1660} y={230} r={95} />
+          <Zon x={980} y={150} r={80} />
           <Heuvels />
           <Molen x={1180} y={835} h={430} beweging={beweging} />
           <Molen x={1400} y={870} h={330} duur={13} beweging={beweging} />
@@ -255,7 +256,7 @@ export function DuurzaamDecor({ id, reducedMotion }: { id: SlideId; reducedMotio
           className="absolute inset-0"
           style={{ background: WAS[id] }}
         >
-          <svg viewBox={`0 0 ${W} ${H}`} className="absolute inset-0 h-full w-full" preserveAspectRatio="xMidYMax slice" style={{ opacity: 0.13 }}>
+          <svg viewBox={`0 0 ${W} ${H}`} className="absolute inset-0 h-full w-full" preserveAspectRatio="xMidYMax slice" style={{ opacity: 0.2 }}>
             <defs>
               <radialGradient id="zonGloed">
                 <stop offset="0%" stopColor={KLEUR.zon} stopOpacity={0.6} />

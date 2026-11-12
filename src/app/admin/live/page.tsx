@@ -8,6 +8,7 @@ import { adminFetch } from '@/lib/adminAuth';
 import { audioManager } from '@/lib/celebrationSounds';
 import type { ActieSamenvatting } from '@/lib/lotenActieLaden';
 import { DuurzaamDecor } from './DuurzaamDecor';
+import { EnergieMeter, GROET, IcoonChip, LevendeLucht, ONDERWERP_EMOJI, SFEER_CSS, brancheEmoji, dagdeelVan, type ChipKleur } from './LiveSfeer';
 import { groepeerStaffels, type StaffelWeergave } from '@/lib/amStaffel';
 import { bouwSlides, huidigeIndex, leesDuur, leesVasteSlide, onderwerpen, paginaVan, stapIndex, STANDAARD_DUUR_SEC, type SlideId } from '@/lib/liveSlides';
 import { ExclamationTriangleIcon, SignalSlashIcon } from '@heroicons/react/24/outline';
@@ -671,81 +672,132 @@ function SlideVoortgang({ duurMs, stil, onKlaar }: { duurMs: number; stil: boole
 
   return (
     <div
-      className={`h-full rounded-full ${stil ? 'bg-white/40' : 'bg-gradient-to-r from-brand-purple to-brand-pink'}`}
+      className={`h-full rounded-full ${stil ? 'bg-white/40' : 'bg-gradient-to-r from-violet-400 via-fuchsia-400 to-brand-pink'}`}
       style={{ width: `${Math.min(100, (verstreken / duurMs) * 100)}%` }}
     />
   );
 }
 
-function SlideKop({ titel, rechts }: { titel: string; rechts?: React.ReactNode }) {
+function SlideKop({ titel, rechts, emoji, kleur = 'paars' }: { titel: string; rechts?: React.ReactNode; emoji?: string; kleur?: ChipKleur }) {
   return (
     <div className="mb-5 flex shrink-0 items-end justify-between gap-6">
-      <h2 className={`${TYPE.primary} font-black tracking-tight text-white/90`}>{titel}</h2>
+      <div className="flex items-center gap-4">
+        {emoji && <IcoonChip emoji={emoji} kleur={kleur} maat={58} zweef />}
+        <h2 className={`${TYPE.primary} font-black tracking-tight text-white`}>{titel}</h2>
+      </div>
       {rechts}
     </div>
   );
 }
 
+/**
+ * Basis voor elke tegel: glazig, met een dun lichtrandje bovenaan en een
+ * zachte kleurgloed in de hoek. De kleur geeft elke tegel een eigen gezicht.
+ */
+const TEGEL_GLOED: Record<ChipKleur, string> = {
+  oranje: 'rgba(251,146,60,0.16)',
+  groen: 'rgba(52,211,153,0.15)',
+  blauw: 'rgba(56,189,248,0.15)',
+  paars: 'rgba(167,139,250,0.17)',
+  roze: 'rgba(244,114,182,0.15)',
+  geel: 'rgba(252,211,77,0.15)',
+};
+function tegelStijl(kleur: ChipKleur): React.CSSProperties {
+  return {
+    /* Onderste laag donker: de tekeningen in de achtergrond schemeren erdoor, maar de tekst blijft scherp. */
+    background: `radial-gradient(120% 90% at 100% 0%, ${TEGEL_GLOED[kleur]}, transparent 60%), linear-gradient(160deg, rgba(255,255,255,0.07), rgba(255,255,255,0.02)), linear-gradient(rgba(11,14,26,0.55), rgba(11,14,26,0.55))`,
+    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.10), 0 18px 40px -22px rgba(0,0,0,0.7)',
+  };
+}
+const TEGEL = 'relative overflow-hidden rounded-3xl border border-white/[0.09]';
+
 const euro = (n: number, decimalen = 0) =>
   `€${n.toLocaleString('nl-NL', { minimumFractionDigits: decimalen, maximumFractionDigits: decimalen })}`;
 
-function SlideVandaag({ data }: { data: LiveData }) {
+function SlideVandaag({ data, reducedMotion }: { data: LiveData; reducedMotion: boolean }) {
   const dag = data.periodStats.day;
   const cm = data.costMetrics;
-  const kpis: { label: string; waarde: React.ReactNode; sub: string; trend?: React.ReactNode }[] = [
+  const kpis: { label: string; waarde: React.ReactNode; sub: string; trend?: React.ReactNode; emoji: string; kleur: ChipKleur }[] = [
     {
       label: 'Leads laatste 24 uur',
       waarde: <AnimatedNumber value={dag?.leads || 0} />,
       sub: `${dag?.assigned || 0} uitgedeeld`,
       trend: dag ? <TrendArrow current={dag.leads} previous={dag.prevLeads} /> : null,
+      emoji: '📣',
+      kleur: 'oranje',
     },
     {
       label: 'Winst deze maand',
       waarde: <AnimatedNumber value={Math.round(cm?.totalProfit || 0)} prefix="€" />,
       sub: `omzet deze maand ${euro(Math.round(data.totalRevenue))}`,
+      emoji: '💰',
+      kleur: 'groen',
     },
     {
       label: 'Effectieve CPL',
       waarde: euro(cm?.effectieveCpl || 0, 2),
       sub: `deze maand · ${cm?.avgAssignments || 0}x uitgedeeld`,
+      emoji: '🎯',
+      kleur: 'blauw',
     },
     {
       label: 'Leads totaal',
       waarde: <AnimatedNumber value={data.totalLeads} />,
       sub: `${data.activeCustomers} klanten actief`,
+      emoji: '🏡',
+      kleur: 'paars',
     },
   ];
 
   return (
     <div className="flex h-full flex-col gap-5">
-      <div className="relative flex min-h-0 flex-1 flex-col justify-center overflow-hidden rounded-3xl border border-white/[0.08] bg-gradient-to-br from-brand-purple/25 to-brand-pink/10 px-16">
-        <p className={`${TYPE.secondary} font-semibold uppercase tracking-wider text-white/55`}>Omzet laatste 24 uur</p>
-        <div className="mt-4 flex items-end gap-8">
-          <AnimatedNumber
-            value={Math.round(dag?.revenue || 0)}
-            prefix="€"
-            className="text-[220px] font-black leading-[0.9] tracking-tight tabular-nums text-white"
-          />
-          {dag && (
-            <span className="mb-5">
-              <TrendArrow current={dag.revenue} previous={dag.prevRevenue} groot />
-            </span>
-          )}
+      <div
+        className="relative flex min-h-0 flex-1 items-center justify-between gap-10 overflow-hidden rounded-[32px] border border-white/[0.1] px-16"
+        style={{
+          background: 'radial-gradient(70% 90% at 0% 0%, rgba(231,76,140,0.28), transparent 60%), radial-gradient(60% 80% at 100% 100%, rgba(52,211,153,0.18), transparent 60%), linear-gradient(135deg, rgba(91,72,180,0.45), rgba(59,47,117,0.25))',
+          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.14), 0 30px 60px -30px rgba(0,0,0,0.8)',
+        }}
+      >
+        {/* Twinkelende sterretjes in de hoeken van de grote tegel. */}
+        {[[6, 14, 26], [44, 10, 18], [57, 78, 22], [3, 82, 16]].map(([x, y, maat], i) => (
+          <span key={i} aria-hidden className="pointer-events-none absolute text-amber-200" style={{ left: `${x}%`, top: `${y}%`, fontSize: maat, animation: `lvSchitter ${3 + i}s ease-in-out ${i * 0.8}s infinite` }}>✦</span>
+        ))}
+        <div className="relative min-w-0">
+          <div className="flex items-center gap-4">
+            <IcoonChip emoji="⚡" kleur="geel" maat={56} zweef />
+            <p className={`${TYPE.secondary} font-bold uppercase tracking-wider text-white/70`}>Omzet laatste 24 uur</p>
+          </div>
+          <div className="mt-5 flex items-end gap-8">
+            <AnimatedNumber
+              value={Math.round(dag?.revenue || 0)}
+              prefix="€"
+              className="text-[210px] font-black leading-[0.9] tracking-tight tabular-nums text-white [text-shadow:0_6px_40px_rgba(231,76,140,0.35)]"
+            />
+            {dag && (
+              <span className="mb-5">
+                <TrendArrow current={dag.revenue} previous={dag.prevRevenue} groot />
+              </span>
+            )}
+          </div>
+          <p className={`${TYPE.secondary} mt-6 tabular-nums text-white/55`}>
+            vorige 24 uur: {euro(Math.round(dag?.prevRevenue || 0))}
+          </p>
         </div>
-        <p className={`${TYPE.secondary} mt-6 tabular-nums text-white/45`}>
-          vorige 24 uur: {euro(Math.round(dag?.prevRevenue || 0))}
-        </p>
+        {dag && <EnergieMeter nu={dag.revenue} vorige={dag.prevRevenue} reducedMotion={reducedMotion} />}
       </div>
 
       <div className="grid h-[290px] shrink-0 grid-cols-4 gap-5">
         {kpis.map(k => (
-          <div key={k.label} className="flex min-w-0 flex-col justify-center rounded-3xl border border-white/[0.06] bg-white/[0.03] px-8">
-            <p className={`${TYPE.label} font-semibold uppercase tracking-wide text-white/45`}>{k.label}</p>
-            <div className="mt-3 flex items-baseline gap-4">
+          <div key={k.label} className={`${TEGEL} flex min-w-0 flex-col justify-center px-8`} style={tegelStijl(k.kleur)}>
+            <div className="flex items-center gap-3">
+              <IcoonChip emoji={k.emoji} kleur={k.kleur} maat={48} />
+              <p className={`${TYPE.label} min-w-0 truncate font-bold uppercase tracking-wide text-white/60`}>{k.label}</p>
+            </div>
+            <div className="mt-4 flex items-baseline gap-4">
               <span className="text-[72px] font-black leading-none tracking-tight tabular-nums text-white">{k.waarde}</span>
               {k.trend}
             </div>
-            <p className={`${TYPE.label} mt-3 truncate tabular-nums text-white/40`}>{k.sub}</p>
+            <p className={`${TYPE.label} mt-3 truncate tabular-nums text-white/50`}>{k.sub}</p>
           </div>
         ))}
       </div>
@@ -769,52 +821,74 @@ function SlideBatches({
   return (
     <div className="flex h-full flex-col">
       <SlideKop
+        emoji="🔋"
+        kleur="groen"
         titel={paginas > 1 ? `Actieve batches ${pagina}/${paginas}` : 'Actieve batches'}
         rechts={
           <div className="w-[560px] shrink-0">
-            <div className={`${TYPE.label} flex items-baseline justify-between tabular-nums text-white/50`}>
+            <div className={`${TYPE.label} flex items-baseline justify-between tabular-nums text-white/55`}>
               <span>{aantalActief} actief · {aantalVoltooid} voltooid</span>
-              <span className="font-bold text-white/75">{geleverd.toLocaleString('nl-NL')} / {totaal.toLocaleString('nl-NL')} ({totaalPct}%)</span>
+              <span className="font-bold text-white/80">{geleverd.toLocaleString('nl-NL')} / {totaal.toLocaleString('nl-NL')} ({totaalPct}%)</span>
             </div>
-            <div className="mt-2 h-3 overflow-hidden rounded-full bg-white/[0.06]">
-              <div className="h-full rounded-full bg-gradient-to-r from-brand-purple to-brand-pink" style={{ width: `${totaalPct}%` }} />
+            <div className="relative mt-2 h-3.5 overflow-hidden rounded-full bg-white/[0.08]">
+              <div className="relative h-full overflow-hidden rounded-full bg-gradient-to-r from-violet-500 via-fuchsia-500 to-brand-pink" style={{ width: `${totaalPct}%` }}>
+                <span aria-hidden className="absolute inset-y-0 w-1/3 bg-gradient-to-r from-transparent via-white/40 to-transparent" style={{ animation: 'lvGlans 4s ease-in-out infinite' }} />
+              </div>
             </div>
           </div>
         }
       />
       <div className="grid min-h-0 flex-1 grid-cols-2 grid-rows-4 gap-4">
-        {batches.map(b => {
+        {batches.map((b, i) => {
           const pct = b.batchSize > 0 ? Math.min(100, Math.round((b.delivered / b.batchSize) * 100)) : 0;
           const bc = BRANCH_COLORS[b.branch] || DEFAULT_BRANCH;
           const viert = celebratingId === b.id;
+          const bijnaVol = pct >= 90;
           const tempo = b.leadsPerDay ? `${b.leadsPerDay}/dag` : b.leadsPerWeek ? `${b.leadsPerWeek}/week` : null;
           const gebied = (b.targetAreaLabels ?? []).join(' · ');
           return (
             <div
               key={b.id}
-              className={`flex min-h-0 flex-col justify-center rounded-2xl border px-6 ${
-                viert ? 'border-emerald-500/40 bg-emerald-500/[0.08] shadow-lg shadow-emerald-500/20' : 'border-white/[0.05] bg-white/[0.03]'
-              }`}
+              className={`${TEGEL} flex min-h-0 flex-col justify-center rounded-2xl px-6 ${viert ? 'border-emerald-400/50 shadow-lg shadow-emerald-500/25' : ''}`}
+              style={viert ? { background: 'linear-gradient(160deg, rgba(52,211,153,0.16), rgba(52,211,153,0.04))' } : tegelStijl(b.branch === 'airco' ? 'blauw' : b.branch === 'thuisbatterij' ? 'groen' : 'paars')}
             >
               <div className="flex items-center justify-between gap-4">
                 <div className="flex min-w-0 items-center gap-3">
-                  <span className={`${TYPE.secondary} truncate font-bold text-white/90`}>{b.customer}</span>
+                  <span aria-hidden className="shrink-0 text-[30px] leading-none">{brancheEmoji(b.branch)}</span>
+                  <span className={`${TYPE.secondary} truncate font-bold text-white`}>{b.customer}</span>
                   <span className={`shrink-0 rounded-full px-3 py-0.5 text-[20px] font-bold ${bc.badge}`}>{b.branch}</span>
                   {viert && <span className="text-[30px]">🎉</span>}
+                  {!viert && bijnaVol && (
+                    <span className="shrink-0 rounded-full bg-amber-400/20 px-3 py-0.5 text-[20px] font-bold text-amber-200">bijna vol!</span>
+                  )}
                 </div>
                 <div className="flex shrink-0 items-baseline gap-2">
                   <span className={`${TYPE.primary} font-black tabular-nums text-white`}>{b.delivered}</span>
-                  <span className={`${TYPE.label} tabular-nums text-white/35`}>/ {b.batchSize}</span>
+                  <span className={`${TYPE.label} tabular-nums text-white/40`}>/ {b.batchSize}</span>
                 </div>
               </div>
-              <div className="relative mt-3 h-4 overflow-hidden rounded-full bg-white/[0.06]">
-                <div className={`absolute inset-y-0 left-0 rounded-full bg-gradient-to-r ${bc.bar} shadow-lg ${bc.glow}`} style={{ width: `${pct}%` }} />
+              {/* Een batterij die vol laadt: streepjes per 10%, een glans die erlangs loopt en een knopje aan het eind. */}
+              <div className="mt-3 flex items-center gap-1.5">
+                <div className="relative h-5 flex-1 overflow-hidden rounded-lg border border-white/[0.12] bg-black/25 p-[3px]">
+                  <div className={`relative h-full overflow-hidden rounded-[5px] bg-gradient-to-r ${bc.bar} shadow-lg ${bc.glow}`} style={{ width: `${pct}%` }}>
+                    <span
+                      aria-hidden
+                      className="absolute inset-0 opacity-25"
+                      style={{ backgroundImage: 'repeating-linear-gradient(115deg, rgba(255,255,255,0.9) 0 10px, transparent 10px 28px)', backgroundSize: '56px 100%', animation: 'lvStreep 1.6s linear infinite' }}
+                    />
+                    <span aria-hidden className="absolute inset-y-0 w-1/4 bg-gradient-to-r from-transparent via-white/50 to-transparent" style={{ animation: `lvGlans 5s ease-in-out ${(i % 4) * 0.7}s infinite` }} />
+                  </div>
+                  {[10, 20, 30, 40, 50, 60, 70, 80, 90].map(t => (
+                    <span key={t} aria-hidden className="absolute inset-y-[3px] w-[2px] bg-[#0B0E1A]/40" style={{ left: `${t}%` }} />
+                  ))}
+                </div>
+                <span aria-hidden className={`h-2.5 w-1.5 shrink-0 rounded-r ${pct >= 100 ? 'bg-emerald-300' : 'bg-white/25'}`} />
               </div>
-              <div className={`${TYPE.meta} mt-2.5 flex items-center justify-between gap-4 tabular-nums text-white/40`}>
+              <div className={`${TYPE.meta} mt-2.5 flex items-center justify-between gap-4 tabular-nums text-white/50`}>
                 <span className="min-w-0 truncate">
                   {[b.pricePerLead ? `€${b.pricePerLead}/lead` : null, tempo, gebied || null].filter(Boolean).join(' · ')}
                 </span>
-                <span className="shrink-0 font-bold text-white/60">{pct}%</span>
+                <span className="shrink-0 font-bold text-white/75">{pct}%</span>
               </div>
             </div>
           );
@@ -826,10 +900,12 @@ function SlideBatches({
 
 function SlideGeld({ data, costMetrics: cm }: { data: LiveData; costMetrics: CostMetrics }) {
   const ai = data.aiSpend;
-  const tegels: { label: string; waarde: string; kleur: string; sub?: string; uitleg?: string }[] = [
-    { label: 'Ad spend deze maand', waarde: euro(cm.monthAdSpend), kleur: 'text-white' },
-    { label: 'Bruto CPL deze maand', waarde: euro(cm.brutoCpl, 2), kleur: 'text-white' },
+  const tegels: { label: string; waarde: string; kleur: string; sub?: string; uitleg?: string; emoji: string; chip: ChipKleur }[] = [
+    { label: 'Ad spend deze maand', waarde: euro(cm.monthAdSpend), kleur: 'text-white', emoji: '📢', chip: 'blauw' },
+    { label: 'Bruto CPL deze maand', waarde: euro(cm.brutoCpl, 2), kleur: 'text-white', emoji: '🏷️', chip: 'oranje' },
     {
+      emoji: '🎯',
+      chip: 'groen',
       label: 'Effectieve CPL deze maand',
       waarde: euro(cm.effectieveCpl, 2),
       kleur: 'text-emerald-400',
@@ -837,6 +913,8 @@ function SlideGeld({ data, costMetrics: cm }: { data: LiveData; costMetrics: Cos
       uitleg: 'Spend gedeeld door netto-toewijzingen (goedgekeurde reclamaties tellen niet als levering, kosten blijven volledig staan).',
     },
     {
+      emoji: '🧾',
+      chip: 'paars',
       label: 'Omzet deze maand',
       waarde: euro(data.totalRevenue),
       kleur: 'text-white',
@@ -844,12 +922,16 @@ function SlideGeld({ data, costMetrics: cm }: { data: LiveData; costMetrics: Cos
       uitleg: 'Betaald en gefactureerd deze maand, excl. btw, op de dag van betalen: batches, bulk, losse en externe facturen, min creditnota’s. Afspraken en interne klanten tellen niet mee.',
     },
     {
+      emoji: cm.totalProfit >= 0 ? '🤑' : '😬',
+      chip: cm.totalProfit >= 0 ? 'groen' : 'roze',
       label: 'Winst deze maand',
       waarde: `${cm.totalProfit >= 0 ? '+' : ''}${euro(cm.totalProfit)}`,
       sub: 'omzet min ad spend (Meta)',
       kleur: cm.totalProfit >= 0 ? 'text-emerald-400' : 'text-red-400',
     },
     {
+      emoji: '🤖',
+      chip: 'roze',
       label: 'AI spend deze maand',
       waarde: euro((ai?.monthCents || 0) / 100, 2),
       kleur: ai?.enabled ? 'text-purple-300' : 'text-white/30',
@@ -860,6 +942,8 @@ function SlideGeld({ data, costMetrics: cm }: { data: LiveData; costMetrics: Cos
   return (
     <div className="flex h-full flex-col">
       <SlideKop
+        emoji="💶"
+        kleur="geel"
         titel="Geld"
         rechts={
           <p className={`${TYPE.secondary} font-semibold capitalize text-white/50`}>
@@ -869,14 +953,13 @@ function SlideGeld({ data, costMetrics: cm }: { data: LiveData; costMetrics: Cos
       />
       <div className="grid min-h-0 flex-1 grid-cols-3 grid-rows-2 gap-5">
         {tegels.map(t => (
-          <div
-            key={t.label}
-            title={t.uitleg}
-            className="flex min-w-0 flex-col justify-center rounded-3xl border border-emerald-500/10 bg-emerald-500/[0.04] px-10"
-          >
-            <p className={`${TYPE.label} font-bold uppercase tracking-widest text-emerald-400/60`}>{t.label}</p>
-            <p className={`mt-4 text-[84px] font-black leading-none tracking-tight tabular-nums ${t.kleur}`}>{t.waarde}</p>
-            <p className={`${TYPE.label} mt-4 truncate tabular-nums text-white/40`}>{t.sub ?? '\u00a0'}</p>
+          <div key={t.label} title={t.uitleg} className={`${TEGEL} flex min-w-0 flex-col justify-center px-10`} style={tegelStijl(t.chip)}>
+            <div className="flex items-center gap-4">
+              <IcoonChip emoji={t.emoji} kleur={t.chip} maat={56} />
+              <p className={`${TYPE.label} min-w-0 font-bold uppercase tracking-widest text-white/65`}>{t.label}</p>
+            </div>
+            <p className={`mt-5 text-[84px] font-black leading-none tracking-tight tabular-nums ${t.kleur}`}>{t.waarde}</p>
+            <p className={`${TYPE.label} mt-4 truncate tabular-nums text-white/50`}>{t.sub ?? '\u00a0'}</p>
           </div>
         ))}
       </div>
@@ -894,12 +977,18 @@ function SlideActie({ actie, nu }: { actie: ActieSamenvatting; nu: Date }) {
   return (
     <div className="flex h-full flex-col">
       <SlideKop
+        emoji="🎁"
+        kleur="oranje"
         titel={`Actie: ${actie.prijsLeads} gratis leads`}
         rechts={<p className={`${TYPE.label} text-white/45`}>1 lot per {actie.leadsPerLot} leads in een betaalde batch</p>}
       />
       <div className="grid min-h-0 flex-1 grid-cols-5 gap-5">
         <div className="col-span-2 flex flex-col gap-5">
-          <div className="flex flex-1 flex-col justify-center rounded-3xl border border-orange-400/20 bg-gradient-to-br from-orange-500/20 to-brand-pink/10 px-10">
+          <div
+            className="relative flex flex-1 flex-col justify-center overflow-hidden rounded-[32px] border border-orange-300/25 px-10"
+            style={{ background: 'radial-gradient(80% 80% at 100% 0%, rgba(252,211,77,0.25), transparent 60%), linear-gradient(140deg, rgba(249,115,22,0.32), rgba(231,76,140,0.18))', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.14)' }}
+          >
+            <span aria-hidden className="pointer-events-none absolute -right-6 -top-6 text-[150px] opacity-20" style={{ animation: 'lvZweef 6s ease-in-out infinite' }}>🎟️</span>
             {actie.winnaar ? (
               <>
                 <p className={`${TYPE.secondary} font-semibold uppercase tracking-wider text-orange-200/70`}>Winnaar</p>
@@ -917,20 +1006,23 @@ function SlideActie({ actie, nu }: { actie: ActieSamenvatting; nu: Date }) {
             )}
           </div>
           <div className="grid h-[220px] shrink-0 grid-cols-2 gap-5">
-            {[
-              { label: 'Loten in de pot', waarde: actie.totaalLoten },
-              { label: 'Deelnemers', waarde: actie.deelnemers },
-            ].map(k => (
-              <div key={k.label} className="flex flex-col justify-center rounded-3xl border border-white/[0.06] bg-white/[0.03] px-8">
-                <p className={`${TYPE.label} font-semibold uppercase tracking-wide text-white/45`}>{k.label}</p>
+            {([
+              { label: 'Loten in de pot', waarde: actie.totaalLoten, emoji: '🎟️', kleur: 'oranje' },
+              { label: 'Deelnemers', waarde: actie.deelnemers, emoji: '🙌', kleur: 'roze' },
+            ] as const).map(k => (
+              <div key={k.label} className={`${TEGEL} flex flex-col justify-center px-8`} style={tegelStijl(k.kleur)}>
+                <div className="flex items-center gap-3">
+                  <IcoonChip emoji={k.emoji} kleur={k.kleur} maat={46} />
+                  <p className={`${TYPE.label} font-bold uppercase tracking-wide text-white/60`}>{k.label}</p>
+                </div>
                 <AnimatedNumber value={k.waarde} className="mt-3 text-[72px] font-black leading-none tabular-nums text-white" />
               </div>
             ))}
           </div>
         </div>
 
-        <div className="col-span-3 flex min-h-0 flex-col rounded-3xl border border-white/[0.06] bg-white/[0.03] p-8">
-          <h3 className={`${TYPE.secondary} mb-5 font-bold text-white/75`}>Meeste loten</h3>
+        <div className={`${TEGEL} col-span-3 flex min-h-0 flex-col p-8`} style={tegelStijl('geel')}>
+          <h3 className={`${TYPE.secondary} mb-5 font-bold text-white/85`}>⭐ Meeste loten</h3>
           {actie.top.length === 0 ? (
             <div className="flex flex-1 items-center justify-center">
               <p className={`${TYPE.secondary} text-white/30`}>Nog geen loten. De eerste betaalde batch opent de pot.</p>
@@ -940,13 +1032,15 @@ function SlideActie({ actie, nu }: { actie: ActieSamenvatting; nu: Date }) {
               {actie.top.map((t, i) => (
                 <div key={t.klant + i}>
                   <div className="flex items-baseline justify-between gap-4">
-                    <p className={`${TYPE.secondary} min-w-0 truncate font-bold ${i === 0 ? 'text-orange-300' : 'text-white/85'}`}>{t.klant}</p>
+                    <p className={`${TYPE.secondary} min-w-0 truncate font-bold ${i === 0 ? 'text-orange-300' : 'text-white/85'}`}>{['🥇 ', '🥈 ', '🥉 '][i] ?? ''}{t.klant}</p>
                     <span className={`${TYPE.secondary} shrink-0 font-black tabular-nums text-white`}>
                       {t.loten} {t.loten === 1 ? 'lot' : 'loten'}
                     </span>
                   </div>
-                  <div className="mt-2 h-3 overflow-hidden rounded-full bg-white/[0.07]">
-                    <div className="h-full rounded-full bg-gradient-to-r from-orange-400 to-brand-pink" style={{ width: `${(t.loten / meeste) * 100}%` }} />
+                  <div className="mt-2 h-3.5 overflow-hidden rounded-full bg-white/[0.08]">
+                    <div className="relative h-full overflow-hidden rounded-full bg-gradient-to-r from-amber-300 via-orange-400 to-brand-pink" style={{ width: `${(t.loten / meeste) * 100}%` }}>
+                      <span aria-hidden className="absolute inset-y-0 w-1/3 bg-gradient-to-r from-transparent via-white/45 to-transparent" style={{ animation: `lvGlans 4.5s ease-in-out ${i * 0.5}s infinite` }} />
+                    </div>
                   </div>
                 </div>
               ))}
@@ -1020,11 +1114,11 @@ function SlideTeam({ targets, leaderboard, zonderAm = 0 }: { targets: AMTargetLi
 
   return (
     <div className="flex h-full flex-col">
-      <SlideKop titel="Team" />
+      <SlideKop titel="Team" emoji="🏆" kleur="geel" />
       <div className={`grid min-h-0 flex-1 gap-5 ${beide ? 'grid-cols-2' : 'grid-cols-1'}`}>
         {targets.length > 0 && (
-          <div className="flex min-h-0 flex-col overflow-hidden rounded-3xl border border-amber-500/10 bg-amber-500/[0.04] p-6">
-            <h3 className={`${TYPE.secondary} mb-4 font-bold text-white/75`}>Targets</h3>
+          <div className={`${TEGEL} flex min-h-0 flex-col p-6`} style={tegelStijl('oranje')}>
+            <h3 className={`${TYPE.secondary} mb-4 font-bold text-white/85`}>🎯 Targets</h3>
             <div className="flex min-h-0 flex-1 flex-col gap-3">
               {regels.slice(0, MAX_TARGETS).map(r => {
                 if (r.soort === 'staffel') return <StaffelRegel key={r.sleutel} s={r} />;
@@ -1072,9 +1166,9 @@ function SlideTeam({ targets, leaderboard, zonderAm = 0 }: { targets: AMTargetLi
         )}
 
         {leaderboard.length > 0 && (
-          <div className="flex min-h-0 flex-col overflow-hidden rounded-3xl border border-brand-purple/10 bg-brand-purple/[0.04] p-6">
+          <div className={`${TEGEL} flex min-h-0 flex-col p-6`} style={tegelStijl('paars')}>
             <div className="mb-4 flex items-baseline justify-between">
-              <h3 className={`${TYPE.secondary} font-bold text-white/75`}>Leaderboard</h3>
+              <h3 className={`${TYPE.secondary} font-bold text-white/85`}>🏁 Leaderboard</h3>
               <span className={`${TYPE.label} text-white/35`}>
                 {new Date().toLocaleDateString('nl-NL', { month: 'long', year: 'numeric' })}
               </span>
@@ -1086,17 +1180,20 @@ function SlideTeam({ targets, leaderboard, zonderAm = 0 }: { targets: AMTargetLi
                 return (
                   <div
                     key={am.id}
-                    className={`flex items-center gap-4 rounded-2xl border px-5 py-2.5 ${
-                      eerste ? 'border-amber-500/20 bg-amber-500/[0.06]' : 'border-white/[0.04] bg-white/[0.02]'
+                    className={`relative flex items-center gap-4 overflow-hidden rounded-2xl border px-5 py-2.5 ${
+                      eerste ? 'border-amber-400/35 bg-gradient-to-r from-amber-400/[0.16] to-amber-400/[0.03]' : 'border-white/[0.06] bg-white/[0.04]'
                     }`}
                   >
-                    <span
-                      className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-[26px] font-black ${
-                        medaille ? `bg-gradient-to-br ${medaille} text-white` : 'bg-white/[0.06] text-white/40'
-                      }`}
-                    >
-                      {rank + 1}
-                    </span>
+                    {eerste && <span aria-hidden className="pointer-events-none absolute inset-y-0 w-1/4 bg-gradient-to-r from-transparent via-amber-200/20 to-transparent" style={{ animation: 'lvGlans 6s ease-in-out infinite' }} />}
+                    {rank < 3 ? (
+                      <span aria-hidden className="flex h-12 w-12 shrink-0 items-center justify-center text-[42px] leading-none" style={eerste ? { animation: 'lvZweef 3s ease-in-out infinite' } : undefined}>
+                        {['🥇', '🥈', '🥉'][rank]}
+                      </span>
+                    ) : (
+                      <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-[26px] font-black ${medaille ? `bg-gradient-to-br ${medaille} text-white` : 'bg-white/[0.06] text-white/40'}`}>
+                        {rank + 1}
+                      </span>
+                    )}
                     {am.avatarUrl && (
                       <Image src={am.avatarUrl} alt={am.name} width={48} height={48} className="h-12 w-12 shrink-0 rounded-full object-cover" />
                     )}
@@ -1523,6 +1620,7 @@ export default function LiveDashboard() {
   const phoneQuality = data.phoneQuality;
   const phoneColor = phoneQuality.validPct >= 90 ? 'text-emerald-400' : phoneQuality.validPct >= 70 ? 'text-amber-400' : 'text-red-400';
   const phoneRingPct = phoneQuality.validPct;
+  const dagdeel = dagdeelVan(clock);
 
   return (
     <div className="fixed inset-0 flex items-center justify-center overflow-hidden bg-[#0B0E1A] text-white">
@@ -1535,6 +1633,7 @@ export default function LiveDashboard() {
         }}
         className="relative shrink-0"
       >
+      <style>{SFEER_CSS}</style>
       <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 z-[100]" />
 
       {/* Batch completion overlay - Cinematic */}
@@ -2021,16 +2120,33 @@ export default function LiveDashboard() {
         </AnimatePresence>
       </div>
 
-      {/* Zacht duurzaamheidstafereel achter de slide in beeld. */}
+      {/* Levende lucht (kleurt mee met het dagdeel) en daarvoor het duurzaamheidstafereel van de slide in beeld. */}
+      <LevendeLucht dagdeel={dagdeel} reducedMotion={reducedMotion} />
       <DuurzaamDecor id={slide.id} reducedMotion={reducedMotion} />
 
       <div className="relative z-10 flex h-full flex-col overflow-hidden p-5">
         {/* Bovenbalk: blijft staan terwijl de slides wisselen */}
         <div className="mb-4 flex h-[64px] shrink-0 items-center justify-between">
-          <Link href="/admin" className="group flex items-center gap-3">
-            <Image src="/logo-wit.png" alt="WarmeLeads" width={140} height={42} className="h-9 w-auto opacity-80 transition group-hover:opacity-100" />
-            <span className="rounded-full bg-white/[0.06] px-2.5 py-1 text-[18px] font-bold uppercase tracking-widest text-white/30">Live</span>
-          </Link>
+          <div className="flex min-w-0 items-center gap-6">
+            <Link href="/admin" className="group flex shrink-0 items-center gap-3">
+              <Image src="/logo-wit.png" alt="WarmeLeads" width={140} height={42} className="h-9 w-auto opacity-80 transition group-hover:opacity-100" />
+              <span className="flex items-center gap-2 rounded-full bg-rose-500/15 px-3 py-1 text-[18px] font-bold uppercase tracking-widest text-rose-200 ring-1 ring-rose-400/30">
+                <span className={`h-2.5 w-2.5 rounded-full bg-rose-400 ${reducedMotion ? '' : 'animate-pulse'}`} />
+                Live
+              </span>
+            </Link>
+            {/* Begroeting: voor wie binnenloopt, ook klanten. */}
+            <div
+              className="flex items-center gap-3 rounded-full border border-white/[0.12] px-7 py-2.5"
+              style={{ background: 'linear-gradient(90deg, rgba(231,76,140,0.22), rgba(139,92,246,0.22), rgba(52,211,153,0.18))', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12)' }}
+            >
+              <span aria-hidden className="text-[30px] leading-none" style={{ animation: 'lvZweef 4s ease-in-out infinite' }}>{GROET[dagdeel].emoji}</span>
+              <p className="whitespace-nowrap text-[26px] font-bold text-white">
+                {GROET[dagdeel].tekst}! <span className="font-semibold text-white/70">Welkom bij WarmeLeads</span>
+              </p>
+              <span aria-hidden className="text-[26px] leading-none">🌱</span>
+            </div>
+          </div>
           <div className="flex items-center gap-5">
             {/* Telefoonkwaliteit: de ring is de indicator, het getal staat ernaast. */}
             <div className="flex items-center gap-2.5">
@@ -2129,13 +2245,13 @@ export default function LiveDashboard() {
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={slide.key}
-              initial={reducedMotion ? { opacity: 1 } : { opacity: 0, x: 60 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={reducedMotion ? { opacity: 1 } : { opacity: 0, x: -60 }}
-              transition={{ duration: reducedMotion ? 0 : 0.45, ease: [0.25, 0.4, 0.25, 1] }}
+              initial={reducedMotion ? { opacity: 1 } : { opacity: 0, x: 70, scale: 0.98 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={reducedMotion ? { opacity: 1 } : { opacity: 0, x: -70, scale: 0.98 }}
+              transition={{ duration: reducedMotion ? 0 : 0.5, ease: [0.22, 1, 0.36, 1] }}
               className="absolute inset-0"
             >
-              {slide.id === 'vandaag' && <SlideVandaag data={data} />}
+              {slide.id === 'vandaag' && <SlideVandaag data={data} reducedMotion={reducedMotion} />}
               {slide.id === 'batches' && (
                 <SlideBatches
                   batches={paginaVan(data.activeBatches, slide.pagina)}
@@ -2167,10 +2283,11 @@ export default function LiveDashboard() {
                   type="button"
                   onClick={() => gaNaar(o.eersteIndex)}
                   className={`min-w-0 flex-1 rounded-xl px-4 py-2 text-left transition ${
-                    actief ? 'bg-white/[0.07]' : 'bg-white/[0.02] hover:bg-white/[0.05]'
+                    actief ? 'bg-white/[0.1] ring-1 ring-white/[0.15]' : 'bg-white/[0.03] hover:bg-white/[0.06]'
                   }`}
                 >
-                  <p className={`${TYPE.label} truncate font-bold ${actief ? 'text-white/90' : 'text-white/35'}`}>
+                  <p className={`${TYPE.label} truncate font-bold ${actief ? 'text-white' : 'text-white/40'}`}>
+                    <span aria-hidden className={`mr-2 ${actief ? '' : 'opacity-60 grayscale'}`}>{ONDERWERP_EMOJI[o.id]}</span>
                     {o.titel}
                     {actief && o.paginas > 1 && (
                       <span className="ml-2 font-semibold tabular-nums text-white/45">
