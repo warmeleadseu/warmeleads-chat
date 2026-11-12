@@ -360,6 +360,8 @@ export async function POST(request: NextRequest) {
       const gekoppeld = normalizeCampaignIds(insertPayload.meta_campaign_ids ?? []);
       if (body.meta_campagne_exclusief !== undefined) insertPayload.meta_campagne_exclusief = normaliseerExclusief(body.meta_campagne_exclusief, gekoppeld);
       if (body.meta_campagne_uitgesloten !== undefined) insertPayload.meta_campagne_uitgesloten = normaliseerUitgesloten(body.meta_campagne_uitgesloten, gekoppeld);
+      /* Alleen meesturen als hij aan staat: standaard uit (migratie 201). */
+      if (body.alleen_eigen_campagne === true) insertPayload.alleen_eigen_campagne = true;
     }
     if (insertPayload.meta_campagne_exclusief && Object.keys(insertPayload.meta_campagne_exclusief as object).length > 0) {
       const botsing = await exclusiefBijAndereKlant(supabase, Object.keys(insertPayload.meta_campagne_exclusief as object), customer_id);
@@ -593,6 +595,14 @@ export async function PUT(request: NextRequest) {
     delete updates.meta_campagne_uitgesloten;
   }
 
+  /* Alleen leads uit de eigen gekoppelde campagnes: zelfde rechten als hierboven. */
+  const oudAlleenEigen = (existing as { alleen_eigen_campagne?: boolean | null }).alleen_eigen_campagne === true;
+  if (updates.alleen_eigen_campagne !== undefined) {
+    const nieuw = updates.alleen_eigen_campagne === true;
+    if (admin.role === 'accountmanager' || !isPipelineBatchKind(soortNa) || nieuw === oudAlleenEigen) delete updates.alleen_eigen_campagne;
+    else updates.alleen_eigen_campagne = nieuw;
+  }
+
   if (admin.role === 'accountmanager') {
     const { data: myCust } = await supabase.from('customers').select('id').eq('account_manager_id', admin.id).eq('id', existing.customer_id).single();
     if (!myCust) return NextResponse.json({ error: 'Geen toegang tot deze batch' }, { status: 403 });
@@ -681,7 +691,7 @@ export async function PUT(request: NextRequest) {
     'compensations', 'starts_at', 'account_manager_id', 'batch_kind', 'niche_title',
     'meta_campaign_ids', 'meta_campaign_paused_ids', 'meta_campaign_sync_enabled',
     'lead_branch_slug', 'distribution_priority', 'direct_leveren',
-    'meta_campagne_exclusief', 'meta_campagne_uitgesloten', 'dagdosering',
+    'meta_campagne_exclusief', 'meta_campagne_uitgesloten', 'alleen_eigen_campagne', 'dagdosering',
     'extern_factuurnummer', 'extern_bedrag_excl', 'betaalherinneringen',
   ];
   if (updates.betaalherinneringen !== undefined) updates.betaalherinneringen = updates.betaalherinneringen !== false;
@@ -791,7 +801,7 @@ export async function PUT(request: NextRequest) {
   /* Direct leveren op de batch gewijzigd: vastleggen. */
   const directNa = (data as { direct_leveren?: string | null }).direct_leveren ?? null;
   const directVoor = (existing as { direct_leveren?: string | null }).direct_leveren ?? null;
-  if ('meta_campagne_exclusief' in safeUpdates || 'meta_campagne_uitgesloten' in safeUpdates) {
+  if ('meta_campagne_exclusief' in safeUpdates || 'meta_campagne_uitgesloten' in safeUpdates || 'alleen_eigen_campagne' in safeUpdates) {
     await logAudit({
       adminId: admin.id,
       adminName: (admin as { name?: string | null }).name ?? null,
@@ -801,6 +811,7 @@ export async function PUT(request: NextRequest) {
       details: {
         exclusief_van: oudExclusief, exclusief_naar: (data as { meta_campagne_exclusief?: unknown }).meta_campagne_exclusief ?? {},
         uitgesloten_van: oudUitgesloten, uitgesloten_naar: (data as { meta_campagne_uitgesloten?: unknown }).meta_campagne_uitgesloten ?? [],
+        alleen_eigen_campagne_van: oudAlleenEigen, alleen_eigen_campagne_naar: (data as { alleen_eigen_campagne?: boolean | null }).alleen_eigen_campagne === true,
         branch: (data as { branch?: string }).branch ?? null, customer_id: existing.customer_id,
       },
     }).catch(() => {});

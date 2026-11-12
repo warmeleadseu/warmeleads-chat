@@ -550,12 +550,12 @@ export async function distributeLead(
 
   const eersteKlant = pipelineCooldownAssignments.length === 0;
 
-  /* Campagneregels: alleen nodig als de lead uit een Meta-campagne komt.
-     Lukt het ophalen niet, dan nu niet verdelen: een exclusieve lead mag niet
-     bij een verkeerde klant belanden. Het vangnet en de kwartierronde proberen
-     het opnieuw. */
+  /* Campagneregels: altijd nodig, ook voor een lead zonder campagne (een batch
+     met "alleen eigen campagne" mag die niet krijgen). Lukt het ophalen niet,
+     dan nu niet verdelen: een exclusieve lead mag niet bij een verkeerde klant
+     belanden. Het vangnet en de kwartierronde proberen het opnieuw. */
   let campagneRegels: CampagneRegels = GEEN_REGELS;
-  if ((fullLead as { meta_campaign_id?: string | null }).meta_campaign_id) {
+  {
     try {
       campagneRegels = ctx?.campagneRegels ?? (await laadCampagneRegels(supabase));
     } catch (err) {

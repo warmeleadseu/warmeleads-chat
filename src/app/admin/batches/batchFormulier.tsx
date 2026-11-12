@@ -24,7 +24,7 @@ import { coerceCustomerBatchMetaCampaignIds, type MetaCampaignPick } from '@/lib
 import { MetaCampaignLinkerFields } from './MetaCampaignLinkerFields';
 import type { CustomerTargetRow } from '@/lib/batchTargetAreas';
 
-export function metaFieldsFromPicks(picks: MetaCampaignPick[], uitgesloten?: MetaCampaignPick[]) {
+export function metaFieldsFromPicks(picks: MetaCampaignPick[], uitgesloten?: MetaCampaignPick[], alleenEigen?: boolean) {
   const meta_campaign_ids = picks.map(p => p.id).slice(0, 10);
   const linked = new Set(meta_campaign_ids);
   const meta_campaign_paused_ids = picks
@@ -41,12 +41,19 @@ export function metaFieldsFromPicks(picks: MetaCampaignPick[], uitgesloten?: Met
     meta_campaign_paused_ids,
     meta_campagne_exclusief,
     meta_campagne_uitgesloten: uitgesloten.map(p => p.id).filter(id => !linked.has(id)),
+    ...(alleenEigen !== undefined ? { alleen_eigen_campagne: alleenEigen } : {}),
   };
 }
 
 /** Uitgesloten campagnes van een batch, als picks (namen vult het koppelblok aan). */
 export function uitgeslotenVanBatch(batch: { meta_campagne_uitgesloten?: unknown }): MetaCampaignPick[] {
   return coerceCustomerBatchMetaCampaignIds(batch.meta_campagne_uitgesloten).map(id => ({ id, name: id }));
+}
+
+/** Krijgt deze batch alleen leads uit zijn eigen campagne? Voor het label in lijst en detail. */
+export function alleenEigenCampagneLabel(b: { alleen_eigen_campagne?: boolean | null; status?: string }): string | null {
+  if (b.status === 'completed' || b.alleen_eigen_campagne !== true) return null;
+  return 'Alleen eigen campagne';
 }
 
 /** Heeft deze batch een exclusieve campagne? Voor het label in lijst en detail. */
@@ -121,6 +128,8 @@ export interface Batch {
   meta_campagne_exclusief?: Record<string, string> | null;
   /** Campagnes waarvan deze batch nooit leads krijgt. */
   meta_campagne_uitgesloten?: string[] | null;
+  /** Batch krijgt uitsluitend leads uit zijn eigen gekoppelde campagnes. */
+  alleen_eigen_campagne?: boolean | null;
   batch_targets?: CustomerTargetRow[] | null;
   customers?: {
     id?: string;
@@ -430,6 +439,7 @@ export function CreateBatchPanel({ branches, customers, onClose, onCreated, vast
   const [startsAtTime, setStartsAtTime] = useState('09:00');
   const [metaCampaignPicks, setMetaCampaignPicks] = useState<MetaCampaignPick[]>([]);
   const [campagneUitgesloten, setCampagneUitgesloten] = useState<MetaCampaignPick[]>([]);
+  const [alleenEigen, setAlleenEigen] = useState(false);
   const [metaSyncEnabled, setMetaSyncEnabled] = useState(true);
   const [distributionPriority, setDistributionPriority] = useState(false);
   const [directStand, setDirectStand] = useState<DirectStand>(null);
@@ -714,7 +724,11 @@ export function CreateBatchPanel({ branches, customers, onClose, onCreated, vast
       const metaPayload = metaFetchPending
         ? { meta_campaign_sync_enabled: metaSyncEnabled }
         : {
-            ...metaFieldsFromPicks(metaCampaignPicks, form.batch_delivery === 'pipeline' && form.batch_product === 'leads' ? campagneUitgesloten : undefined),
+            ...metaFieldsFromPicks(
+              metaCampaignPicks,
+              form.batch_delivery === 'pipeline' && form.batch_product === 'leads' ? campagneUitgesloten : undefined,
+              form.batch_delivery === 'pipeline' && form.batch_product === 'leads' ? alleenEigen : undefined,
+            ),
             meta_campaign_sync_enabled: metaSyncEnabled,
           };
 
@@ -1182,7 +1196,7 @@ export function CreateBatchPanel({ branches, customers, onClose, onCreated, vast
                 syncEnabled={metaSyncEnabled}
                 setSyncEnabled={setMetaSyncEnabled}
                 campagneRegels={form.batch_delivery === 'pipeline' && form.batch_product === 'leads'
-                  ? { magWijzigen: aanmaker.role !== 'accountmanager', uitgesloten: campagneUitgesloten, setUitgesloten: setCampagneUitgesloten }
+                  ? { magWijzigen: aanmaker.role !== 'accountmanager', uitgesloten: campagneUitgesloten, setUitgesloten: setCampagneUitgesloten, alleenEigen, setAlleenEigen }
                   : undefined}
               />
             </div>

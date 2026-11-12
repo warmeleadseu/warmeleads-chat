@@ -65,3 +65,43 @@ describe('regels', () => {
     expect(campagneStaatToe('X', { meta_campaign_id: '555', created_at: uur(100) }, r, NU)).toBe(false);
   });
 });
+
+describe('alleen eigen campagne', () => {
+  const regels = bouwCampagneRegels([
+    { id: 'cf', customer_id: 'k-cf', status: 'active', meta_campagne_exclusief: { '111': 'altijd' }, meta_campagne_uitgesloten: [], alleen_eigen_campagne: true, meta_campaign_ids: ['111'] },
+    { id: 'ander', customer_id: 'k-ander', status: 'active', meta_campagne_exclusief: {}, meta_campagne_uitgesloten: [], meta_campaign_ids: ['222'] },
+    { id: 'leeg', customer_id: 'k-leeg', status: 'paused', meta_campagne_exclusief: {}, meta_campagne_uitgesloten: [], alleen_eigen_campagne: true, meta_campaign_ids: [] },
+    { id: 'klaar', customer_id: 'k-klaar', status: 'completed', meta_campagne_exclusief: {}, meta_campagne_uitgesloten: [], alleen_eigen_campagne: true, meta_campaign_ids: ['111'] },
+  ]);
+
+  it('de batch krijgt zijn eigen campagne, en anderen krijgen die niet (altijd exclusief)', () => {
+    expect(campagneStaatToe('cf', { meta_campaign_id: '111' }, regels)).toBe(true);
+    expect(campagneStaatToe('ander', { meta_campaign_id: '111' }, regels)).toBe(false);
+  });
+
+  it('geen leads uit andere campagnes of zonder campagne', () => {
+    expect(campagneStaatToe('cf', { meta_campaign_id: '222' }, regels)).toBe(false);
+    expect(campagneStaatToe('cf', { meta_campaign_id: null }, regels)).toBe(false);
+    expect(campagneStaatToe('cf', {}, regels)).toBe(false);
+    expect(campagneWeigering('cf', { meta_campaign_id: '222' }, regels)).toMatch(/alleen leads uit zijn eigen campagne/);
+    expect(campagneWeigering('cf', { meta_campaign_id: null }, regels)).toMatch(/zonder campagne/);
+    expect(campagneWeigering('cf', { meta_campaign_id: '111' }, regels)).toBeNull();
+  });
+
+  it('andere batches merken er niets van', () => {
+    expect(campagneStaatToe('ander', { meta_campaign_id: '222' }, regels)).toBe(true);
+    expect(campagneStaatToe('ander', { meta_campaign_id: null }, regels)).toBe(true);
+    expect(campagneStaatToe('ander', { meta_campaign_id: '333' }, regels)).toBe(true);
+  });
+
+  it('zonder gekoppelde campagne krijgt de batch niets; afgerond telt niet meer', () => {
+    expect(campagneStaatToe('leeg', { meta_campaign_id: '222' }, regels)).toBe(false);
+    expect(regels.alleenEigen.has('klaar')).toBe(false);
+  });
+
+  it('staat de stand uit, dan verandert er niets', () => {
+    const uit = bouwCampagneRegels([{ id: 'cf', customer_id: 'k', status: 'active', meta_campagne_exclusief: {}, meta_campagne_uitgesloten: [], alleen_eigen_campagne: false, meta_campaign_ids: ['111'] }]);
+    expect(campagneStaatToe('cf', { meta_campaign_id: '222' }, uit)).toBe(true);
+    expect(campagneStaatToe('cf', {}, uit)).toBe(true);
+  });
+});

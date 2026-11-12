@@ -9,11 +9,15 @@ import type { SupabaseClient } from '@supabase/supabase-js';
  *           naar anderen, met de gewone regels;
  * - altijd: leads uit die campagne gaan nooit naar een andere klant.
  * En campagnes die een batch nooit krijgt (uitgesloten).
+ * En de andere kant op: "alleen eigen campagne". Dan krijgt de batch
+ * uitsluitend leads uit zijn eigen gekoppelde campagnes, en geen leads zonder
+ * campagne. Samen met "altijd exclusief" is een campagne dan in beide
+ * richtingen van één klant.
  *
  * Eén plek bepaalt dit: het blok Meta-campagnes van de batch. Elke route die
  * een lead aan een batch geeft (verdeling bij binnenkomst, vangnet,
  * kwartierronde, lookback, wachtrij, Restleads) vraagt hier of het mag.
- * Leads zonder campagne vallen er nooit onder.
+ * Leads zonder campagne vallen er alleen onder bij "alleen eigen campagne".
  */
 
 export type ExclusiefModus = '24u' | 'altijd';
@@ -52,6 +56,8 @@ export type CampagneRegelBatch = {
   status: string | null;
   meta_campagne_exclusief: unknown;
   meta_campagne_uitgesloten: unknown;
+  alleen_eigen_campagne?: boolean | null;
+  meta_campaign_ids?: unknown;
 };
 
 export type CampagneRegels = {
@@ -59,13 +65,16 @@ export type CampagneRegels = {
   exclusief: Map<string, { modus: ExclusiefModus; batchIds: Set<string>; klantIds: Set<string> }>;
   /** Per batch: campagnes die hij nooit krijgt. */
   uitgesloten: Map<string, Set<string>>;
+  /** Per batch met "alleen eigen campagne": de enige campagnes waaruit hij leads krijgt. */
+  alleenEigen: Map<string, Set<string>>;
 };
 
-export const GEEN_REGELS: CampagneRegels = { exclusief: new Map(), uitgesloten: new Map() };
+export const GEEN_REGELS: CampagneRegels = { exclusief: new Map(), uitgesloten: new Map(), alleenEigen: new Map() };
 
 export function bouwCampagneRegels(batches: CampagneRegelBatch[]): CampagneRegels {
   const exclusief: CampagneRegels['exclusief'] = new Map();
   const uitgesloten: CampagneRegels['uitgesloten'] = new Map();
+  const alleenEigen: CampagneRegels['alleenEigen'] = new Map();
   for (const b of batches) {
     if (!b.status || !HOUDT_EXCLUSIVITEIT.includes(b.status)) continue;
     const raw = b.meta_campagne_exclusief;
@@ -84,8 +93,14 @@ export function bouwCampagneRegels(batches: CampagneRegelBatch[]): CampagneRegel
     if (Array.isArray(b.meta_campagne_uitgesloten) && b.meta_campagne_uitgesloten.length > 0) {
       uitgesloten.set(b.id, new Set(b.meta_campagne_uitgesloten.map(String)));
     }
+    if (b.alleen_eigen_campagne === true) {
+      /* Zonder gekoppelde campagne krijgt de batch dan niets: liever stil dan
+         toch leads uit andere campagnes. */
+      const ids = Array.isArray(b.meta_campaign_ids) ? b.meta_campaign_ids.map(x => String(x).trim()).filter(Boolean) : [];
+      alleenEigen.set(b.id, new Set(ids));
+    }
   }
-  return { exclusief, uitgesloten };
+  return { exclusief, uitgesloten, alleenEigen };
 }
 
 export type LeadVoorCampagne = { meta_campaign_id?: string | null; created_at?: string | null };
@@ -116,6 +131,8 @@ export function campagneStaatToe(
   nu: Date = new Date(),
 ): boolean {
   const id = lead.meta_campaign_id ? String(lead.meta_campaign_id) : '';
+  const eigen = regels.alleenEigen?.get(batchId);
+  if (eigen && !eigen.has(id)) return false;
   if (!id) return true;
   if (regels.uitgesloten.get(batchId)?.has(id)) return false;
   const excl = exclusiviteitVan(lead, regels, nu);
@@ -130,6 +147,10 @@ export function campagneWeigering(
   nu: Date = new Date(),
 ): string | null {
   const id = lead.meta_campaign_id ? String(lead.meta_campaign_id) : '';
+  const eigen = regels.alleenEigen?.get(batchId);
+  if (eigen && !eigen.has(id)) {
+    return id ? 'deze batch krijgt alleen leads uit zijn eigen campagne' : 'deze batch krijgt alleen leads uit zijn eigen campagne (lead zonder campagne)';
+  }
   if (!id) return null;
   if (regels.uitgesloten.get(batchId)?.has(id)) return 'deze batch sluit de campagne van deze lead uit';
   const excl = exclusiviteitVan(lead, regels, nu);
@@ -143,11 +164,17 @@ export function campagneWeigering(
 
 /** De regels uit de database: alleen batches die er een hebben. */
 export async function laadCampagneRegels(supabase: SupabaseClient): Promise<CampagneRegels> {
-  const { data, error } = await supabase
-    .from('customer_batches')
-    .select('id, customer_id, status, meta_campagne_exclusief, meta_campagne_uitgesloten')
-    .in('status', HOUDT_EXCLUSIVITEIT)
-    .limit(5000);
+  const basis = 'id, customer_id, status, meta_campagne_exclusief, meta_campagne_uitgesloten';
+  const lees = async (kolommen: string) => {
+    const r = await supabase.from('customer_batches').select(kolommen).in('status', HOUDT_EXCLUSIVITEIT).limit(5000);
+    return { data: r.data as unknown[] | null, error: r.error };
+  };
+  let { data, error } = await lees(`${basis}, meta_campaign_ids, alleen_eigen_campagne`);
+  if (error && error.code === '42703') {
+    /* Kolom alleen_eigen_campagne (migratie 201) nog niet aanwezig: zonder die
+       stand verder, in plaats van helemaal niets meer te verdelen. */
+    ({ data, error } = await lees(basis));
+  }
   if (error) {
     /* Bij twijfel liever niets uitdelen dan een exclusieve lead weggeven:
        de aanroeper krijgt een fout en slaat deze ronde over. */

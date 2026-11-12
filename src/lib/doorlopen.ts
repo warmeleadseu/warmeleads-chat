@@ -312,6 +312,10 @@ export async function startDoorloop(
     nieuw.meta_campaign_sync_enabled = meta.meta_campaign_sync_enabled;
     nieuw.meta_campagne_exclusief = await zonderBotsingen(supabase, meta.meta_campagne_exclusief, k.id).catch(() => ({}));
     nieuw.meta_campagne_uitgesloten = meta.meta_campagne_uitgesloten;
+    /* "Alleen eigen campagne" gaat mee. Los opgevraagd: zonder de kolom
+       (migratie 201) levert dit niets op en loopt de rest gewoon door. */
+    const { data: eigen } = await supabase.from('customer_batches').select('alleen_eigen_campagne').eq('id', b.id).maybeSingle();
+    if ((eigen as { alleen_eigen_campagne?: boolean | null } | null)?.alleen_eigen_campagne === true) nieuw.alleen_eigen_campagne = true;
   }
 
   const { data: nb, error } = await supabase.from('customer_batches').insert(nieuw).select('id, created_at').single();

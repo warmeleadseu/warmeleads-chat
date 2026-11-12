@@ -55,6 +55,7 @@ import {
   metaFieldsFromPicks,
   uitgeslotenVanBatch,
   exclusieveCampagneLabel,
+  alleenEigenCampagneLabel,
   picksFromBatchMeta,
   Compensation,
   Batch,
@@ -452,6 +453,11 @@ export default function BatchesPage() {
                               Meta · {metaLinkCount}
                             </span>
                           )}
+                          {alleenEigenCampagneLabel(b) && (
+                            <span title="Krijgt alleen leads uit de gekoppelde campagnes" className="inline-flex w-fit items-center rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-800">
+                              Alleen eigen campagne
+                            </span>
+                          )}
                           {exclusieveCampagneLabel(b) && (
                             <span title={exclusieveCampagneLabel(b) ?? undefined} className="inline-flex w-fit items-center rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-800">
                               Exclusief
@@ -551,6 +557,11 @@ export default function BatchesPage() {
                           <span className="inline-flex items-center gap-0.5 rounded-md bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-800">
                             <GlobeAltIcon className="h-3 w-3 shrink-0" aria-hidden />
                             Meta · {metaLinkCount}
+                          </span>
+                        )}
+                        {alleenEigenCampagneLabel(b) && (
+                          <span className="inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-800">
+                            Alleen eigen campagne
                           </span>
                         )}
                         {directLabel(b) && (
@@ -675,6 +686,8 @@ function BatchDetailMetaBlock({
 
   const [metaCampaignPicks, setMetaCampaignPicks] = useState<MetaCampaignPick[]>(() => picksFromBatchMeta(batch));
   const [campagneUitgesloten, setCampagneUitgesloten] = useState<MetaCampaignPick[]>(() => uitgeslotenVanBatch(batch));
+  const [alleenEigen, setAlleenEigen] = useState(() => batch.alleen_eigen_campagne === true);
+  useEffect(() => { setAlleenEigen(batch.alleen_eigen_campagne === true); }, [batch.id, batch.alleen_eigen_campagne]);
   const { user: metaBewerker } = useAdmin();
   const toonCampagneRegels = isPipelineBatchKind(batch.batch_kind);
   const [metaSyncEnabled, setMetaSyncEnabled] = useState(() => batch.meta_campaign_sync_enabled !== false);
@@ -764,7 +777,7 @@ function BatchDetailMetaBlock({
         method: 'PUT',
         body: JSON.stringify({
           id: batch.id,
-          ...metaFieldsFromPicks(metaCampaignPicks, toonCampagneRegels ? campagneUitgesloten : undefined),
+          ...metaFieldsFromPicks(metaCampaignPicks, toonCampagneRegels ? campagneUitgesloten : undefined, toonCampagneRegels ? alleenEigen : undefined),
           meta_campaign_sync_enabled: metaSyncEnabled,
           ...savePayload,
         }),
@@ -810,7 +823,7 @@ function BatchDetailMetaBlock({
         setPicks={setMetaCampaignPicks}
         syncEnabled={metaSyncEnabled}
         setSyncEnabled={setMetaSyncEnabled}
-        campagneRegels={toonCampagneRegels ? { magWijzigen: metaBewerker.role !== 'accountmanager', uitgesloten: campagneUitgesloten, setUitgesloten: setCampagneUitgesloten } : undefined}
+        campagneRegels={toonCampagneRegels ? { magWijzigen: metaBewerker.role !== 'accountmanager', uitgesloten: campagneUitgesloten, setUitgesloten: setCampagneUitgesloten, alleenEigen, setAlleenEigen } : undefined}
         syncStatusSlot={
           (batch.meta_sync_last_error || batch.meta_sync_last_success_at) ? (
             <div className="mt-2 space-y-0.5 border-t border-indigo-200/60 pt-2 text-[10px] text-indigo-900/70">
@@ -1135,6 +1148,11 @@ function BatchDetailPanel({ batchId, branches, onClose, onEdit, onListRefresh }:
                   ) : (
                     <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-600">
                       <ExclamationCircleIcon className="h-3.5 w-3.5" /> Onbetaald
+                    </span>
+                  )}
+                  {alleenEigenCampagneLabel(batch) && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-2.5 py-1 text-xs font-semibold text-violet-800">
+                      {alleenEigenCampagneLabel(batch)}
                     </span>
                   )}
                   {exclusieveCampagneLabel(batch) && (
@@ -1676,6 +1694,8 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
 
   const [metaCampaignPicks, setMetaCampaignPicks] = useState<MetaCampaignPick[]>(() => picksFromBatchMeta(batch));
   const [campagneUitgesloten, setCampagneUitgesloten] = useState<MetaCampaignPick[]>(() => uitgeslotenVanBatch(batch));
+  const [alleenEigen, setAlleenEigen] = useState(() => batch.alleen_eigen_campagne === true);
+  useEffect(() => { setAlleenEigen(batch.alleen_eigen_campagne === true); }, [batch.id, batch.alleen_eigen_campagne]);
   const { user: metaBewerker } = useAdmin();
   const toonCampagneRegels = isPipelineBatchKind(batch.batch_kind);
   const [metaSyncEnabled, setMetaSyncEnabled] = useState(() => batch.meta_campaign_sync_enabled !== false);
@@ -1781,7 +1801,7 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
         payload.lookback_days = clamped;
       }
       if (supportsBatchMetaCampaigns(batch.batch_kind)) {
-        Object.assign(payload, metaFieldsFromPicks(metaCampaignPicks, toonCampagneRegels ? campagneUitgesloten : undefined));
+        Object.assign(payload, metaFieldsFromPicks(metaCampaignPicks, toonCampagneRegels ? campagneUitgesloten : undefined, toonCampagneRegels ? alleenEigen : undefined));
         payload.meta_campaign_sync_enabled = metaSyncEnabled;
         // Match-aware (zie BatchDetailMetaBlock):
         //  - vinkje aan → upsert met huidige meta-staat;
@@ -2063,7 +2083,7 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
               setPicks={setMetaCampaignPicks}
               syncEnabled={metaSyncEnabled}
               setSyncEnabled={setMetaSyncEnabled}
-              campagneRegels={toonCampagneRegels && !isNicheResearch ? { magWijzigen: metaBewerker.role !== 'accountmanager', uitgesloten: campagneUitgesloten, setUitgesloten: setCampagneUitgesloten } : undefined}
+              campagneRegels={toonCampagneRegels && !isNicheResearch ? { magWijzigen: metaBewerker.role !== 'accountmanager', uitgesloten: campagneUitgesloten, setUitgesloten: setCampagneUitgesloten, alleenEigen, setAlleenEigen } : undefined}
               syncStatusSlot={
                 (batch.meta_sync_last_error || batch.meta_sync_last_success_at) ? (
                   <div className="mt-2 space-y-1 border-t border-indigo-200/60 pt-2 text-[10px] text-indigo-900/70">

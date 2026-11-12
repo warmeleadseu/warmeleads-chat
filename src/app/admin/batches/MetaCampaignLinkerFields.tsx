@@ -25,6 +25,9 @@ type Props = {
     magWijzigen: boolean;
     uitgesloten: MetaCampaignPick[];
     setUitgesloten: React.Dispatch<React.SetStateAction<MetaCampaignPick[]>>;
+    /** Batch krijgt uitsluitend leads uit de gekoppelde campagnes. */
+    alleenEigen?: boolean;
+    setAlleenEigen?: (v: boolean) => void;
   };
 };
 
@@ -299,6 +302,31 @@ export function MetaCampaignLinkerFields({
           anderen). Kan deze batch de lead niet nemen, dan wacht hij of komt hij in Restleads; een andere klant krijgt hem in die tijd niet.
           Een campagne kan maar bij één klant exclusief zijn.
         </p>
+      )}
+
+      {campagneRegels?.setAlleenEigen && (
+        <div className={`mb-3 rounded-md border px-2.5 py-2 ${campagneRegels.alleenEigen ? 'border-violet-300 bg-violet-50' : 'border-slate-200 bg-white/70'}`}>
+          <label className={`flex items-start gap-2 text-[11px] ${campagneRegels.magWijzigen ? 'cursor-pointer' : 'cursor-not-allowed opacity-70'}`}>
+            <input
+              type="checkbox"
+              checked={campagneRegels.alleenEigen === true}
+              disabled={!campagneRegels.magWijzigen}
+              onChange={e => campagneRegels.setAlleenEigen?.(e.target.checked)}
+              className="mt-0.5 rounded border-violet-300 text-violet-600 focus:ring-violet-500"
+            />
+            <span>
+              <span className="font-semibold text-violet-900">Alleen leads uit de gekoppelde campagnes</span>
+              <span className="block text-[10px] text-slate-600">
+                Deze batch krijgt geen leads uit andere campagnes en geen leads zonder campagne, ook niet in zijn regio.
+                Zet de campagne hierboven ook op &quot;altijd exclusief&quot;, dan gaan de leads ervan ook naar niemand anders.
+                {!campagneRegels.magWijzigen && ' Alleen een admin of superadmin kan dit wijzigen.'}
+              </span>
+            </span>
+          </label>
+          {campagneRegels.alleenEigen && picks.length === 0 && (
+            <p className="mt-1.5 text-[10px] font-semibold text-rose-700">Er is nog geen campagne gekoppeld: deze batch krijgt zo geen enkele lead.</p>
+          )}
+        </div>
       )}
 
       {campagneRegels && (
