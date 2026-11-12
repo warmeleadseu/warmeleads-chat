@@ -27,7 +27,7 @@ export const maxDuration = 60;
 
 const START = '2026-05-01';
 const SOORTEN = ['leads', 'bulk_leads', 'niche_research'];
-const PERIODES: PeriodeSoort[] = ['week', 'maand', 'kwartaal', 'jaar'];
+const PERIODES: PeriodeSoort[] = ['dag', 'week', 'maand', 'kwartaal', 'jaar'];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** Afspraken die niet als geleverd tellen (zie appointmentBatchSync.ts). */
 const AFSPRAAK_NIET_GELEVERD = new Set(['cancelled', 'rescheduled']);

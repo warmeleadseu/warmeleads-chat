@@ -28,7 +28,12 @@ const kleur = (n: number) => (n > 0 ? 'text-emerald-600' : n < 0 ? 'text-red-600
 const datumKort = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 
 const MAANDEN = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
+const WEEKDAGEN = ['zo', 'ma', 'di', 'wo', 'do', 'vr', 'za'];
+/** Per dag: in de grafiek de laatste 60 dagen, in de tabel eerst de laatste 31. */
+const DAGEN_GRAFIEK = 60;
+const DAGEN_TABEL = 31;
 function label(p: PeriodeResultaat, soort: PeriodeSoort): string {
+  if (soort === 'dag') { const d = new Date(`${p.sleutel}T12:00:00Z`); return `${WEEKDAGEN[d.getUTCDay()]} ${d.getUTCDate()} ${MAANDEN[d.getUTCMonth()]}`; }
   if (soort === 'maand') { const [j, m] = p.sleutel.split('-').map(Number); return `${MAANDEN[m - 1]} ${j}`; }
   if (soort === 'kwartaal') return p.sleutel.replace('-K', ' K');
   if (soort === 'jaar') return p.sleutel;
@@ -66,7 +71,7 @@ function Grafiek({ perioden, soort }: { perioden: PeriodeResultaat[]; soort: Per
               )}
               <rect x={x} y={y} width={w} height={Math.max(1, hoogte)} rx={3} fill={p.netto >= 0 ? '#10b981' : '#ef4444'} opacity={p.lopend ? 0.65 : 1} />
               <text x={x + w / 2} y={h + 18} textAnchor="middle" fontSize={10} fill="#64748b">
-                {soort === 'week' ? `wk ${weekNummer(new Date(`${p.van}T12:00:00Z`))}` : label(p, soort).split(' ')[0]}
+                {soort === 'week' ? `wk ${weekNummer(new Date(`${p.van}T12:00:00Z`))}` : soort === 'dag' ? String(Number(p.sleutel.slice(8))) : label(p, soort).split(' ')[0]}
               </text>
             </g>
           );
@@ -164,7 +169,7 @@ function PersoneelBeheer({ regels, onGewijzigd }: { regels: Personeel[]; onGewij
 }
 
 const SOORTEN: { waarde: PeriodeSoort; label: string }[] = [
-  { waarde: 'week', label: 'Week' }, { waarde: 'maand', label: 'Maand' }, { waarde: 'kwartaal', label: 'Kwartaal' }, { waarde: 'jaar', label: 'Jaar' },
+  { waarde: 'dag', label: 'Dag' }, { waarde: 'week', label: 'Week' }, { waarde: 'maand', label: 'Maand' }, { waarde: 'kwartaal', label: 'Kwartaal' }, { waarde: 'jaar', label: 'Jaar' },
 ];
 
 export default function ResultaatPerPeriode({ filter }: { filter: WinstFilterStand }) {
@@ -172,6 +177,7 @@ export default function ResultaatPerPeriode({ filter }: { filter: WinstFilterSta
   const [data, setData] = useState<Antwoord | null>(null);
   const [laden, setLaden] = useState(true);
   const [fout, setFout] = useState<string | null>(null);
+  const [alleDagen, setAlleDagen] = useState(false);
   const volgnummer = useRef(0);
 
   const laad = useCallback(async () => {
@@ -196,8 +202,13 @@ export default function ResultaatPerPeriode({ filter }: { filter: WinstFilterSta
   useEffect(() => { void laad(); }, [laad]);
 
   const perioden = data?.perioden ?? [];
-  const nieuwsteEerst = [...perioden].reverse();
+  const perDag = soort === 'dag';
+  const alleNieuwsteEerst = [...perioden].reverse();
+  const nieuwsteEerst = perDag && !alleDagen ? alleNieuwsteEerst.slice(0, DAGEN_TABEL) : alleNieuwsteEerst;
+  const grafiekPerioden = perDag ? perioden.slice(-DAGEN_GRAFIEK) : perioden;
   const huidig = perioden[perioden.length - 1];
+  /* Per dag is vandaag nog niet af: daarom ook gisteren als vergelijking. */
+  const gisteren = perDag ? perioden[perioden.length - 2] : undefined;
   const totaal = perioden.reduce((s, p) => ({
     verdiend: s.verdiend + p.verdiend, gefactureerd: s.gefactureerd + p.gefactureerd, advertentie: s.advertentie + p.advertentie,
     brutowinst: s.brutowinst + p.brutowinst, personeel: s.personeel + p.personeel, netto: s.netto + p.netto, leveringen: s.leveringen + p.leveringen,
@@ -234,11 +245,19 @@ export default function ResultaatPerPeriode({ filter }: { filter: WinstFilterSta
               <p className={`mt-1 text-xl font-bold tabular-nums ${kleur(huidig.netto)}`}>{eur(huidig.netto)}</p>
               <p className="mt-0.5 text-xs text-slate-400">marge {pct(huidig.marge)}</p>
             </div>
-            <div className="rounded-xl border border-slate-200 bg-white p-4">
-              <p className="text-xs font-medium text-slate-500">Prognose hele {soort === 'week' ? 'week' : soort === 'maand' ? 'maand' : soort === 'kwartaal' ? 'kwartaal' : 'jaar'}</p>
-              <p className={`mt-1 text-xl font-bold tabular-nums ${kleur(huidig.prognose?.netto ?? huidig.netto)}`}>{eur(huidig.prognose?.netto ?? huidig.netto)}</p>
-              <p className="mt-0.5 text-xs text-slate-400">bij het huidige tempo</p>
-            </div>
+            {perDag ? (
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <p className="text-xs font-medium text-slate-500">Netto gisteren{gisteren ? ` (${label(gisteren, soort)})` : ''}</p>
+                <p className={`mt-1 text-xl font-bold tabular-nums ${kleur(gisteren?.netto ?? 0)}`}>{eur(gisteren?.netto ?? null)}</p>
+                <p className="mt-0.5 text-xs text-slate-400">marge {pct(gisteren?.marge)}</p>
+              </div>
+            ) : (
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <p className="text-xs font-medium text-slate-500">Prognose hele {soort === 'week' ? 'week' : soort === 'maand' ? 'maand' : soort === 'kwartaal' ? 'kwartaal' : 'jaar'}</p>
+                <p className={`mt-1 text-xl font-bold tabular-nums ${kleur(huidig.prognose?.netto ?? huidig.netto)}`}>{eur(huidig.prognose?.netto ?? huidig.netto)}</p>
+                <p className="mt-0.5 text-xs text-slate-400">bij het huidige tempo</p>
+              </div>
+            )}
             <div className="rounded-xl border border-slate-200 bg-white p-4">
               <p className="text-xs font-medium text-slate-500">Break-even {label(huidig, soort)}</p>
               <p className="mt-1 text-xl font-bold tabular-nums text-slate-900">{eur(huidig.prognose ? huidig.prognose.advertentie + huidig.prognose.personeel : huidig.breakEven)}</p>
@@ -252,8 +271,15 @@ export default function ResultaatPerPeriode({ filter }: { filter: WinstFilterSta
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-white p-4">
-            <p className="mb-2 text-xs font-medium text-slate-500">Nettoresultaat per {soort}{huidig.prognose ? ' (gestippeld: prognose lopende periode)' : ''}</p>
-            <Grafiek perioden={perioden} soort={soort} />
+            <p className="mb-2 text-xs font-medium text-slate-500">
+              Nettoresultaat per {soort}{perDag ? `, laatste ${Math.min(DAGEN_GRAFIEK, perioden.length)} dagen` : ''}{huidig.prognose ? ' (gestippeld: prognose lopende periode)' : ''}
+            </p>
+            <Grafiek perioden={grafiekPerioden} soort={soort} />
+            {perDag && (
+              <p className="mt-2 text-[11px] text-slate-400">
+                Vandaag is nog niet af: leveringen en advertentiekosten van vandaag lopen nog op. Personeel telt elke dag mee, ook in het weekend.
+              </p>
+            )}
           </div>
 
           <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
@@ -296,6 +322,15 @@ export default function ResultaatPerPeriode({ filter }: { filter: WinstFilterSta
                     <td className="px-3 py-2 text-right tabular-nums text-slate-600">{eur2(p.kostenPerLead)}</td>
                   </tr>
                 ))}
+                {perDag && alleNieuwsteEerst.length > DAGEN_TABEL && (
+                  <tr className="border-t border-slate-100">
+                    <td colSpan={11} className="px-3 py-2 text-center">
+                      <button onClick={() => setAlleDagen(a => !a)} className="text-xs font-semibold text-brand-purple hover:underline">
+                        {alleDagen ? `Alleen de laatste ${DAGEN_TABEL} dagen` : `Toon alle ${alleNieuwsteEerst.length} dagen`}
+                      </button>
+                    </td>
+                  </tr>
+                )}
                 <tr className="border-t-2 border-slate-200 bg-slate-50/60 font-semibold">
                   <td className="px-3 py-2 text-slate-700">Totaal sinds 1 mei</td>
                   <td className="px-3 py-2 text-right tabular-nums">{eur(totaal.verdiend)}</td>

@@ -19,7 +19,7 @@
  * Alle dagen zijn Nederlandse kalenderdagen (YYYY-MM-DD).
  */
 
-export type PeriodeSoort = 'week' | 'maand' | 'kwartaal' | 'jaar';
+export type PeriodeSoort = 'dag' | 'week' | 'maand' | 'kwartaal' | 'jaar';
 
 export type WinstBatch = {
   id: string;
@@ -107,6 +107,7 @@ export function dagenTussen(van: string, tot: string): string[] {
 
 /** Sleutel en eerste en laatste dag van de periode waar een dag in valt. */
 export function periodeVan(dag: string, soort: PeriodeSoort): { sleutel: string; van: string; tot: string } {
+  if (soort === 'dag') return { sleutel: dag, van: dag, tot: dag };
   const [j, m] = dag.split('-').map(Number);
   const iso = (d: Date) => d.toISOString().slice(0, 10);
   if (soort === 'jaar') return { sleutel: `${j}`, van: `${j}-01-01`, tot: `${j}-12-31` };

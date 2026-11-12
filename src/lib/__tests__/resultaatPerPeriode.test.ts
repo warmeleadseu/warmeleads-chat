@@ -123,3 +123,34 @@ describe('bouwResultaat', () => {
     expect(maanden).toBeCloseTo(6000 - 1200 - 3 * 8500, 1);
   });
 });
+
+describe('per dag', () => {
+  const regels = [{ bedrag_per_maand: 9300, ingang: '2026-05-01', einde: null }];
+  const m = (o: Record<string, number>) => new Map(Object.entries(o));
+
+  it('periodeVan: een dag is zijn eigen periode', () => {
+    expect(periodeVan('2026-11-12', 'dag')).toEqual({ sleutel: '2026-11-12', van: '2026-11-12', tot: '2026-11-12' });
+  });
+
+  it('elke dag een eigen regel met zijn eigen omzet, kosten en personeel', () => {
+    const r = bouwResultaat({
+      soort: 'dag', start: '2026-05-01', vandaag: '2026-05-03',
+      verdiend: m({ '2026-05-02': 1000 }), gefactureerd: new Map(), advertentie: m({ '2026-05-01': 200, '2026-05-02': 300 }),
+      leveringen: m({ '2026-05-02': 10 }), personeel: regels,
+    });
+    expect(r.map(x => x.sleutel)).toEqual(['2026-05-01', '2026-05-02', '2026-05-03']);
+    expect(r[0]).toMatchObject({ verdiend: 0, advertentie: 200, personeel: 300, netto: -500, lopend: false });
+    expect(r[1]).toMatchObject({ verdiend: 1000, advertentie: 300, brutowinst: 700, personeel: 300, netto: 400, leveringen: 10 });
+    expect(r[2]).toMatchObject({ lopend: true, prognose: null });
+  });
+
+  it('dagen tellen op tot hetzelfde totaal als maanden', () => {
+    const basis = {
+      start: '2026-05-01', vandaag: '2026-07-31',
+      verdiend: m({ '2026-05-03': 1000, '2026-06-20': 2000, '2026-07-30': 3000 }), gefactureerd: new Map<string, number>(),
+      advertentie: m({ '2026-05-04': 500, '2026-07-01': 700 }), leveringen: new Map<string, number>(), personeel: regels,
+    };
+    const tel = (rs: { netto: number }[]) => rs.reduce((s, x) => s + x.netto, 0);
+    expect(tel(bouwResultaat({ ...basis, soort: 'dag' }))).toBeCloseTo(tel(bouwResultaat({ ...basis, soort: 'maand' })), 0);
+  });
+});
