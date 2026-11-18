@@ -12,7 +12,7 @@ import {
   XMarkIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
-import { beschrijfMoment } from '@/lib/restleadPlanning';
+import { SPREIDING_OPTIES, beschrijfMoment, spreidOverWerkuren } from '@/lib/restleadPlanning';
 import { TERUGDRAAI_VENSTER_MINUTEN } from '@/lib/restleads';
 import { LEGE_LEADFILTERS, telActieveLeadFilters, type LeadFilterStand } from '@/lib/leadFilterState';
 import { standNaarFilterParams } from '@/lib/leadFilterParams';
@@ -116,6 +116,14 @@ function naarParams(stand: LeadFilterStand, kanNaar: string[]): Record<string, s
   return p;
 }
 
+/** "ongeveer 1 lead per 8 minuten" bij een selectie die over een aantal werkuren binnendruppelt. */
+function tempoTekst(aantal: number, uren: number): string {
+  const minuten = (uren * 60) / Math.max(1, aantal - 1);
+  if (minuten >= 90) return `ongeveer 1 lead per ${Math.round(minuten / 6) / 10} uur`.replace('.', ',');
+  if (minuten >= 1) { const n = Math.round(minuten); return `ongeveer 1 lead per ${n} ${n === 1 ? 'minuut' : 'minuten'}`; }
+  return `ongeveer ${Math.round(1 / minuten)} leads per minuut`;
+}
+
 export default function RestleadsPage() {
   const [kansrijk, setKansrijk] = useState<Restlead[]>([]);
   const [verlopen, setVerlopen] = useState<Restlead[]>([]);
@@ -129,6 +137,8 @@ export default function RestleadsPage() {
   const [wachtrij, setWachtrij] = useState<WachtrijRij[]>([]);
   const [wachtrijLaden, setWachtrijLaden] = useState(false);
   const [massaBezig, setMassaBezig] = useState(false);
+  /* "Deel selectie uit": over hoeveel werkuren de leads binnendruppelen (0 = direct). */
+  const [spreidingUren, setSpreidingUren] = useState(0);
   const [historie, setHistorie] = useState<WachtrijRij[]>([]);
   /* Hoeveel regels er getoond worden. De lijst "verlopen" telt 1.300 leads en
      die allemaal tekenen maakt het scherm stroperig. */
@@ -403,7 +413,13 @@ export default function RestleadsPage() {
     const leads = metSelectie;
     if (leads.length === 0) return;
     const leveringen = leads.reduce((t, l) => t + (selectie[l.id]?.size ?? 0), 0);
-    if (!confirm(`${leads.length} lead${leads.length === 1 ? '' : 's'} uitdelen aan de klanten die je hebt aangevinkt (${leveringen} levering${leveringen === 1 ? '' : 'en'})?`)) return;
+    const spreiding = SPREIDING_OPTIES.find(o => o.uren === spreidingUren) ?? SPREIDING_OPTIES[0];
+    const tempo = spreidingUren > 0 && leads.length > 1 ? `
+
+${spreiding.label.toLowerCase()} (werktijd 9:00 tot 17:00): ${tempoTekst(leads.length, spreidingUren)}.` : '';
+    if (!confirm(`${leads.length} lead${leads.length === 1 ? '' : 's'} uitdelen aan de klanten die je hebt aangevinkt (${leveringen} levering${leveringen === 1 ? '' : 'en'})?${tempo}`)) return;
+    /* Per lead het vroegste moment voor zijn eerste klant, gelijk verdeeld over de gekozen werkuren. */
+    const starts = spreidOverWerkuren(new Date(), leads.length, spreidingUren);
 
     setMassaBezig(true);
     setMelding(null);
@@ -411,7 +427,7 @@ export default function RestleadsPage() {
     const weg = new Set<string>();
     const fouten: string[] = [];
     try {
-      for (const lead of leads) {
+      for (const [i, lead] of leads.entries()) {
         const gekozen = selectie[lead.id];
         const doelen = lead.kandidaten
           .filter(k => gekozen?.has(k.customer_id))
@@ -420,7 +436,11 @@ export default function RestleadsPage() {
         try {
           const res = await adminFetch('/api/admin/restleads/uitdelen', {
             method: 'POST',
-            body: JSON.stringify({ lead_id: lead.id, doelen }),
+            body: JSON.stringify(
+              spreidingUren > 0
+                ? { lead_id: lead.id, doelen, vanaf: starts[i].toISOString(), spreiding_uren: spreidingUren }
+                : { lead_id: lead.id, doelen },
+            ),
           });
           const d = await res.json().catch(() => ({}));
           if (!res.ok) { fouten.push(`${lead.naam_klant ?? 'lead'}: ${d.error || 'mislukt'}`); continue; }
@@ -597,6 +617,22 @@ export default function RestleadsPage() {
             >
               <ArrowDownTrayIcon className={`h-4 w-4 ${exportBezig ? 'animate-pulse' : ''}`} /> {exportBezig ? 'Exporteren...' : 'Export'}
             </button>
+          )}
+          {metSelectie.length > 0 && (
+            <label className="flex items-center gap-1.5 text-xs text-slate-500" title="Over hoeveel werkuren (9:00 tot 17:00) de selectie binnendruppelt bij de eerste klant. De wachttijd tussen klanten en het dagmaximum blijven gelden.">
+              <span className="hidden sm:inline">Uitdelen</span>
+              <select
+                value={spreidingUren}
+                onChange={e => setSpreidingUren(Number(e.target.value))}
+                disabled={massaBezig}
+                className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-sm font-medium text-slate-700"
+              >
+                {SPREIDING_OPTIES.map(o => <option key={o.uren} value={o.uren}>{o.label}</option>)}
+              </select>
+              {spreidingUren > 0 && metSelectie.length > 1 && (
+                <span className="hidden whitespace-nowrap lg:inline">{tempoTekst(metSelectie.length, spreidingUren)}</span>
+              )}
+            </label>
           )}
           {metSelectie.length > 0 && (
             <button

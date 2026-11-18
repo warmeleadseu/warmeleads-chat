@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { herverdeel, type WachtrijItem } from './restleadPlanning';
 import { wachttijdUren } from './wachttijdKlanten';
-import { RESTLEAD_REDEN } from './restleads';
+import { RESTLEAD_REDEN, VAST_TIJDSTIP } from './restleads';
 import { laadInterneKlantIds } from './interneKlanten';
 
 /**
@@ -30,6 +30,8 @@ export async function herverdeelRestleadWachtrij(
     .select('id, lead_id, customer_id, gepland_voor')
     .eq('status', 'gepland')
     .like('reden', `${RESTLEAD_REDEN}%`)
+    /* Een selectie die je bewust over een paar uur liet binnendruppelen, houdt zijn tijden. */
+    .not('reden', 'like', `%${VAST_TIJDSTIP}%`)
     .gt('gepland_voor', vanaf)
     .limit(2000);
   if (klantIds && klantIds.length > 0) q = q.in('customer_id', klantIds);

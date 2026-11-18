@@ -33,6 +33,8 @@ export const MAX_UITDELINGEN = 2;
  * plaatst heeft er immers zelf voor gekozen het daarbij te laten.
  */
 export const RESTLEAD_REDEN = 'Restleads:';
+/** In de reden van een levering met een bewust gekozen tijdstip ("Deel selectie uit" met spreiding); de herverdeling laat die staan. */
+export const VAST_TIJDSTIP = 'Vast tijdstip:';
 
 /**
  * Hoe lang een handmatige uitdeling nog teruggedraaid kan worden.

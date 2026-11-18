@@ -4,8 +4,8 @@ import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { assignLeadToBatch } from '@/lib/assignLeadToBatch';
 import { campagneWeigering, laadCampagneRegels } from '@/lib/campagneExclusiviteit';
-import { MAX_UITDELINGEN, RESTLEAD_REDEN } from '@/lib/restleads';
-import { planMomenten, dagSleutel } from '@/lib/restleadPlanning';
+import { MAX_UITDELINGEN, RESTLEAD_REDEN, VAST_TIJDSTIP } from '@/lib/restleads';
+import { planMomenten, dagSleutel, isSpreidingUren } from '@/lib/restleadPlanning';
 import { herverdeelRestleadWachtrij } from '@/lib/restleadWachtrij';
 import { laadInterneKlantIds } from '@/lib/interneKlanten';
 
@@ -22,6 +22,12 @@ import { laadInterneKlantIds } from '@/lib/interneKlanten';
  * binnen een middag door drie bedrijven gebeld, precies wat die cooldown moet
  * voorkomen. Met `meteen: true` gaat alles ineens, wat logisch is bij oude
  * leads uit de lijst "verlopen" die als bulk worden verkocht.
+ *
+ * Met `vanaf` (en `spreiding_uren`) komt de lead niet eerder dan dat moment
+ * bij de eerste klant. "Deel selectie uit" laat zo een selectie gelijkmatig
+ * binnendruppelen over een gekozen aantal werkuren (restleadPlanning.ts,
+ * spreidOverWerkuren). Die tijden zijn bewust gekozen: de herverdeling van de
+ * wachtrij (restleadWachtrij.ts) laat ze staan.
  */
 
 const MIRROR = 'mirror';
@@ -84,6 +90,17 @@ export async function POST(request: NextRequest) {
   const leadId: string = body.lead_id;
   const doelen: Doel[] = Array.isArray(body.doelen) ? body.doelen : [];
   const meteen: boolean = body.meteen === true;
+  /* Niet eerder dan dit moment naar de eerste klant. Hooguit een maand vooruit;
+     iets in het verleden betekent gewoon "nu". */
+  let vanaf: Date | null = null;
+  if (body.vanaf != null && !meteen) {
+    const t = new Date(String(body.vanaf));
+    if (Number.isNaN(t.getTime()) || t.getTime() > Date.now() + 31 * 86_400_000) {
+      return NextResponse.json({ error: 'Ongeldig starttijdstip' }, { status: 400 });
+    }
+    if (t.getTime() > Date.now()) vanaf = t;
+  }
+  const spreidingUren = isSpreidingUren(body.spreiding_uren) ? body.spreiding_uren : 0;
 
   if (!leadId || doelen.length === 0) {
     return NextResponse.json({ error: 'lead_id en minimaal een klant zijn verplicht' }, { status: 400 });
@@ -177,6 +194,7 @@ export async function POST(request: NextRequest) {
     : teDoen.map((doel, i) => {
         const p = plafonds.get(doel.customer_id);
         return planMomenten({
+          nu: vanaf ?? undefined,
           laatsteToewijzing: laatste,
           aantal: i + 1,
           klantenAl: telt.size,
@@ -255,7 +273,9 @@ export async function POST(request: NextRequest) {
       status: 'gepland',
       pogingen: 0,
       negeer_geo: true,
-      reden: `${RESTLEAD_REDEN} gespreid volgens de wachttijd tussen klanten (12 uur, 8 uur voor de derde).`,
+      reden: spreidingUren > 0
+        ? `${RESTLEAD_REDEN} ${VAST_TIJDSTIP} selectie gespreid over ${spreidingUren} werkuren, met de wachttijd tussen klanten (12 uur, 8 uur voor de derde).`
+        : `${RESTLEAD_REDEN} gespreid volgens de wachttijd tussen klanten (12 uur, 8 uur voor de derde).`,
       aangemaakt_door: admin.id,
     }).select('id').single();
 

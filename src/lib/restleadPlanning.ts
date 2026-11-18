@@ -275,3 +275,50 @@ export function beschrijfMoment(moment: Date, nu: Date = new Date()): string {
   if (dag === morgen) return `morgen ${tijd}`;
   return `${moment.toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short', timeZone: TIJDZONE })} ${tijd}`;
 }
+
+/**
+ * Een moment plus een aantal werkminuten: tijd buiten het leververvenster
+ * (9:00 tot 17:00 Nederlandse tijd) telt niet mee. Om 16:00 plus twee
+ * werkuren is dus de volgende ochtend 10:00.
+ */
+export function plusWerkminuten(start: Date, minuten: number): Date {
+  let t = naarWerkbaarMoment(start);
+  let rest = Math.max(0, minuten);
+  /* Begrensd: zelfs twee werkdagen vraagt hooguit een paar rondes. */
+  for (let i = 0; i < 400; i++) {
+    const ruimte = (vensterEinde(t).getTime() - t.getTime()) / 60_000;
+    if (rest <= ruimte) return new Date(t.getTime() + rest * 60_000);
+    rest -= ruimte;
+    t = vensterBegin(t, 1);
+  }
+  return t;
+}
+
+/** Keuzes voor "Deel selectie uit": over hoeveel werkuren de leads binnendruppelen. 0 = alles direct. */
+export const SPREIDING_OPTIES: { uren: number; label: string }[] = [
+  { uren: 0, label: 'Direct' },
+  { uren: 1, label: 'In 1 uur' },
+  { uren: 2, label: 'In 2 uur' },
+  { uren: 4, label: 'In 4 uur' },
+  { uren: 8, label: 'In 1 werkdag' },
+  { uren: 16, label: 'In 2 werkdagen' },
+];
+
+export function isSpreidingUren(n: unknown): n is number {
+  return typeof n === 'number' && SPREIDING_OPTIES.some(o => o.uren === n);
+}
+
+/**
+ * Starttijden voor een selectie restleads die je over een aantal werkuren wilt
+ * laten binnendruppelen (18 nov 2026): de eerste meteen, de laatste aan het
+ * eind, de rest gelijk ertussen. Werktijd telt door: wat na 17:00 zou vallen,
+ * gaat de volgende ochtend verder. Dit is het vroegste moment voor de eerste
+ * klant van elke lead; de wachttijd tussen klanten en het dagmaximum komen
+ * daar in `planMomenten` nog bovenop.
+ */
+export function spreidOverWerkuren(start: Date, aantal: number, uren: number): Date[] {
+  if (aantal <= 0) return [];
+  if (uren <= 0 || aantal === 1) return Array.from({ length: aantal }, () => new Date(start));
+  const stap = (uren * 60) / (aantal - 1);
+  return Array.from({ length: aantal }, (_, i) => plusWerkminuten(start, i * stap));
+}

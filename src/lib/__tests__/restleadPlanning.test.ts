@@ -10,6 +10,10 @@ import {
   COOLDOWN_UREN,
   VROEGSTE_UUR,
   LAATSTE_UUR,
+  plusWerkminuten,
+  spreidOverWerkuren,
+  SPREIDING_OPTIES,
+  isSpreidingUren,
   type WachtrijItem,
 } from '../restleadPlanning';
 
@@ -234,5 +238,49 @@ describe('beschrijfMoment', () => {
 
   it('noemt de dag bij verder weg', () => {
     expect(beschrijfMoment(new Date('2026-09-27T07:00:00Z'), NU)).toContain('09:00');
+  });
+});
+
+describe('selectie spreiden over werkuren', () => {
+  /* 18 nov 2026 is wintertijd (UTC+1). */
+  const om = (uur: number, minuut = 0, dag = 18) => nlMoment(2026, 11, dag, uur, minuut);
+  const kl = (d: Date) => { const k = nlKlok(d); return `${k.dag}-${k.uur}:${String(k.minuut).padStart(2, '0')}`; };
+
+  it('plusWerkminuten: binnen werktijd gewoon erbij, daarbuiten door naar de volgende ochtend', () => {
+    expect(kl(plusWerkminuten(om(10), 90))).toBe('18-11:30');
+    expect(kl(plusWerkminuten(om(16), 120))).toBe('19-10:00');
+    expect(kl(plusWerkminuten(om(20), 30))).toBe('19-9:30');
+    expect(kl(plusWerkminuten(om(7), 0))).toBe('18-9:00');
+  });
+
+  it('eerste meteen, laatste aan het eind, de rest gelijk ertussen', () => {
+    const m = spreidOverWerkuren(om(10), 5, 2);
+    expect(m.map(kl)).toEqual(['18-10:00', '18-10:30', '18-11:00', '18-11:30', '18-12:00']);
+  });
+
+  it('loopt door over de nacht: om 15:00 vier uur spreiden eindigt de volgende ochtend om 11:00', () => {
+    const m = spreidOverWerkuren(om(15), 3, 4);
+    expect(m.map(kl)).toEqual(['18-15:00', '18-17:00', '19-11:00']);
+  });
+
+  it('direct of één lead: alles op het startmoment', () => {
+    expect(spreidOverWerkuren(om(10), 3, 0).map(kl)).toEqual(['18-10:00', '18-10:00', '18-10:00']);
+    expect(spreidOverWerkuren(om(10), 1, 4).map(kl)).toEqual(['18-10:00']);
+    expect(spreidOverWerkuren(om(10), 0, 4)).toEqual([]);
+  });
+
+  it('de wachttijd tussen klanten komt bovenop het gekozen moment', () => {
+    const start = spreidOverWerkuren(om(10), 3, 2)[2]; // 12:00
+    const [eerste] = planMomenten({ laatsteToewijzing: null, aantal: 1, nu: start });
+    expect(kl(eerste)).toBe('18-12:00');
+    const [tweede] = planMomenten({ laatsteToewijzing: om(9), aantal: 1, klantenAl: 1, nu: start });
+    expect(kl(tweede)).toBe('19-9:00');
+  });
+
+  it('alleen bekende keuzes', () => {
+    expect(SPREIDING_OPTIES.map(o => o.uren)).toEqual([0, 1, 2, 4, 8, 16]);
+    expect(isSpreidingUren(4)).toBe(true);
+    expect(isSpreidingUren(3)).toBe(false);
+    expect(isSpreidingUren('4')).toBe(false);
   });
 });
