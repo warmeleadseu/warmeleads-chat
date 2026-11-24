@@ -5,7 +5,8 @@ import {
   isOutboundWebhookSyncReady,
 } from './integrationRepo';
 import { buildWebhookPayload } from './payload';
-import { sendWebhookRequest } from './transport';
+import { isDefinitieveWeigering, sendWebhookRequest } from './transport';
+import { MAX_SYNC_ATTEMPTS } from '@/lib/integrations/syncPogingen';
 import { resolveStreetName } from '@/lib/pdok';
 import { OUTBOUND_WEBHOOK_PROVIDER, type LeadForWebhook } from './types';
 
@@ -122,6 +123,21 @@ export async function syncAssignmentToOutboundWebhook(args: WebhookSyncArgs): Pr
         assignmentId,
       });
       return;
+    }
+
+    if (!res.ok && res.outcome === 'http_error' && isDefinitieveWeigering(res.status)) {
+      /* 400, 401 en dergelijke: de ontvanger weigert deze lead of ons verzoek.
+         Opnieuw sturen geeft hetzelfde antwoord, dus de teller op het maximum
+         zodat de retry-cron hem laat liggen. Zichtbaar blijft hij als mislukt;
+         na een aanpassing van de koppeling gaat hij vanzelf opnieuw. */
+      await supabase
+        .from('integration_sync_log')
+        .update({ attempts: MAX_SYNC_ATTEMPTS })
+        .eq('assignment_id', assignmentId)
+        .eq('provider', OUTBOUND_WEBHOOK_PROVIDER);
+      throw new Error(
+        `${res.errorMessage ?? `Webhook gaf HTTP ${res.status}`} (definitief, niet opnieuw geprobeerd)`,
+      );
     }
 
     if (!res.ok) {

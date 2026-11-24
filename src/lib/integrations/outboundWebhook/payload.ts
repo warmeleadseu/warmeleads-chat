@@ -75,6 +75,29 @@ export function samenvatting(
   return delen.length > 0 ? delen.join('. ') : null;
 }
 
+/** Een gewoon huisnummer: 12, 12a, 12 A, 12-2, 12 bis, 12 hs, 12/3. */
+const GEWOON_HUISNUMMER = /^\d{1,6}\s*[a-zA-Z]{0,3}(\s*[-/]?\s*\w{1,6})?$/;
+/** Het eerste huisnummer in een vrije tekst, met een losse letter erachter. */
+const EERSTE_HUISNUMMER = /\d{1,6}(?:\s*[a-zA-Z](?![a-zA-Z]))?/;
+
+/**
+ * Haalt het huisnummer uit wat de klant in het formulier typte.
+ *
+ * Soms staat er meer in dan een nummer, zoals "Bremerf 13 nieuwbouw is over 6
+ * maanden klaar" of "Flintdijk 140/140/140". Een ontvanger met een strikt
+ * huisnummerveld weigert dan de hele lead (DTA: maximaal 20 tekens). Een
+ * gewoon huisnummer blijft precies zoals het was; alleen bij extra tekst
+ * pakken we het eerste nummer. De oorspronkelijke tekst gaat mee in de
+ * samenvatting, zodat er geen informatie verloren gaat.
+ */
+export function schoonHuisnummer(raw: string | null | undefined): string | null {
+  const tekst = (raw ?? '').trim().replace(/\s+/g, ' ');
+  if (!tekst) return null;
+  if (GEWOON_HUISNUMMER.test(tekst)) return tekst;
+  const match = tekst.match(EERSTE_HUISNUMMER);
+  return match ? match[0].replace(/\s+/g, ' ') : tekst;
+}
+
 function nullable(value: unknown): string | null {
   if (value === null || value === undefined) return null;
   const str = String(value).trim();
@@ -99,7 +122,15 @@ export function buildLeadSourceValues(
   const categorieen = resolveCategorieen(lead.branch, lead.custom_fields ?? null);
   const gesplitst = splitsNaam(lead.naam_klant);
   const straatnaam = nullable(straat);
-  const huisnummer = nullable(lead.huisnummer);
+  const ingevuldHuisnummer = nullable(lead.huisnummer);
+  const huisnummer = schoonHuisnummer(ingevuldHuisnummer);
+  const basisSamenvatting = samenvatting(lead.custom_fields ?? null, lead.notities ?? null);
+  const huisnummerNotitie =
+    ingevuldHuisnummer && huisnummer !== ingevuldHuisnummer
+      ? `Huisnummer zoals ingevuld: ${ingevuldHuisnummer}`
+      : null;
+  const volledigeSamenvatting =
+    [basisSamenvatting, huisnummerNotitie].filter(Boolean).join('. ') || null;
   const adres = straatnaam
     ? [straatnaam, huisnummer].filter(Boolean).join(' ').trim()
     : [nullable(lead.postcode), huisnummer].filter(Boolean).join(' ').trim();
@@ -124,7 +155,7 @@ export function buildLeadSourceValues(
     lead_id: lead.id,
     assignment_id: assignmentId,
     aangemaakt_op: nullable(lead.created_at),
-    samenvatting: samenvatting(lead.custom_fields ?? null, lead.notities ?? null),
+    samenvatting: volledigeSamenvatting,
   };
 
   // Branche-specifieke antwoorden uit custom_fields beschikbaar maken onder

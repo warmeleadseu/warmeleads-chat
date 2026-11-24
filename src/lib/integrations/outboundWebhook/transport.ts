@@ -86,6 +86,19 @@ export function leesOntvangerUitslag(body: string): { geweigerd: string | null; 
   return { geweigerd: null, notitie: null };
 }
 
+/**
+ * Of een HTTP-fout van de ontvanger definitief is: opnieuw versturen levert
+ * hetzelfde antwoord op. Dat geldt voor 4xx (ongeldige lead, geen toegang),
+ * behalve 408 (timeout), 425 (te vroeg) en 429 (te veel verzoeken): die gaan
+ * over het moment, niet over de lead. 5xx en netwerkfouten zijn tijdelijk.
+ * Een definitieve fout komt pas weer in de wachtrij als de koppeling wordt
+ * aangepast (zie saveOutboundWebhookConfig).
+ */
+export function isDefinitieveWeigering(status: number): boolean {
+  if (status < 400 || status >= 500) return false;
+  return status !== 408 && status !== 425 && status !== 429;
+}
+
 type SendOptions = {
   /** Stabiele sleutel zodat de ontvanger zelf kan dedupliceren. */
   idempotencyKey?: string | null;

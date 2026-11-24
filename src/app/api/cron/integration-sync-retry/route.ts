@@ -11,6 +11,7 @@ import { TEAMLEADER_PROVIDER } from '@/lib/teamleader/types';
 import { getTeamleaderConnectionState } from '@/lib/teamleader/integrationRepo';
 import { syncAssignmentToOutboundWebhook } from '@/lib/integrations/outboundWebhook/syncAssignment';
 import { verifyCronAuth } from '@/lib/cronAuth';
+import { MAX_SYNC_ATTEMPTS } from '@/lib/integrations/syncPogingen';
 import { meldIntegratieStoringen } from '@/lib/integrations/storingMelding';
 import { PARTNER_PROVIDERS, partnerOpProvider, PARTNERS } from '@/lib/integrations/partners/registry';
 import {
@@ -34,7 +35,7 @@ import {
 /* Partnerleveringen worden gedoseerd (limiet van de partner); ruim genoeg. */
 export const maxDuration = 300;
 
-const MAX_ATTEMPTS = 8;
+const MAX_ATTEMPTS = MAX_SYNC_ATTEMPTS;
 const MISSING_LOOKBACK_HOURS = 72;
 const MISSING_BATCH_LIMIT = 30;
 
