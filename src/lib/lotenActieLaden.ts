@@ -264,10 +264,14 @@ export type ActieSamenvatting = {
   winnaar: string | null;
 };
 
-/** Voor het live-dashboard: de stand van de zichtbare actie, of null als er geen in beeld hoort. */
+/**
+ * Voor het live-dashboard: de stand van de actie zolang die loopt, anders null.
+ * Na afloop verdwijnt de slide meteen van het dashboard (nov 2026, op verzoek);
+ * het portaal toont de uitslag nog wel een tijd (zie actieZichtbaar).
+ */
 export async function laadActieSamenvatting(supabase: SupabaseClient, nu: Date = new Date()): Promise<ActieSamenvatting | null> {
   const zichtbaar = await laadZichtbareActie(supabase, nu);
-  if (!zichtbaar) return null;
+  if (!zichtbaar || nu.getTime() >= Date.parse(zichtbaar.actie.eind)) return null;
   const { actie, trekking } = zichtbaar;
   const deelnemers = (await laadDeelnemers(supabase, actie, { nu })).filter(d => d.totaal > 0);
   let winnaar: string | null = null;
