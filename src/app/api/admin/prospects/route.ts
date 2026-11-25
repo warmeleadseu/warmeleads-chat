@@ -7,12 +7,12 @@ import {
   isAccountManagerScope,
   isValidSource,
   isValidStatus,
-  PROSPECT_STATUSES,
 } from '@/lib/prospects';
 import {
   buildProspectFilterApplicator,
   readProspectListFiltersFromUrl,
 } from '@/lib/prospectsListFilters';
+import { alleProspectRijen, telPerStatus } from '@/lib/prospectTelling';
 
 const DEFAULT_LIMIT = 25;
 const MAX_LIMIT = 200;
@@ -50,6 +50,9 @@ export async function GET(request: NextRequest) {
 
   dataQuery = dataQuery
     .order(sortCol, { ascending: asc, nullsFirst: false })
+    /* Na een import delen veel prospects hetzelfde tijdstip; zonder vaste
+       tweede volgorde kan er tussen twee pagina's een wegvallen. */
+    .order('id')
     .range((page - 1) * limit, page * limit - 1);
 
   const [
@@ -102,16 +105,17 @@ export async function GET(request: NextRequest) {
   // Statusfacets (alleen op page=1 of expliciet)
   let stats: Record<string, number> | undefined;
   if (includeStats || page === 1) {
-    let statusBase = supabase.from('prospects').select('status');
-    statusBase = applyAmScope(statusBase, admin);
-    const { data: statusRows } = await statusBase;
-    stats = {};
-    for (const s of PROSPECT_STATUSES) stats[s] = 0;
-    for (const r of statusRows || []) {
-      const s = r.status as string;
-      if (s in stats) stats[s] += 1;
+    try {
+      const statusRows = await alleProspectRijen<{ status: string }>((van, tot) => {
+        let q = supabase.from('prospects').select('status');
+        q = applyAmScope(q, admin);
+        return q.order('id').range(van, tot);
+      });
+      stats = { ...telPerStatus(statusRows), total: statusRows.length };
+    } catch (err) {
+      /* De lijst zelf is er wel; alleen de tellers blijven dan zoals ze waren. */
+      console.error('[prospects] statustelling mislukt:', err instanceof Error ? err.message : err);
     }
-    stats.total = (statusRows || []).length;
   }
 
   return NextResponse.json({

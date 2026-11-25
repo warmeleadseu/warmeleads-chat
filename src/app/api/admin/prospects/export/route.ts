@@ -105,7 +105,7 @@ async function fetchProspectsByFilters(
     const batchSize = Math.min(PAGE_SIZE, hardLimit - out.length);
     let query = supabase.from('prospects').select('*');
     query = apply(query);
-    query = query.order('updated_at', { ascending: false, nullsFirst: false });
+    query = query.order('updated_at', { ascending: false, nullsFirst: false }).order('id');
     query = query.range(offset, offset + batchSize - 1);
 
     const { data, error } = await query;

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
-import { applyAmScope, PROSPECT_STATUSES } from '@/lib/prospects';
+import { applyAmScope } from '@/lib/prospects';
+import { alleProspectRijen, telPerStatus } from '@/lib/prospectTelling';
 
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
@@ -10,17 +11,18 @@ export async function GET(request: NextRequest) {
   const supabase = createServerClient();
 
   // Status counts
-  let statusBase = supabase.from('prospects').select('status, account_manager_id, converted_at, created_at, next_action_at');
-  statusBase = applyAmScope(statusBase, admin);
-
-  const { data: rows } = await statusBase;
-  const all = rows || [];
-
-  const statusCounts: Record<string, number> = {};
-  for (const s of PROSPECT_STATUSES) statusCounts[s] = 0;
-  for (const r of all) {
-    if (r.status in statusCounts) statusCounts[r.status] += 1;
+  let all: { status: string; converted_at: string | null }[];
+  try {
+    all = await alleProspectRijen<{ status: string; converted_at: string | null }>((van, tot) => {
+      let q = supabase.from('prospects').select('status, converted_at');
+      q = applyAmScope(q, admin);
+      return q.order('id').range(van, tot);
+    });
+  } catch (err) {
+    console.error('[prospects/stats]', err instanceof Error ? err.message : err);
+    return NextResponse.json({ error: 'Prospects tellen mislukt' }, { status: 500 });
   }
+  const statusCounts = telPerStatus(all);
 
   // Conversies deze maand
   const startOfMonth = new Date();

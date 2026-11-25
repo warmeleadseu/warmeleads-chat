@@ -587,7 +587,7 @@ export default function ProspectsPage() {
       <ExportProspectsDialog
         open={exportOpen}
         onClose={() => setExportOpen(false)}
-        filterCount={stats.total ?? total}
+        filterCount={total}
         selectedIds={Array.from(selected)}
         filters={{
           search: deferredSearch.trim() || undefined,
