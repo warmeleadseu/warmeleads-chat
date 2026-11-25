@@ -28,6 +28,8 @@ export interface IcsAfspraak {
   branch?: string | null;
   updated_at?: string | null;
   created_at?: string | null;
+  /** Een terugbelmoment in plaats van een afspraak. */
+  soort?: 'afspraak' | 'terugbellen';
 }
 
 /** Vouwt een regel volgens RFC 5545: maximaal 75 octetten, vervolg begint met een spatie. */
@@ -97,29 +99,34 @@ export function bouwAgendaIcs(
     ].filter(Boolean).join(', ');
 
     const branche = a.branch ? (opties.branchNamen?.[a.branch] ?? a.branch) : '';
-    const titel = branche ? `${a.contact_name} (${branche})` : a.contact_name;
+    const terugbellen = a.soort === 'terugbellen';
+    const pad = terugbellen ? '/portal' : '/portal/agenda';
+    const basisTitel = branche ? `${a.contact_name} (${branche})` : a.contact_name;
+
+    const titel = terugbellen ? `Terugbellen: ${basisTitel}` : basisTitel;
 
     const omschrijving: string[] = [];
     if (a.contact_phone) omschrijving.push(`Telefoon: ${a.contact_phone}`);
     if (a.contact_email) omschrijving.push(`E-mail: ${a.contact_email}`);
     if (a.notes) omschrijving.push(`Opmerkingen: ${a.notes}`);
-    omschrijving.push(`Openen in portaal: ${opties.siteUrl}/portal/agenda`);
+    omschrijving.push(`Openen in portaal: ${opties.siteUrl}${pad}`);
 
     const stempelBron = a.updated_at || a.created_at || a.starts_at;
     const stempel = new Date(stempelBron);
 
     regels.push(
       'BEGIN:VEVENT',
-      `UID:afspraak-${a.id}@warmeleads.eu`,
+      `UID:${terugbellen ? 'terugbellen' : 'afspraak'}-${a.id}@warmeleads.eu`,
       `DTSTAMP:${formatIcsDate(Number.isNaN(stempel.getTime()) ? start : stempel)}`,
       `DTSTART:${formatIcsDate(start)}`,
       `DTEND:${formatIcsDate(eind)}`,
       `SUMMARY:${escapeIcs(titel)}`,
       `DESCRIPTION:${escapeIcs(omschrijving.join('\n'))}`,
       ...(adres ? [`LOCATION:${escapeIcs(adres)}`] : []),
-      `URL:${opties.siteUrl}/portal/agenda`,
+      `URL:${opties.siteUrl}${pad}`,
       `STATUS:${icsStatus(a.status)}`,
-      'TRANSP:OPAQUE',
+      /* Een terugbelmoment houdt de agenda niet bezet. */
+      terugbellen ? 'TRANSP:TRANSPARENT' : 'TRANSP:OPAQUE',
       'END:VEVENT',
     );
   }

@@ -26,6 +26,7 @@ import { IMPERSONATION_HANDOFF_PREFIX, IMPERSONATION_HANDOFF_TTL_MS } from '@/li
 import { PERMISSIONS } from '@/lib/portalPermissions';
 import { UsersIcon, FlagIcon } from '@heroicons/react/24/outline';
 import { ToastProvider, AnnouncementBar } from './_ui';
+import { TerugbelProvider } from './_terugbellen/context';
 
 /**
  * Self-healing loading-screen voor het portal.
@@ -1069,9 +1070,11 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
             {!isDemoPortalExperience(customer) && hasPermFn(PERMISSIONS.ORDERS_CREATE) && <NabestelBanner />}
           </div>
           {!isAdminView && <InstallBanner />}
-          <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 lg:px-8">
-            {children}
-          </main>
+          <TerugbelProvider alleenKijken={isAdminView}>
+            <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 lg:px-8">
+              {children}
+            </main>
+          </TerugbelProvider>
           <PortalFooter />
         </div>
       </ToastProvider>

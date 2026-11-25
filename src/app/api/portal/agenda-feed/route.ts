@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
+import { terugbellenAan } from '@/lib/terugbellenServer';
 import { bouwAgendaIcs, controleerAgendaToken, type IcsAfspraak } from '@/lib/agendaIcs';
 
 /**
@@ -63,12 +64,36 @@ export async function GET(request: NextRequest) {
     return new NextResponse('Agenda kon niet worden geladen', { status: 500 });
   }
 
+  /* Open terugbelmomenten, als de klant die functie heeft (migratie 202). */
+  const terugbel: IcsAfspraak[] = [];
+  if (await terugbellenAan(supabase, customerId)) {
+    let t = supabase
+      .from('lead_terugbelmomenten')
+      .select('id, terug_op, notitie, updated_at, leads!inner(naam_klant, telefoonnummer, plaatsnaam, branch, toestemming_ingetrokken_op)')
+      .eq('customer_id', customerId)
+      .eq('status', 'open')
+      .is('leads.toestemming_ingetrokken_op', null)
+      .gte('terug_op', van.toISOString())
+      .order('terug_op')
+      .limit(1000);
+    if (portalUserId) t = t.or(`portal_user_id.eq.${portalUserId},voor_iedereen.eq.true`);
+    const { data: momenten } = await t;
+    for (const m of momenten ?? []) {
+      const lead = (Array.isArray(m.leads) ? m.leads[0] : m.leads) as { naam_klant: string | null; telefoonnummer: string | null; plaatsnaam: string | null; branch: string } | null;
+      terugbel.push({
+        id: m.id as string, starts_at: m.terug_op as string, duration_minutes: 15, status: 'scheduled', soort: 'terugbellen',
+        contact_name: lead?.naam_klant || 'Lead', contact_phone: lead?.telefoonnummer, city: lead?.plaatsnaam, notes: m.notitie as string | null,
+        branch: lead?.branch, updated_at: m.updated_at as string | null,
+      });
+    }
+  }
+
   const { data: branches } = await supabase.from('branches').select('slug, name');
   const branchNamen: Record<string, string> = {};
   for (const b of branches || []) branchNamen[b.slug] = b.name;
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.warmeleads.eu';
-  const ics = bouwAgendaIcs((data || []) as IcsAfspraak[], {
+  const ics = bouwAgendaIcs([...((data || []) as IcsAfspraak[]), ...terugbel], {
     kalenderNaam: `WarmeLeads agenda — ${klant.name}`,
     siteUrl,
     branchNamen,

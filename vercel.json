@@ -65,6 +65,10 @@
       "schedule": "* * * * *"
     },
     {
+      "path": "/api/cron/terugbellen",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/cron/betaalherinneringen",
       "schedule": "0 8 * * *"
     },

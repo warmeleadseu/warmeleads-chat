@@ -12,6 +12,7 @@ import { repairDemoAssignmentsIfNeeded } from '@/lib/demoPortalLeads';
 import { getHasPaidCustomerBatch, shouldUseDemoPortalExperience } from '@/lib/demoPortalEligibility';
 import { buildPhoneSearchIlikeClauses, sanitizePostgrestIlike } from '@/lib/phoneSearch';
 import { isValidLeadStatus } from '@/lib/leadStatuses';
+import { TERUGBELLEN } from '@/lib/terugbellen';
 import {
   matchesPostcodeArea,
   parseMaxDistanceKm,
@@ -576,6 +577,11 @@ export async function PUT(request: NextRequest) {
 
     if (status !== undefined && !isValidLeadStatus(status)) {
       return NextResponse.json({ error: `Ongeldige status: ${status}` }, { status: 400 });
+    }
+
+    /* Terugbellen kan alleen met een tijdstip: zie /api/portal/terugbellen. */
+    if (status === TERUGBELLEN) {
+      return NextResponse.json({ error: 'Kies een datum en tijd om terug te bellen' }, { status: 400 });
     }
 
     const supabase = createServerClient();

@@ -10,7 +10,7 @@
  * onbetrouwbaar bij weinig leads of weinig bijgewerkte statussen.
  */
 
-export const OPVOLG_STATUSSEN = ['gecontacteerd', 'geen_gehoor', 'afspraak', 'offerte', 'verkocht', 'afgewezen'] as const;
+export const OPVOLG_STATUSSEN = ['gecontacteerd', 'geen_gehoor', 'terugbellen', 'afspraak', 'offerte', 'verkocht', 'afgewezen'] as const;
 export type OpvolgStatus = (typeof OPVOLG_STATUSSEN)[number];
 
 /** Pas na zoveel dagen verwachten we dat een klant een lead heeft bijgewerkt. */

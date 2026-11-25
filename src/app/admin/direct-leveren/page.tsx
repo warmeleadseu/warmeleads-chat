@@ -28,7 +28,7 @@ const GROEPEN: { sleutel: Groep; titel: string; uitleg: string }[] = [
   { sleutel: 'geen', titel: 'Normaal', uitleg: 'Gewone verdeling, zonder Snelraak' },
 ];
 const STATUS_LABEL: Record<OpvolgStatus, string> = {
-  gecontacteerd: 'Gecontacteerd', geen_gehoor: 'Geen gehoor', afspraak: 'Afspraak', offerte: 'Offerte', verkocht: 'Verkocht', afgewezen: 'Afgewezen',
+  gecontacteerd: 'Gecontacteerd', geen_gehoor: 'Geen gehoor', terugbellen: 'Terugbellen', afspraak: 'Afspraak', offerte: 'Offerte', verkocht: 'Verkocht', afgewezen: 'Afgewezen',
 };
 
 /** Kalenderdag in Nederlandse tijd (de API rekent ook in Amsterdamse dagen). */

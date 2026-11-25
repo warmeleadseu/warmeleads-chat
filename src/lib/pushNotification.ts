@@ -32,8 +32,15 @@ export async function sendPushToCustomer(customerId: string, payload: PushPayloa
     .select('id, endpoint, p256dh, auth')
     .eq('customer_id', customerId);
 
-  if (!subs || subs.length === 0) return { sent: 0, failed: 0, cleaned: 0 };
+  return verstuurPush(subs ?? [], payload);
+}
 
+export type PushAanmelding = { id: string; endpoint: string; p256dh: string; auth: string };
+
+/** Stuurt naar deze aanmeldingen en ruimt verlopen aanmeldingen op. */
+export async function verstuurPush(subs: PushAanmelding[], payload: PushPayload): Promise<{ sent: number; failed: number; cleaned: number }> {
+  if (!VAPID_PUBLIC || !VAPID_PRIVATE || subs.length === 0) return { sent: 0, failed: 0, cleaned: 0 };
+  const supabase = createServerClient();
   const message = JSON.stringify(payload);
   let sent = 0;
   let failed = 0;

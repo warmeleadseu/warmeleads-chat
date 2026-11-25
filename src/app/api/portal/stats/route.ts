@@ -157,7 +157,7 @@ export async function GET(request: NextRequest) {
   const totalLeads = scoped.length;
   /* Op ontvangstdatum bij deze klant; demo-leads en directe leads zonder toewijzing op aanmaakdatum. */
   const newThisWeek = scoped.filter(l => new Date(demoMode ? l.created_at : (ontvangenOp[l.id] ?? l.created_at)) >= weekAgo).length;
-  const contacted = scoped.filter(l => l.status === 'gecontacteerd').length;
+  const contacted = scoped.filter(l => l.status === 'gecontacteerd' || l.status === 'terugbellen').length;
   const sold = scoped.filter(l => l.status === 'verkocht').length;
 
   const statusCounts: Record<string, number> = {};

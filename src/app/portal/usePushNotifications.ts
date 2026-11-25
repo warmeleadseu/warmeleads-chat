@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { portalFetch } from '@/lib/portalAuth';
+import { apparaatKenmerk } from './_terugbellen/apparaat';
 
 const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || '';
 
@@ -143,7 +144,7 @@ export function usePushNotifications() {
 
       const res = await portalFetch('/api/portal/push-subscribe', {
         method: 'POST',
-        body: JSON.stringify({ subscription: subJson }),
+        body: JSON.stringify({ subscription: subJson, apparaat: apparaatKenmerk() }),
       });
 
       if (!res.ok) {

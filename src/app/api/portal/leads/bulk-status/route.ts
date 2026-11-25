@@ -7,6 +7,7 @@ import {
   buildPortalAgentLeadScope,
 } from '@/lib/portalAgentLeadScope';
 import { isValidLeadStatus } from '@/lib/leadStatuses';
+import { TERUGBELLEN } from '@/lib/terugbellen';
 import { logLeadActivity } from '@/lib/leadActivities';
 
 /**
@@ -30,6 +31,10 @@ export async function POST(request: NextRequest) {
   const status = typeof body.status === 'string' ? body.status : '';
   if (!isValidLeadStatus(status)) {
     return NextResponse.json({ error: `Ongeldige status: ${status}` }, { status: 400 });
+  }
+
+  if (status === TERUGBELLEN) {
+    return NextResponse.json({ error: 'Terugbellen plan je per lead, met een datum en tijd' }, { status: 400 });
   }
 
   const leadIds = Array.isArray(body.lead_ids)

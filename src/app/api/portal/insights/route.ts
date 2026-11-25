@@ -130,7 +130,8 @@ export async function GET(request: NextRequest) {
   const total = leads.length;
 
   const nieuw = leads.filter(l => l.status === 'nieuw').length;
-  const gecontacteerd = leads.filter(l => l.status === 'gecontacteerd').length;
+  /* Terugbellen is ook gecontacteerd: er ligt een afspraak om te bellen. */
+  const gecontacteerd = leads.filter(l => l.status === 'gecontacteerd' || l.status === 'terugbellen').length;
   const geen_gehoor = leads.filter(l => l.status === 'geen_gehoor').length;
   const offerte = leads.filter(l => l.status === 'offerte').length;
   const verkocht = leads.filter(l => l.status === 'verkocht').length;

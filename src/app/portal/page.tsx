@@ -71,6 +71,10 @@ import {
 } from '@/lib/portalBatches';
 import { PortalPendingBatchesCard } from './_components/PortalPendingBatchesCard';
 import LeadAppointmentSchedulePrompt from './_components/LeadAppointmentSchedulePrompt';
+import { useTerugbellen, LEAD_STATUS_EVENT, OPEN_LEAD_EVENT, type LeadStatusEvent } from './_terugbellen/context';
+import TerugbelLijst from './_terugbellen/TerugbelLijst';
+import GeenGehoorVraag from './_terugbellen/GeenGehoorVraag';
+import { momentLabel } from '@/lib/terugbellen';
 import BookAppointmentModal from './agenda/BookAppointmentModal';
 import { leadRowToAppointmentPrefill } from '@/lib/leadAppointmentPrefill';
 import { RECLAMATION_REASONS, RECLAMATION_STATUS_MAP, reclamationReasonLabel } from './_constants/reclamaties';
@@ -368,6 +372,11 @@ export default function PortalPage() {
 
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [schedulePromptLead, setSchedulePromptLead] = useState<Lead | null>(null);
+  const terugbel = useTerugbellen();
+  const [geenGehoorLead, setGeenGehoorLead] = useState<Lead | null>(null);
+  /* Zonder de terugbelfunctie staat de status niet in de keuzelijsten. */
+  const statusOpties = (huidig?: string) =>
+    STATUS_OPTIONS.filter((o) => o.value !== 'all' && (o.value !== 'terugbellen' || terugbel.aan || huidig === 'terugbellen'));
   const [showBookFromLead, setShowBookFromLead] = useState(false);
   const [agendaTeam, setAgendaTeam] = useState<{ id: string; name: string; role: string }[]>([]);
   const [assignTeam, setAssignTeam] = useState<{ id: string; name: string; role: string }[]>([]);
@@ -814,6 +823,11 @@ export default function PortalPage() {
   };
 
   const handleStatusUpdate = async (lead: Lead, newStatus: string) => {
+    /* Terugbellen vraagt eerst om een datum en tijd; pas daarna verandert de status. */
+    if (newStatus === 'terugbellen') {
+      terugbel.plan({ lead_id: lead.id, naam: lead.naam_klant });
+      return;
+    }
     const oldStatus = lead.status;
 
     setLeads(prev => prev.map(l => l.id === lead.id ? { ...l, status: newStatus } : l));
@@ -832,6 +846,8 @@ export default function PortalPage() {
       }
       showToast('Status bijgewerkt');
       fetchStats(true);
+      if (oldStatus === 'terugbellen') void terugbel.ververs();
+      setGeenGehoorLead(newStatus === 'geen_gehoor' && terugbel.aan ? lead : null);
       if (newStatus === 'afspraak') {
         const updated = { ...lead, status: newStatus };
         setSchedulePromptLead(updated);
@@ -844,6 +860,49 @@ export default function PortalPage() {
       showToast(err instanceof Error ? err.message : 'Fout bij bijwerken status', 'error');
     }
   };
+
+  /* Een status die via het terugbellen veranderde (plannen of afhandelen). */
+  useEffect(() => {
+    const onStatus = (e: Event) => {
+      const { lead_id, status } = (e as CustomEvent<LeadStatusEvent>).detail;
+      setLeads((prev) => prev.map((l) => (l.id === lead_id ? { ...l, status } : l)));
+      setSelectedLead((prev) => (prev && prev.id === lead_id ? { ...prev, status } : prev));
+      void fetchStats(true);
+      if (status === 'afspraak') {
+        const lead = leads.find((l) => l.id === lead_id);
+        if (lead) setSchedulePromptLead({ ...lead, status });
+      }
+    };
+    window.addEventListener(LEAD_STATUS_EVENT, onStatus);
+    return () => window.removeEventListener(LEAD_STATUS_EVENT, onStatus);
+  }, [leads, fetchStats]);
+
+  /* Een lead openen vanuit de pop-up of de terugbellijst. */
+  const openLeadVanMoment = useCallback(async (m: { lead_id: string; naam: string; telefoon: string | null }) => {
+    const inLijst = leads.find((l) => l.id === m.lead_id);
+    if (inLijst) { setSelectedLead(inLijst); return; }
+    try {
+      const params = new URLSearchParams({ search: m.telefoon || m.naam, limit: '25', page: '1' });
+      const res = await portalFetch(`/api/portal/leads?${params.toString()}`);
+      const data = (await res.json().catch(() => ({}))) as { leads?: Lead[] };
+      const gevonden = (data.leads ?? []).find((l) => l.id === m.lead_id);
+      if (gevonden) setSelectedLead(gevonden);
+      else showToast('De lead kon niet worden geopend', 'error');
+    } catch {
+      showToast('De lead kon niet worden geopend', 'error');
+    }
+  }, [leads, showToast]);
+  useEffect(() => {
+    const onOpen = (e: Event) => { void openLeadVanMoment((e as CustomEvent<{ lead_id: string; naam: string; telefoon: string | null }>).detail); };
+    window.addEventListener(OPEN_LEAD_EVENT, onOpen);
+    return () => window.removeEventListener(OPEN_LEAD_EVENT, onOpen);
+  }, [openLeadVanMoment]);
+  /* Vanaf een andere pagina: de provider onthoudt welke lead open moet. */
+  useEffect(() => {
+    const wacht = terugbel.neemTeOpenen();
+    if (wacht) void openLeadVanMoment(wacht);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- alleen bij het openen van de pagina
+  }, []);
 
   const dismissSchedulePrompt = () => {
     setShowBookFromLead(false);
@@ -1202,8 +1261,9 @@ export default function PortalPage() {
     { value: 'nieuw', label: 'Nieuw' },
     { value: 'gecontacteerd', label: 'Gecontacteerd' },
     { value: 'geen_gehoor', label: 'Geen gehoor' },
+    ...(terugbel.aan ? [{ value: 'terugbellen', label: 'Terugbellen' }] : []),
     { value: 'offerte', label: 'Offerte' },
-  ] as const;
+  ];
 
   const handleBulkStatus = useCallback(async (status: string) => {
     const leadIds = await resolveSelectedLeadIds();
@@ -1705,7 +1765,7 @@ export default function PortalPage() {
                     onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
                     className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-700 outline-none focus:border-brand-purple/50"
                   >
-                    {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    {STATUS_OPTIONS.filter(o => o.value !== 'terugbellen' || terugbel.aan).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
                 </div>
                 <div>
@@ -2006,6 +2066,8 @@ export default function PortalPage() {
         </div>
       )}
 
+      <TerugbelLijst onOpen={(m) => void openLeadVanMoment(m)} />
+
       {/* Quick status triage */}
       <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5">
         {STATUS_QUICK_PILLS.map((pill) => {
@@ -2199,7 +2261,7 @@ export default function PortalPage() {
                           onChange={(e) => handleStatusUpdate(lead, e.target.value)}
                           className={`rounded-full border-0 px-2.5 py-0.5 text-[11px] font-medium outline-none ${STATUS_COLORS[lead.status] || 'bg-slate-100 text-slate-600'}`}
                         >
-                          {STATUS_OPTIONS.filter(o => o.value !== 'all').map(o => (
+                          {statusOpties(lead.status).map(o => (
                             <option key={o.value} value={o.value}>{o.label}</option>
                           ))}
                         </select>
@@ -2343,7 +2405,7 @@ export default function PortalPage() {
                     onChange={(e) => handleStatusUpdate(lead, e.target.value)}
                     className={`rounded-full border-0 px-2.5 py-1 text-[11px] font-medium outline-none ${STATUS_COLORS[lead.status] || 'bg-slate-100 text-slate-600'}`}
                   >
-                    {STATUS_OPTIONS.filter(o => o.value !== 'all').map(o => (
+                    {statusOpties(lead.status).map(o => (
                       <option key={o.value} value={o.value}>{o.label}</option>
                     ))}
                   </select>
@@ -2471,7 +2533,7 @@ export default function PortalPage() {
               canAssign={canAssign}
               canEditStatus={canEditStatus}
               teamMembers={assignTeam}
-              statusOptions={STATUS_OPTIONS.filter((o) => o.value !== 'all').map((o) => ({
+              statusOptions={statusOpties().filter((o) => o.value !== 'terugbellen').map((o) => ({
                 value: o.value,
                 label: o.label,
               }))}
@@ -2543,6 +2605,17 @@ export default function PortalPage() {
             canSchedule={canScheduleAppointments}
             onSchedule={() => setShowBookFromLead(true)}
             onDismiss={dismissSchedulePrompt}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {geenGehoorLead && (
+          <GeenGehoorVraag
+            key={geenGehoorLead.id}
+            naam={geenGehoorLead.naam_klant}
+            onPlan={() => { terugbel.plan({ lead_id: geenGehoorLead.id, naam: geenGehoorLead.naam_klant }); setGeenGehoorLead(null); }}
+            onSluit={() => setGeenGehoorLead(null)}
           />
         )}
       </AnimatePresence>
@@ -2638,6 +2711,9 @@ function LeadDetailPanel({
     onNotesChange(notes);
     setNotesDirty(false);
   };
+
+  const terugbel = useTerugbellen();
+  const terugbelMoment = terugbel.momenten.find((m) => m.lead_id === lead.id) ?? null;
 
   const requestClose = () => {
     if (notesDirty) {
@@ -2800,10 +2876,16 @@ function LeadDetailPanel({
                 onChange={(e) => onStatusChange(e.target.value)}
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 outline-none focus:border-brand-purple/50"
               >
-                {STATUS_OPTIONS.filter(o => o.value !== 'all').map(o => (
+                {STATUS_OPTIONS.filter(o => o.value !== 'all' && (o.value !== 'terugbellen' || terugbel.aan || lead.status === 'terugbellen')).map(o => (
                   <option key={o.value} value={o.value}>{o.label}</option>
                 ))}
               </select>
+              {terugbelMoment && (
+                <div className="mt-2 flex items-center justify-between gap-2 rounded-lg bg-sky-50 px-3 py-2 text-sm text-sky-800">
+                  <span className="min-w-0">Terugbellen <strong>{momentLabel(terugbelMoment.terug_op)}</strong>{terugbelMoment.notitie ? <span className="block truncate text-xs text-sky-700/80">{terugbelMoment.notitie}</span> : null}</span>
+                  <button type="button" onClick={() => terugbel.plan({ lead_id: lead.id, naam: lead.naam_klant })} className="shrink-0 text-xs font-semibold text-sky-700 hover:underline">Verzetten</button>
+                </div>
+              )}
             </div>
 
             {canAssign && onAssign && (
@@ -3436,6 +3518,7 @@ function MiniCharts({ stats, getBranch }: { stats: Stats & { statusBreakdown?: R
     gecontacteerd: '#F59E0B',
     geen_gehoor: '#F97316',
     offerte: '#8B5CF6',
+    terugbellen: '#0EA5E9',
     verkocht: '#10B981',
     afgewezen: '#94A3B8',
   };
@@ -3444,6 +3527,7 @@ function MiniCharts({ stats, getBranch }: { stats: Stats & { statusBreakdown?: R
     nieuw: 'Nieuw',
     gecontacteerd: 'Gecontacteerd',
     geen_gehoor: 'Geen gehoor',
+    terugbellen: 'Terugbellen',
     offerte: 'Offerte',
     verkocht: 'Verkocht',
     afgewezen: 'Afgewezen',
