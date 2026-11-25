@@ -211,8 +211,8 @@ export default function ResultaatPerPeriode({ filter }: { filter: WinstFilterSta
   const gisteren = perDag ? perioden[perioden.length - 2] : undefined;
   const totaal = perioden.reduce((s, p) => ({
     verdiend: s.verdiend + p.verdiend, gefactureerd: s.gefactureerd + p.gefactureerd, advertentie: s.advertentie + p.advertentie,
-    brutowinst: s.brutowinst + p.brutowinst, personeel: s.personeel + p.personeel, netto: s.netto + p.netto, leveringen: s.leveringen + p.leveringen,
-  }), { verdiend: 0, gefactureerd: 0, advertentie: 0, brutowinst: 0, personeel: 0, netto: 0, leveringen: 0 });
+    brutowinst: s.brutowinst + p.brutowinst, winstdeling: s.winstdeling + p.winstdeling, personeel: s.personeel + p.personeel, netto: s.netto + p.netto, leveringen: s.leveringen + p.leveringen,
+  }), { verdiend: 0, gefactureerd: 0, advertentie: 0, brutowinst: 0, winstdeling: 0, personeel: 0, netto: 0, leveringen: 0 });
 
   return (
     <section className="space-y-3">
@@ -220,7 +220,7 @@ export default function ResultaatPerPeriode({ filter }: { filter: WinstFilterSta
         <div>
           <h2 className="text-base font-bold text-slate-900">Resultaat per periode</h2>
           <p className="max-w-3xl text-xs text-slate-500">
-            Verdiende omzet (geleverde leads naar rato, op de leverdag) min de advertentiekosten en de personeelskosten. Vanaf 1 mei 2026, excl. btw;
+            Verdiende omzet (geleverde leads naar rato, op de leverdag) min de advertentiekosten, de winst die met een derde wordt gedeeld en de personeelskosten. Vanaf 1 mei 2026, excl. btw;
             interne klanten tellen niet mee. De lopende periode telt tot vandaag, met een prognose voor de hele periode.
           </p>
         </div>
@@ -260,7 +260,7 @@ export default function ResultaatPerPeriode({ filter }: { filter: WinstFilterSta
             )}
             <div className="rounded-xl border border-slate-200 bg-white p-4">
               <p className="text-xs font-medium text-slate-500">Break-even {label(huidig, soort)}</p>
-              <p className="mt-1 text-xl font-bold tabular-nums text-slate-900">{eur(huidig.prognose ? huidig.prognose.advertentie + huidig.prognose.personeel : huidig.breakEven)}</p>
+              <p className="mt-1 text-xl font-bold tabular-nums text-slate-900">{eur(huidig.prognose ? huidig.prognose.advertentie + huidig.prognose.winstdeling + huidig.prognose.personeel : huidig.breakEven)}</p>
               <p className="mt-0.5 text-xs text-slate-400">omzet nodig om quitte te spelen</p>
             </div>
             <div className="rounded-xl border border-slate-200 bg-white p-4">
@@ -291,10 +291,11 @@ export default function ResultaatPerPeriode({ filter }: { filter: WinstFilterSta
                   <th className="px-3 py-2.5 text-right font-medium" title="Betaalde facturen op de betaaldag, ter vergelijking">Gefactureerd</th>
                   <th className="px-3 py-2.5 text-right font-medium">Advertentie</th>
                   <th className="px-3 py-2.5 text-right font-medium">Brutowinst</th>
+                  <th className="px-3 py-2.5 text-right font-medium" title="Winst die met een derde wordt gedeeld, over batches en bulk">Winstdeling</th>
                   <th className="px-3 py-2.5 text-right font-medium">Personeel</th>
                   <th className="px-3 py-2.5 text-right font-medium">Netto</th>
                   <th className="px-3 py-2.5 text-right font-medium">Marge</th>
-                  <th className="px-3 py-2.5 text-right font-medium" title="Advertentie + personeel">Break-even</th>
+                  <th className="px-3 py-2.5 text-right font-medium" title="Advertentie + winstdeling + personeel">Break-even</th>
                   <th className="px-3 py-2.5 text-right font-medium">Leads</th>
                   <th className="px-3 py-2.5 text-right font-medium" title="(Advertentie + personeel) / geleverde leads">Kosten/lead</th>
                 </tr>
@@ -311,6 +312,7 @@ export default function ResultaatPerPeriode({ filter }: { filter: WinstFilterSta
                     <td className="px-3 py-2 text-right tabular-nums text-slate-500">{eur(p.gefactureerd)}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{eur(p.advertentie)}{p.prognose && <span className="block text-[11px] text-slate-400">{eur(p.prognose.advertentie)}</span>}</td>
                     <td className={`px-3 py-2 text-right tabular-nums ${kleur(p.brutowinst)}`}>{eur(p.brutowinst)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{p.winstdeling ? eur(p.winstdeling) : '—'}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{eur(p.personeel)}{p.prognose && <span className="block text-[11px] text-slate-400">{eur(p.prognose.personeel)}</span>}</td>
                     <td className={`px-3 py-2 text-right font-semibold tabular-nums ${kleur(p.netto)}`}>
                       {eur(p.netto)}
@@ -337,10 +339,11 @@ export default function ResultaatPerPeriode({ filter }: { filter: WinstFilterSta
                   <td className="px-3 py-2 text-right tabular-nums text-slate-500">{eur(totaal.gefactureerd)}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{eur(totaal.advertentie)}</td>
                   <td className={`px-3 py-2 text-right tabular-nums ${kleur(totaal.brutowinst)}`}>{eur(totaal.brutowinst)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{totaal.winstdeling ? eur(totaal.winstdeling) : '—'}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{eur(totaal.personeel)}</td>
                   <td className={`px-3 py-2 text-right tabular-nums ${kleur(totaal.netto)}`}>{eur(totaal.netto)}</td>
                   <td className={`px-3 py-2 text-right tabular-nums ${kleur(totaal.netto)}`}>{pct(totaal.verdiend > 0 ? Math.round((totaal.netto / totaal.verdiend) * 1000) / 10 : null)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-slate-600">{eur(totaal.advertentie + totaal.personeel)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-slate-600">{eur(totaal.advertentie + totaal.winstdeling + totaal.personeel)}</td>
                   <td className="px-3 py-2 text-right tabular-nums text-slate-600">{totaal.leveringen}</td>
                   <td className="px-3 py-2 text-right tabular-nums text-slate-600">{eur2(totaal.leveringen > 0 ? (totaal.advertentie + totaal.personeel) / totaal.leveringen : null)}</td>
                 </tr>

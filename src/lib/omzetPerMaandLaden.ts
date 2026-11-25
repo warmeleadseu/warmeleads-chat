@@ -84,7 +84,7 @@ export async function laadExterneOmzet(supabase: SupabaseClient, vanaf: string):
   for (let p = 0; p < 50; p++) {
     const { data, error } = await supabase
       .from('externe_omzet')
-      .select('datum, bedrag_excl, soort, customer_id')
+      .select('datum, bedrag_excl, soort, customer_id, klant_naam, factuurnummer, omschrijving')
       .gte('datum', vanaf)
       .eq('telt_mee', true)
       .or('betaald.is.null,betaald.eq.true')

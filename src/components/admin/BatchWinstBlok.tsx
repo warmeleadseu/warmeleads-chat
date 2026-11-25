@@ -101,6 +101,12 @@ export default function BatchWinstBlok({ batchId }: { batchId: string }) {
                 <span>Gefactureerd</span>
                 <span className="text-right text-slate-700">{EURO2.format(w.omzet)} <span className="text-slate-400">({BRON[w.omzetBron]}, {BETAAL[w.betaalwijze]}{extNr ? `, ${extNr}` : ''})</span></span>
               </div>
+              {w.winstdeling > 0 && (
+                <div className="flex justify-between gap-2">
+                  <span>Winstdeling met een derde</span>
+                  <span className="tabular-nums text-slate-700">− {EURO2.format(w.winstdeling)} <span className="text-slate-400">(al van de winst af)</span></span>
+                </div>
+              )}
               <div className="flex justify-between gap-2">
                 <span>Geleverd</span>
                 <span className="tabular-nums text-slate-700">{w.geleverd + w.geleverdExtern} van {w.grootte}</span>

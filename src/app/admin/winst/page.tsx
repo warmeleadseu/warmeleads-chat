@@ -21,12 +21,12 @@ type Rij = {
   created_at: string; completed_at: string | null; extern_factuurnummer: string | null; extern_bedrag_excl: number | null;
   batchprijs: number; betaalwijze: Betaalwijze; omzetBron: 'extern' | 'factuur' | 'batchprijs';
   omzet: number; geleverd: number; geleverdExtern: number; grootte: number; voortgang: number; gerealiseerd: number;
-  kosten: number; winst: number; marge: number | null; kostenPerLead: number | null; opbrengstPerLead: number | null;
+  kosten: number; winstdeling: number; winst: number; marge: number | null; kostenPerLead: number | null; opbrengstPerLead: number | null;
   prognoseWinst: number | null; leadsZonderKosten: number; leadsNogNietBerekend: number; leadsLopendeWeek: number; gedeeldGemiddeld: number | null;
 };
-type Totaal = { omzet: number; gerealiseerd: number; kosten: number; winst: number; marge: number | null; prognoseWinst: number };
+type Totaal = { omzet: number; gerealiseerd: number; kosten: number; winstdeling: number; winst: number; marge: number | null; prognoseWinst: number };
 type Lekkage = { uitgaven: number; acquisitie: number; aan_batches: number; intern?: number; buiten_batch: number; onverkocht: number; rest: number };
-type OmzetBuitenBatches = { bedrag: number; facturen: { nummer: string; klant: string; bedrag: number; omschrijving: string | null; betaald: string | null }[] };
+type OmzetBuitenBatches = { bedrag: number; winstdeling: number; facturen: { nummer: string | null; customer_id: string | null; klant: string | null; bedrag: number; omschrijving: string | null; betaald: string | null; winstdeling: number }[] };
 type Antwoord = { van: string; tot: string; rijen: Rij[]; totaal: Totaal; totaalOnbetaald: Totaal; lekkage: Lekkage | null; omzetBuitenBatches?: OmzetBuitenBatches; error?: string };
 type DetailLead = {
   lead_id: string; naam: string; plaats: string; binnengekomen: string | null; geleverd_op: string;
@@ -142,6 +142,9 @@ function Detail({ rij, onOpgeslagen }: { rij: Rij; onOpgeslagen: () => void }) {
         <p>Kosten per lead: <strong>{eur2(rij.kostenPerLead)}</strong></p>
         <p>Gem. gedeeld met: <strong>{rij.gedeeldGemiddeld ? `${rij.gedeeldGemiddeld.toLocaleString('nl-NL')} klanten` : '—'}</strong></p>
       </div>
+      {rij.winstdeling > 0 && (
+        <p className="text-xs text-slate-600">Omzet {eur2(rij.gerealiseerd)} − leadkosten {eur2(rij.kosten)} − winstdeling met een derde {eur2(rij.winstdeling)} = winst <strong>{eur2(rij.winst)}</strong></p>
+      )}
       {rij.geleverdExtern > 0 && (
         <p className="text-xs text-amber-700">{rij.geleverdExtern} leads zijn buiten het platform om geleverd; die tellen mee voor de omzet, maar hun kosten zijn onbekend.</p>
       )}
@@ -245,9 +248,9 @@ export default function WinstPage() {
 
   const totaal = useMemo(() => {
     const t = zichtbaar.reduce((s, r) => ({
-      gerealiseerd: s.gerealiseerd + r.gerealiseerd, kosten: s.kosten + r.kosten, winst: s.winst + r.winst,
+      gerealiseerd: s.gerealiseerd + r.gerealiseerd, kosten: s.kosten + r.kosten, winstdeling: s.winstdeling + r.winstdeling, winst: s.winst + r.winst,
       prognose: s.prognose + (r.prognoseWinst ?? r.winst), omzet: s.omzet + r.omzet,
-    }), { gerealiseerd: 0, kosten: 0, winst: 0, prognose: 0, omzet: 0 });
+    }), { gerealiseerd: 0, kosten: 0, winstdeling: 0, winst: 0, prognose: 0, omzet: 0 });
     return { ...t, marge: t.gerealiseerd > 0 ? Math.round((t.winst / t.gerealiseerd) * 1000) / 10 : null };
   }, [zichtbaar]);
 
@@ -258,6 +261,17 @@ export default function WinstPage() {
       </button>
     </th>
   );
+
+  const buiten = useMemo(() => {
+    const o = data?.omzetBuitenBatches;
+    if (!o) return null;
+    const weg = o.facturen.filter(f => f.customer_id && uitgesloten.has(f.customer_id));
+    return {
+      facturen: o.facturen.filter(f => !weg.includes(f)),
+      bedrag: o.bedrag - weg.reduce((s, f) => s + f.bedrag, 0),
+      winstdeling: o.winstdeling - weg.reduce((s, f) => s + f.winstdeling, 0),
+    };
+  }, [data, uitgesloten]);
 
   const lek = data?.lekkage;
   const lekRegels: [string, number, string][] = lek ? [
@@ -332,7 +346,7 @@ export default function WinstPage() {
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Kpi label="Gerealiseerde omzet" waarde={eur(totaal.gerealiseerd)} sub={`van ${eur(totaal.omzet)} gefactureerd`} />
         <Kpi label="Leadkosten" waarde={eur(totaal.kosten)} />
-        <Kpi label="Winst" waarde={eur(totaal.winst)} sub={totaal.marge == null ? undefined : `${totaal.marge.toLocaleString('nl-NL')}% marge`} toon={totaal.winst >= 0 ? 'goed' : 'slecht'} />
+        <Kpi label="Winst" waarde={eur(totaal.winst)} sub={[totaal.marge == null ? null : `${totaal.marge.toLocaleString('nl-NL')}% marge`, totaal.winstdeling > 0 ? `na ${eur(totaal.winstdeling)} winstdeling` : null].filter(Boolean).join(' · ') || undefined} toon={totaal.winst >= 0 ? 'goed' : 'slecht'} />
         <Kpi label="Prognose bij voltooiing" waarde={eur(totaal.prognose)} sub="lopende batches afgemaakt tegen hun huidige kosten per lead" />
       </div>
 
@@ -390,7 +404,7 @@ export default function WinstPage() {
                       </td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{eur(r.gerealiseerd)}</td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{eur(r.kosten)}</td>
-                      <td className={`px-3 py-2.5 text-right font-semibold tabular-nums ${r.winst >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>{eur(r.winst)}</td>
+                      <td className={`px-3 py-2.5 text-right font-semibold tabular-nums ${r.winst >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>{eur(r.winst)}{r.winstdeling > 0 && <span className="block text-[11px] font-normal text-slate-400" title="Gedeeld met een derde; al van de winst af">na {eur(r.winstdeling)} deling</span>}</td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">{r.marge == null ? '—' : `${r.marge.toLocaleString('nl-NL')}%`}</td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">{eur2(r.kostenPerLead)}</td>
                       <td className={`px-3 py-2.5 text-right tabular-nums ${r.prognoseWinst != null && r.prognoseWinst < 0 ? 'text-red-600' : 'text-slate-600'}`}>{eur(r.prognoseWinst)}</td>
@@ -407,24 +421,25 @@ export default function WinstPage() {
         </div>
       )}
 
-      {data?.omzetBuitenBatches && (
+      {buiten && (
         <details className="rounded-xl border border-slate-200 bg-white p-4">
           <summary className="flex cursor-pointer list-none flex-wrap items-baseline justify-between gap-2">
             <span className="text-sm font-semibold text-slate-800">Omzet buiten batches</span>
             <span className="text-xs text-slate-400">
-              {data.omzetBuitenBatches.facturen.length} betaalde factu{data.omzetBuitenBatches.facturen.length === 1 ? 'ur' : 'ren'} zonder batch, betaald in deze periode:{' '}
-              <strong className="text-slate-700">{eur(data.omzetBuitenBatches.bedrag)}</strong>
+              {buiten.facturen.length} betaalde factu{buiten.facturen.length === 1 ? 'ur' : 'ren'} zonder batch in deze periode, ook uit Rompslomp:{' '}
+              <strong className="text-slate-700">{eur(buiten.bedrag)}</strong>{buiten.winstdeling > 0 && <>, waarvan {eur(buiten.winstdeling)} winstdeling</>}
             </span>
           </summary>
           <p className="mt-2 text-xs text-slate-500">
             Bijvoorbeeld een losse bulkverkoop. Deze omzet hoort bij geen enkele batch en staat daarom niet in de tabel; de kosten van die leads staan hieronder bij &ldquo;leads buiten een batch&rdquo;.
           </p>
-          {data.omzetBuitenBatches.facturen.length > 0 && (
+          {buiten.facturen.length > 0 && (
             <div className="mt-2 divide-y divide-slate-100 rounded-lg border border-slate-100 text-xs">
-              {data.omzetBuitenBatches.facturen.map(f => (
-                <div key={f.nummer} className="flex flex-wrap items-center gap-x-3 gap-y-0.5 px-3 py-1.5">
+              {buiten.facturen.map((f, i) => (
+                <div key={`${f.nummer ?? ''}-${i}`} className="flex flex-wrap items-center gap-x-3 gap-y-0.5 px-3 py-1.5">
                   <span className="font-medium text-slate-700">{f.nummer}</span>
-                  <span className="min-w-0 flex-1 truncate text-slate-500">{f.klant} · {f.omschrijving}</span>
+                  <span className="min-w-0 flex-1 truncate text-slate-500">{f.klant ?? 'Onbekende klant'}{f.omschrijving ? ` · ${f.omschrijving}` : ''}</span>
+                  {f.winstdeling > 0 && <span className="text-slate-400">winstdeling {eur2(f.winstdeling)}</span>}
                   <span className="text-slate-400">{datum(f.betaald)}</span>
                   <span className="w-20 text-right font-medium tabular-nums text-slate-700">{eur2(f.bedrag)}</span>
                 </div>

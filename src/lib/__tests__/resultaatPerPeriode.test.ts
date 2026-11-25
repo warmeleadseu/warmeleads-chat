@@ -96,7 +96,7 @@ describe('bouwResultaat', () => {
     });
     expect(r[0].lopend).toBe(true);
     expect(r[0].personeel).toBeCloseTo((8500 / 30) * 10, 1);
-    expect(r[0].prognose).toEqual({ verdiend: 30000, advertentie: 12000, personeel: 8500, netto: 9500 });
+    expect(r[0].prognose).toEqual({ verdiend: 30000, advertentie: 12000, winstdeling: 0, personeel: 8500, netto: 9500 });
   });
 
   it('verlies: negatief netto en negatieve marge', () => {

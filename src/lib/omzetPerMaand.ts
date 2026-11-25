@@ -19,6 +19,9 @@
  * interne klanten wel en losse facturen, afspraken en externe facturen niet.
  */
 
+/** Facturen met deze status zijn nooit omzet. */
+export const VERVALLEN_FACTUUR: ReadonlySet<string> = new Set(['expired', 'cancelled', 'canceled', 'failed', 'void']);
+
 export type OmzetSoort = 'leads' | 'bulk' | 'afspraken' | 'overig' | 'credit';
 export type OmzetPost = {
   dag: string; bedrag: number; soort: OmzetSoort;
@@ -40,7 +43,7 @@ export type OmzetFactuur = {
   created_at: string; intern?: boolean;
 };
 export type OmzetAfspraakBatch = { id: string; customer_id: string; total_price: number | string | null; created_at: string; intern?: boolean };
-export type ExterneOmzetRij = { datum: string; bedrag_excl: number | string; soort: 'bulk' | 'overig' | string; customer_id?: string | null };
+export type ExterneOmzetRij = { datum: string; bedrag_excl: number | string; soort: 'bulk' | 'overig' | string; customer_id?: string | null; klant_naam?: string | null; factuurnummer?: string | null; omschrijving?: string | null };
 
 export type OmzetInvoer = {
   /** Alleen betaalde batches. */
@@ -71,7 +74,7 @@ export function omzetPosten(i: OmzetInvoer): OmzetPost[] {
 
   const batches = new Map(i.batches.filter(telt).map(b => [b.id, b]));
   const afspraken = new Map((i.afspraakBatches ?? []).filter(telt).map(b => [b.id, b]));
-  const gewoon = i.facturen.filter(f => !f.credit_note_of);
+  const gewoon = i.facturen.filter(f => !f.credit_note_of && !VERVALLEN_FACTUUR.has(f.status));
   const perBatch = new Map<string, OmzetFactuur[]>();
   for (const f of gewoon) {
     const k = f.batch_id ? `b:${f.batch_id}` : f.appointment_batch_id ? `a:${f.appointment_batch_id}` : null;

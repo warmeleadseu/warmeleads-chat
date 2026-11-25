@@ -1,9 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { WinstFactuur, WinstKosten } from './batchWinst';
+import { VERVALLEN_FACTUUR } from './omzetPerMaand';
 
 /**
  * Facturen per batch, met creditnota's (ook die zonder eigen batch_id, via de
  * factuur waar ze bij horen). Gedeeld door het winstoverzicht en de batchkaart.
+ * Vervallen en geannuleerde facturen zijn nooit omzet.
  */
 export async function laadFacturenPerBatch(supabase: SupabaseClient, ids: string[]): Promise<Map<string, WinstFactuur[]>> {
   const perBatch = new Map<string, WinstFactuur[]>();
@@ -13,10 +15,10 @@ export async function laadFacturenPerBatch(supabase: SupabaseClient, ids: string
   for (let i = 0; i < ids.length; i += 150) {
     const { data } = await supabase
       .from('invoices')
-      .select('id, batch_id, subtotal, credit_note_of')
+      .select('id, batch_id, subtotal, credit_note_of, status')
       .in('batch_id', ids.slice(i, i + 150));
     for (const f of data ?? []) {
-      if (!f.batch_id) continue;
+      if (!f.batch_id || VERVALLEN_FACTUUR.has(f.status as string)) continue;
       if (!f.credit_note_of) factuurNaarBatch.set(f.id as string, f.batch_id as string);
       voegToe(f.batch_id as string, { subtotal: f.subtotal as number, credit: Boolean(f.credit_note_of) });
     }

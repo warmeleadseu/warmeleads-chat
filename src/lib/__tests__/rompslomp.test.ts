@@ -17,6 +17,11 @@ describe('Rompslomp-facturen indelen', () => {
     expect(zelfdeKlant('Groenvolt', 'Greenteam')).toBe(false);
   });
 
+  it('zonder factuurnummer telt niet tot hij beoordeeld is', () => {
+    const [v] = deelIn([factuur({ invoice_number: null, description: '2149 bulk leads' })], [], KLANTEN);
+    expect(v).toMatchObject({ telt_mee: false, reden: 'beoordelen: geen factuurnummer' });
+  });
+
   it('afspraken tellen nooit mee', () => {
     const [v] = deelIn([factuur({ description: 'Factuur - 10 exclusieve thuisbatterij afspraken' })], [], []);
     expect(v).toMatchObject({ telt_mee: false, reden: 'afspraken' });

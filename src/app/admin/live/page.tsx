@@ -81,7 +81,7 @@ interface BatchInfo {
   notes: string | null;
   targetAreaLabels?: string[];
 }
-interface CostMetrics { monthAdSpend: number; brutoCpl: number; effectieveCpl: number; avgAssignments: number; distributionAssignmentTotal?: number; netDistributionAssignmentTotal?: number; approvedReclamationsInWindow?: number; omzetPerSoort?: OmzetPerSoort | null; omzetFout?: boolean; totalProfit: number; }
+interface CostMetrics { monthAdSpend: number; brutoCpl: number; effectieveCpl: number; avgAssignments: number; distributionAssignmentTotal?: number; netDistributionAssignmentTotal?: number; approvedReclamationsInWindow?: number; omzetPerSoort?: OmzetPerSoort | null; omzetFout?: boolean; winstdeling?: number; winstdelingFout?: boolean; totalProfit: number; }
 type OmzetPerSoort = { leads: number; bulk: number; afspraken: number; overig: number; credit: number };
 
 /** "€41.200 leads · €6.300 bulk · ..." voor de omzettegel; alleen wat er is. */
@@ -926,7 +926,8 @@ function SlideGeld({ data, costMetrics: cm }: { data: LiveData; costMetrics: Cos
       chip: cm.totalProfit >= 0 ? 'groen' : 'roze',
       label: 'Winst deze maand',
       waarde: `${cm.totalProfit >= 0 ? '+' : ''}${euro(cm.totalProfit)}`,
-      sub: 'omzet min ad spend (Meta)',
+      sub: cm.winstdelingFout ? 'winstdeling kon niet worden geladen' : cm.winstdeling ? `na ad spend en ${euro(cm.winstdeling)} winstdeling` : 'omzet min ad spend (Meta)',
+      uitleg: 'Omzet deze maand min de Meta-uitgaven en min de winst die met een derde wordt gedeeld. Personeelskosten staan in Winst en verlies.',
       kleur: cm.totalProfit >= 0 ? 'text-emerald-400' : 'text-red-400',
     },
     {

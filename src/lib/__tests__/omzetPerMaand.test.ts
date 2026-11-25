@@ -25,6 +25,15 @@ describe('omzet per maand', () => {
     expect(telOmzet(p, '2026-10-01', '2026-10-31').totaal).toBe(5535);
   });
 
+  it('een vervallen factuur is nooit omzet', () => {
+    const p = omzetPosten({
+      ...leeg,
+      batches: [batch('b1')],
+      facturen: [factuur({ id: 'f1', batch_id: 'b1', subtotal: 9999, status: 'expired' })],
+    });
+    expect(kort(p)).toEqual([{ dag: '2026-10-05', bedrag: 1000, soort: 'leads' }]);
+  });
+
   it('een extern bedrag gaat voor; zonder factuur telt de batchprijs op de aanmaakdag', () => {
     const p = omzetPosten({
       ...leeg,

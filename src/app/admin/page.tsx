@@ -151,14 +151,15 @@ interface CostData {
   netAssignments?: number;
   totalRevenue: number;
   totalCost: number;
+  winstdeling?: number;
   totalProfit: number;
   roi: number;
   leadsWithCost: number;
   uniqueAssignedLeads: number;
   totalAssignments: number;
   branchCosts: Record<string, { spend: number; count: number; avgCpl: number; effectieveCpl: number; assignments: number; netAssignments?: number; approvedReclamations?: number }>;
-  customerMargins: { name: string; revenue: number; cost: number; margin: number; leads: number; marginPct: number }[];
-  batchFinancials: { id: string; customer: string; branch: string; batchSize: number; delivered: number; pricePerLead: number; status: string; revenue: number; cost: number; profit: number; marginPct: number; leadsWithCost: number }[];
+  customerMargins: { name: string; revenue: number; cost: number; winstdeling: number; margin: number; leads: number; marginPct: number }[];
+  batchFinancials: { id: string; customer: string; branch: string; batchSize: number; delivered: number; pricePerLead: number; status: string; revenue: number; cost: number; winstdeling: number; profit: number; marginPct: number }[];
   lastSyncAt: string | null;
   dailyTrend: { date: string; spend: number; leads: number }[];
 }
@@ -504,14 +505,14 @@ export default function AdminDashboard() {
                 {costData.totalProfit >= 0 ? '+' : ''}&euro;{costData.totalProfit.toFixed(0)}
               </p>
               <p className="mt-0.5 text-[11px] text-slate-500">Winst ({costPhrase})</p>
-              <p className="text-[11px] text-slate-400">Kosten: &euro;{costData.totalCost.toFixed(0)}</p>
+              <p className="text-[11px] text-slate-400">Advertenties: &euro;{costData.totalCost.toFixed(0)}{costData.winstdeling ? <> · winstdeling: &euro;{costData.winstdeling.toFixed(0)}</> : null}</p>
             </div>
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <p className={`text-xl font-bold ${costData.roi >= 0 ? 'text-brand-purple' : 'text-red-600'}`}>
                 {costData.roi}%
               </p>
               <p className="mt-0.5 text-[11px] text-slate-500">ROI</p>
-              <p className="text-[11px] text-slate-400">(omzet − kosten) / kosten</p>
+              <p className="text-[11px] text-slate-400">winst / advertentiekosten</p>
             </div>
           </div>
 
@@ -568,6 +569,7 @@ export default function AdminDashboard() {
                             <span>{cm.leads} leads</span>
                             <span>&euro;{cm.revenue.toFixed(0)} omzet</span>
                             <span>&euro;{cm.cost.toFixed(0)} kosten</span>
+                            {cm.winstdeling > 0 && <span>&euro;{cm.winstdeling.toFixed(0)} winstdeling</span>}
                           </div>
                         </div>
                         <div className="ml-2 flex shrink-0 items-center gap-1.5">
@@ -593,6 +595,7 @@ export default function AdminDashboard() {
                 <div className="flex items-center gap-2">
                   <BanknotesIcon className="h-4 w-4 text-amber-500" />
                   <h3 className="text-sm font-semibold text-slate-900">Winst per batch</h3>
+                  <span className="text-[11px] text-slate-400">leveringen in deze periode, met de echte leadkosten</span>
                 </div>
               </div>
 
@@ -631,6 +634,7 @@ export default function AdminDashboard() {
                           <td className="px-3 py-2.5 text-right text-xs text-slate-500">&euro;{bf.cost.toFixed(0)}</td>
                           <td className={`px-3 py-2.5 text-right text-xs font-bold ${bf.profit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                             {bf.profit >= 0 ? '+' : ''}&euro;{bf.profit.toFixed(0)}
+                            {bf.winstdeling > 0 && <span className="block text-[10px] font-normal text-slate-400">na &euro;{bf.winstdeling.toFixed(0)} deling</span>}
                           </td>
                           <td className="px-3 py-2.5 text-right">
                             <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${bf.marginPct >= 50 ? 'bg-emerald-50 text-emerald-600' : bf.marginPct >= 0 ? 'bg-amber-50 text-amber-600' : 'bg-red-50 text-red-600'}`}>
@@ -665,6 +669,7 @@ export default function AdminDashboard() {
                       <div className="mt-1.5 flex items-center gap-3 text-[11px]">
                         <span className="text-slate-400">Omzet &euro;{bf.revenue.toFixed(0)}</span>
                         <span className="text-slate-400">Kosten &euro;{bf.cost.toFixed(0)}</span>
+                        {bf.winstdeling > 0 && <span className="text-slate-400">Deling &euro;{bf.winstdeling.toFixed(0)}</span>}
                         <span className={`font-bold ${bf.profit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                           {bf.profit >= 0 ? '+' : ''}&euro;{bf.profit.toFixed(0)}
                         </span>

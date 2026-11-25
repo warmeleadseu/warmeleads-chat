@@ -4,6 +4,7 @@ import { createServerClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
 import { berekenBatchWinst } from '@/lib/batchWinst';
 import { laadFacturenPerBatch, laadKostenPerBatch, laadKlantenZonderKostendeel } from '@/lib/batchWinstLaden';
+import { laadWinstAfspraken, winstdeelVanBatch } from '@/lib/winstdelingLaden';
 
 /**
  * Detail van de winst van één batch: per geleverde lead wat hij kostte, uit
@@ -27,16 +28,16 @@ export async function GET(request: NextRequest, { params }: Ctx) {
   if (request.nextUrl.searchParams.get('samenvatting') === '1') {
     const { data: batch } = await supabase
       .from('customer_batches')
-      .select('id, batch_kind, status, batch_size, total_price, is_paid, mollie_payment_id, leads_delivered_external, extern_bedrag_excl, extern_factuurnummer')
+      .select('id, customer_id, created_at, batch_kind, status, batch_size, total_price, is_paid, mollie_payment_id, leads_delivered_external, extern_bedrag_excl, extern_factuurnummer')
       .eq('id', batchId)
       .maybeSingle();
     if (!batch) return NextResponse.json({ error: 'Batch niet gevonden' }, { status: 404 });
     const { data: klant } = await supabase.from('customer_batches').select('customers(intern, afspraakpartner)').eq('id', batchId).maybeSingle();
     const k = (Array.isArray(klant?.customers) ? klant?.customers[0] : klant?.customers) as { intern?: boolean; afspraakpartner?: boolean } | null | undefined;
     try {
-      const [facturen, kosten] = await Promise.all([laadFacturenPerBatch(supabase, [batchId]), laadKostenPerBatch(supabase, [batchId])]);
+      const [facturen, kosten, afspraken] = await Promise.all([laadFacturenPerBatch(supabase, [batchId]), laadKostenPerBatch(supabase, [batchId]), laadWinstAfspraken(supabase)]);
       return NextResponse.json(
-        { samenvatting: berekenBatchWinst(batch, facturen.get(batchId) ?? [], kosten.get(batchId) ?? null), extern_factuurnummer: batch.extern_factuurnummer, intern: Boolean(k?.intern), afspraakpartner: Boolean(k?.afspraakpartner) },
+        { samenvatting: berekenBatchWinst(batch, facturen.get(batchId) ?? [], kosten.get(batchId) ?? null, winstdeelVanBatch(afspraken, batch)), extern_factuurnummer: batch.extern_factuurnummer, intern: Boolean(k?.intern), afspraakpartner: Boolean(k?.afspraakpartner) },
         { headers: { 'Cache-Control': 'no-store' } },
       );
     } catch {

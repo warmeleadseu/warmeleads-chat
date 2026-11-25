@@ -3,6 +3,9 @@ import { requireSuperAdmin } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { berekenBatchWinst, telWinstOp, type WinstKosten } from '@/lib/batchWinst';
 import { laadFacturenPerBatch, laadKostenPerBatch } from '@/lib/batchWinstLaden';
+import { laadExterneOmzet } from '@/lib/omzetPerMaandLaden';
+import { afTeStaan, winstdeelVan, type WinstAfspraak } from '@/lib/winstdeling';
+import { laadWinstAfspraken, winstdeelVanBatch } from '@/lib/winstdelingLaden';
 
 /**
  * Winst per batch, over de batches die in de gekozen periode zijn aangemaakt.
@@ -66,7 +69,9 @@ export async function GET(request: NextRequest) {
 
   const facturenPerBatch = await laadFacturenPerBatch(supabase, ids);
   let kostenPerBatch: Map<string, WinstKosten>;
+  let afspraken: WinstAfspraak[];
   try {
+    afspraken = await laadWinstAfspraken(supabase);
     kostenPerBatch = await laadKostenPerBatch(supabase, ids);
   } catch {
     return NextResponse.json({ error: 'Kosten konden niet worden berekend' }, { status: 500 });
@@ -86,7 +91,7 @@ export async function GET(request: NextRequest) {
       extern_factuurnummer: b.extern_factuurnummer,
       extern_bedrag_excl: b.extern_bedrag_excl === null ? null : Number(b.extern_bedrag_excl),
       batchprijs: Number(b.total_price) || 0,
-      ...berekenBatchWinst(b, facturenPerBatch.get(b.id) ?? [], kostenPerBatch.get(b.id) ?? null),
+      ...berekenBatchWinst(b, facturenPerBatch.get(b.id) ?? [], kostenPerBatch.get(b.id) ?? null, winstdeelVanBatch(afspraken, b)),
     };
   });
 
@@ -99,7 +104,7 @@ export async function GET(request: NextRequest) {
      afspraken en interne klanten tellen niet. */
   const { data: losRuw } = await supabase
     .from('invoices')
-    .select('id, invoice_number, subtotal, description, paid_at, customer_name, customers(intern)')
+    .select('id, invoice_number, subtotal, description, paid_at, customer_id, customer_name, customers(intern)')
     .eq('status', 'paid')
     .is('batch_id', null)
     .is('appointment_batch_id', null)
@@ -117,9 +122,40 @@ export async function GET(request: NextRequest) {
     const { data: cr } = await supabase.from('invoices').select('subtotal').in('credit_note_of', losIds);
     losCredit = (cr ?? []).reduce((s, c) => s + Math.abs(Number(c.subtotal) || 0), 0);
   }
+  /* Externe facturen (Rompslomp, vooral bulk) op hun factuurdatum: zelfde
+     regels als de maandomzet. */
+  let extern: Awaited<ReturnType<typeof laadExterneOmzet>>['rijen'];
+  try {
+    extern = (await laadExterneOmzet(supabase, van)).rijen.filter(e => String(e.datum).slice(0, 10) <= tot);
+  } catch {
+    return NextResponse.json({ error: 'Externe omzet kon niet worden geladen' }, { status: 500 });
+  }
+  const nlDag = (iso: string) => new Date(iso).toLocaleDateString('sv-SE', { timeZone: 'Europe/Amsterdam' });
+  const losRijen = [
+    ...los.map(f => {
+      const bedrag = Number(f.subtotal) || 0;
+      const klantId = f.customer_id as string | null;
+      return {
+        nummer: f.invoice_number as string | null, customer_id: klantId, klant: f.customer_name as string | null, bedrag,
+        omschrijving: f.description as string | null, betaald: f.paid_at as string,
+        winstdeling: afTeStaan(bedrag, winstdeelVan(afspraken, klantId, nlDag(f.paid_at as string))),
+      };
+    }),
+    ...extern.map(e => {
+      const bedrag = Number(e.bedrag_excl) || 0;
+      const dag = String(e.datum).slice(0, 10);
+      return {
+        nummer: e.factuurnummer ?? null, customer_id: e.customer_id ?? null, klant: e.klant_naam ?? null, bedrag,
+        omschrijving: e.omschrijving ?? null, betaald: dag,
+        winstdeling: afTeStaan(bedrag, winstdeelVan(afspraken, e.customer_id, dag)),
+      };
+    }),
+  ].sort((a, b) => b.betaald.localeCompare(a.betaald));
+  const cent = (n: number) => Math.round(n * 100) / 100;
   const omzetBuitenBatches = {
-    bedrag: Math.round((los.reduce((s, f) => s + (Number(f.subtotal) || 0), 0) - losCredit) * 100) / 100,
-    facturen: los.map(f => ({ nummer: f.invoice_number, klant: f.customer_name, bedrag: Number(f.subtotal) || 0, omschrijving: f.description, betaald: f.paid_at })),
+    bedrag: cent(losRijen.reduce((s, f) => s + f.bedrag, 0) - losCredit),
+    winstdeling: cent(losRijen.reduce((s, f) => s + f.winstdeling, 0)),
+    facturen: losRijen,
   };
 
   return NextResponse.json(

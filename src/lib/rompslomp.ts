@@ -15,7 +15,9 @@ import { naamSleutel, type ExterneSoort } from './externeOmzet';
  *    btw, omdat dat in Rompslomp soms andersom is ingevuld.
  * 4. Creditfactuur (negatief bedrag): telt; WarmeLeads kent die niet.
  * 5. Bulk: telt.
- * 6. De rest (geen batch in WarmeLeads gevonden): telt mee zodra hij betaald is.
+ * 6. Zonder factuurnummer: nog niet definitief (bijvoorbeeld een dubbel
+ *    aangemaakte factuur), telt niet tot iemand hem beoordeelt.
+ * 7. De rest (geen batch in WarmeLeads gevonden): telt mee zodra hij betaald is.
  */
 
 export type RompslompFactuur = {
@@ -135,6 +137,7 @@ export function deelIn(
       continue;
     }
 
+    if (!f.invoice_number) { voorstel(false, 'beoordelen: geen factuurnummer'); continue; }
     if (bedrag < 0) { voorstel(true, 'creditfactuur'); continue; }
     if (/credit|terugbetaling/i.test(tekst)) { voorstel(false, 'beoordelen: creditfactuur met een positief bedrag'); continue; }
 

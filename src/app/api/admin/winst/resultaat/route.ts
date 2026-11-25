@@ -2,14 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireSuperAdmin } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { berekenBatchWinst } from '@/lib/batchWinst';
-import { laadFacturenPerBatch } from '@/lib/batchWinstLaden';
+import { laadFacturenPerBatch, laadKostenPerBatch } from '@/lib/batchWinstLaden';
+import { verdeelOverDagen, winstdeelVan } from '@/lib/winstdeling';
+import { laadWinstAfspraken, winstdeelVanBatch } from '@/lib/winstdelingLaden';
 import { bouwResultaat, verdiendPerDag, type PeriodeSoort, type PersoneelsRegel, type WinstBatch } from '@/lib/resultaatPerPeriode';
 import { omzetPosten } from '@/lib/omzetPerMaand';
 import { laadExterneOmzet } from '@/lib/omzetPerMaandLaden';
 
 /**
- * Resultaat per periode: verdiende omzet min advertentiekosten min
- * personeelskosten. Gefactureerd volgt dezelfde definitie als het
+ * Resultaat per periode: verdiende omzet min advertentiekosten, min
+ * winstdeling (src/lib/winstdeling.ts), min personeelskosten. Gefactureerd volgt dezelfde definitie als het
  * live-dashboard (src/lib/omzetPerMaand.ts); externe facturen (Rompslomp)
  * tellen als verdiend én gefactureerd op hun factuurdatum. Vanaf 1 mei 2026 (sinds dan zijn de advertentiekosten
  * bekend). Alleen superadmin. Zie src/lib/resultaatPerPeriode.ts.
@@ -122,6 +124,12 @@ export async function GET(request: NextRequest) {
     if (advertentieRuw.error) throw new LaadFout(`advertentie: ${advertentieRuw.error.message}`);
     if (personeelRuw.error) throw new LaadFout(`personeel: ${personeelRuw.error.message}`);
 
+    /* Winstdeling: alleen van batches met een afspraak zijn de leadkosten per batch nodig. */
+    const afspraken = await laadWinstAfspraken(supabase);
+    const gedeeldeIds = batches.filter(b => winstdeelVanBatch(afspraken, b) > 0).map(b => b.id);
+    const kostenGedeeld = await laadKostenPerBatch(supabase, gedeeldeIds);
+    const winstdeling = new Map<string, number>();
+
     const leveringenPerBatch = new Map<string, { dag: string; aantal: number }[]>();
     const leveringen = new Map<string, number>();
     for (const l of leveringenRuw) {
@@ -139,7 +147,13 @@ export async function GET(request: NextRequest) {
         geleverdExtern: w.geleverdExtern, aangemaakt: nlDag(b.created_at),
         afgerond: b.completed_at ? nlDag(b.completed_at) : null, leveringen: leveringenPerBatch.get(b.id) ?? [],
       };
-      for (const [dag, bedrag] of verdiendPerDag(invoer)) plus(verdiend, dag, bedrag);
+      const perDag = verdiendPerDag(invoer);
+      for (const [dag, bedrag] of perDag) plus(verdiend, dag, bedrag);
+      const deel = winstdeelVanBatch(afspraken, b);
+      if (deel > 0) {
+        const gedeeld = berekenBatchWinst(b, facturen, kostenGedeeld.get(b.id) ?? null, deel);
+        for (const [dag, bedrag] of verdeelOverDagen(gedeeld.winstdeling, perDag)) plus(winstdeling, dag, bedrag);
+      }
     }
 
     /* Losse facturen (zonder batch) tellen als verdiend op de betaaldag;
@@ -163,12 +177,15 @@ export async function GET(request: NextRequest) {
       }
       if (f.status !== 'paid' || !f.paid_at || !telt(f) || f.batch_id || f.appointment_batch_id) continue;
       plus(verdiend, nlDag(f.paid_at), bedrag);
+      plus(winstdeling, nlDag(f.paid_at), bedrag * winstdeelVan(afspraken, f.customer_id, nlDag(f.paid_at)));
     }
 
     /* Externe facturen: geleverd en gefactureerd buiten het systeem, dus verdiend op de factuurdatum. */
     for (const e of externRuw.rijen) {
       if (e.customer_id && uitgesloten.has(e.customer_id)) continue;
-      plus(verdiend, String(e.datum).slice(0, 10), Number(e.bedrag_excl) || 0);
+      const dag = String(e.datum).slice(0, 10);
+      plus(verdiend, dag, Number(e.bedrag_excl) || 0);
+      plus(winstdeling, dag, (Number(e.bedrag_excl) || 0) * winstdeelVan(afspraken, e.customer_id, dag));
     }
 
     /* Gefactureerd: zelfde definitie als het live-dashboard. */
@@ -215,7 +232,7 @@ export async function GET(request: NextRequest) {
 
     const personeel = (personeelRuw.data ?? []) as (PersoneelsRegel & { id: string; omschrijving: string })[];
     const perioden = bouwResultaat({
-      soort, start: START, vandaag, verdiend, gefactureerd, advertentie, leveringen,
+      soort, start: START, vandaag, verdiend, gefactureerd, advertentie, winstdeling, leveringen,
       personeel: personeel.map(p => ({ bedrag_per_maand: Number(p.bedrag_per_maand), ingang: p.ingang, einde: p.einde })),
     });
 

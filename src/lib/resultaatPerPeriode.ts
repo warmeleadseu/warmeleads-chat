@@ -4,6 +4,7 @@
  *   Omzet (verdiend)       wat er in de periode geleverd is, naar rato
  * − Advertentiekosten      de werkelijke Meta-uitgaven in de periode
  * = Brutowinst
+ * − Winstdeling          wat van sommige klanten naar een derde gaat (winstdeling.ts)
  * − Personeel              vaste personeelskosten, per dag verdeeld
  * = Nettoresultaat
  *
@@ -136,17 +137,19 @@ export type PeriodeResultaat = {
   gefactureerd: number;
   advertentie: number;
   brutowinst: number;
+  /** Wat er naar een derde gaat; al van het nettoresultaat af. */
+  winstdeling: number;
   personeel: number;
   netto: number;
   /** Nettoresultaat als deel van de verdiende omzet. */
   marge: number | null;
-  /** Omzet die nodig is om quitte te spelen (advertentie + personeel). */
+  /** Omzet die nodig is om quitte te spelen (advertentie + winstdeling + personeel). */
   breakEven: number;
   leveringen: number;
   personeelPerLead: number | null;
   kostenPerLead: number | null;
   /** Lopende periode: doorgetrokken naar de hele periode (personeel volledig). */
-  prognose: { verdiend: number; advertentie: number; personeel: number; netto: number } | null;
+  prognose: { verdiend: number; advertentie: number; winstdeling: number; personeel: number; netto: number } | null;
 };
 
 /**
@@ -160,6 +163,7 @@ export function bouwResultaat(opties: {
   verdiend: Map<string, number>;
   gefactureerd: Map<string, number>;
   advertentie: Map<string, number>;
+  winstdeling?: Map<string, number>;
   leveringen: Map<string, number>;
   personeel: PersoneelsRegel[];
 }): PeriodeResultaat[] {
@@ -170,7 +174,7 @@ export function bouwResultaat(opties: {
     if (!r) {
       r = {
         sleutel: p.sleutel, van: p.van < opties.start ? opties.start : p.van, tot: p.tot,
-        lopend: p.tot >= opties.vandaag, verdiend: 0, gefactureerd: 0, advertentie: 0, brutowinst: 0, personeel: 0,
+        lopend: p.tot >= opties.vandaag, verdiend: 0, gefactureerd: 0, advertentie: 0, brutowinst: 0, winstdeling: 0, personeel: 0,
         netto: 0, marge: null, breakEven: 0, leveringen: 0, personeelPerLead: null, kostenPerLead: null, prognose: null,
         dagen: 0, dagenTotaal: dagenTussen(p.van < opties.start ? opties.start : p.van, p.tot).length,
       };
@@ -180,31 +184,35 @@ export function bouwResultaat(opties: {
     r.verdiend += opties.verdiend.get(dag) ?? 0;
     r.gefactureerd += opties.gefactureerd.get(dag) ?? 0;
     r.advertentie += opties.advertentie.get(dag) ?? 0;
+    r.winstdeling += opties.winstdeling?.get(dag) ?? 0;
     r.leveringen += opties.leveringen.get(dag) ?? 0;
     r.personeel += personeelOpDag(opties.personeel, dag);
   }
 
   return [...perPeriode.values()].map(({ dagen, dagenTotaal, ...r }) => {
     const brutowinst = r.verdiend - r.advertentie;
-    const netto = brutowinst - r.personeel;
+    const netto = brutowinst - r.winstdeling - r.personeel;
     let prognose: PeriodeResultaat['prognose'] = null;
     if (r.lopend && dagen > 0 && dagenTotaal > dagen) {
       const factor = dagenTotaal / dagen;
       const personeelHeel = dagenTussen(r.van, r.tot).reduce((s, d) => s + personeelOpDag(opties.personeel, d), 0);
       const pv = r.verdiend * factor;
       const pa = r.advertentie * factor;
-      prognose = { verdiend: euro(pv), advertentie: euro(pa), personeel: euro(personeelHeel), netto: euro(pv - pa - personeelHeel) };
+      /* De winstdeling hoort bij één klant en schaalt niet mee met de periode. */
+      const pw = r.winstdeling;
+      prognose = { verdiend: euro(pv), advertentie: euro(pa), winstdeling: euro(pw), personeel: euro(personeelHeel), netto: euro(pv - pa - pw - personeelHeel) };
     }
     return {
       ...r,
       verdiend: euro(r.verdiend),
       gefactureerd: euro(r.gefactureerd),
       advertentie: euro(r.advertentie),
+      winstdeling: euro(r.winstdeling),
       personeel: euro(r.personeel),
       brutowinst: euro(brutowinst),
       netto: euro(netto),
       marge: r.verdiend > 0 ? Math.round((netto / r.verdiend) * 1000) / 10 : null,
-      breakEven: euro(r.advertentie + r.personeel),
+      breakEven: euro(r.advertentie + r.winstdeling + r.personeel),
       personeelPerLead: r.leveringen > 0 ? euro(r.personeel / r.leveringen) : null,
       kostenPerLead: r.leveringen > 0 ? euro((r.advertentie + r.personeel) / r.leveringen) : null,
       prognose,

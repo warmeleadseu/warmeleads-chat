@@ -14,6 +14,8 @@ import { laadActieSamenvatting } from '@/lib/lotenActieLaden';
 import { telOmzet } from '@/lib/omzetPerMaand';
 import { laadOmzetMetAm } from '@/lib/omzetPerMaandLaden';
 import { omzetPerAm } from '@/lib/omzetPerAm';
+import { telWinstdeling } from '@/lib/winstdeling';
+import { laadWinstdelingBijPosten } from '@/lib/winstdelingLaden';
 import { amsterdamWallTimeToUtc, amsterdamYmd } from '@/lib/appointmentSlots';
 import {
   countApprovedReclamationsForAssignments,
@@ -26,7 +28,7 @@ const BREAKDOWN_MAX_ROWS = 12_000;
 const BATCHES_LIST_LIMIT = 1_500;
 
 const LIVE_STATS_CACHE_TTL_MS = 45_000;
-const LIVE_STATS_CACHE_KEY = 'live-stats-v11';
+const LIVE_STATS_CACHE_KEY = 'live-stats-v12';
 /** Batches en facturen van vóór deze dag tellen niet meer mee in de maandomzet. */
 const OMZET_LAAD_VANAF = '2026-01-01';
 const UNPAID_BATCH_FEED_LIMIT = 18;
@@ -415,8 +417,17 @@ export async function GET(request: NextRequest) {
 
   const totalRevenue = omzet?.totaal ?? 0;
   /* Winst op het dashboard: omzet min advertentiekosten (Meta, zonder de
-     pakketadvies- en energiecampagnes). Personeel en AI staan in Winst en verlies. */
-  const totalProfit = totalRevenue - monthAdSpend;
+     pakketadvies- en energiecampagnes) min wat er naar een derde gaat
+     (src/lib/winstdeling.ts). Personeel staat in Winst en verlies. */
+  const winstdeling = omzetBron
+    ? await laadWinstdelingBijPosten(supabase, omzetBron.posten)
+        .then(p => telWinstdeling(p, maandDag, amsterdamYmd(new Date())))
+        .catch(err => {
+          console.error('[live-stats] winstdeling', err instanceof Error ? err.message : err);
+          return null;
+        })
+    : 0;
+  const totalProfit = totalRevenue - monthAdSpend - (winstdeling ?? 0);
 
   const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
   const { data: recentPaidOrders } = await supabase
@@ -667,6 +678,8 @@ export async function GET(request: NextRequest) {
       approvedReclamationsInWindow,
       omzetPerSoort: omzet?.perSoort ?? null,
       omzetFout: omzet === null,
+      winstdeling: winstdeling ?? 0,
+      winstdelingFout: winstdeling === null,
       externeOmzetOntbreekt: omzet?.externOntbreekt ?? false,
       totalProfit: Math.round(totalProfit * 100) / 100,
     },

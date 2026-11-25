@@ -13,7 +13,11 @@ import {
   getApprovedReclamationStats,
   countApprovedReclamationsForAssignments,
 } from '@/lib/reclamationStats';
-import { batchRevenueForCosts } from '@/lib/batchRevenue';
+import { berekenBatchWinst } from '@/lib/batchWinst';
+import { laadFacturenPerBatch, laadKlantenZonderKostendeel } from '@/lib/batchWinstLaden';
+import { batchRegels, klantRegels } from '@/lib/dashboardBatchWinst';
+import { telWinstdeling } from '@/lib/winstdeling';
+import { laadWinstAfspraken, laadWinstdelingBijPosten, winstdeelVanBatch } from '@/lib/winstdelingLaden';
 import { MIRROR_ASSIGNMENT_SOURCE } from '@/lib/masterPortalMirror';
 import { telOmzet } from '@/lib/omzetPerMaand';
 import { laadOmzetMetAm, OMZET_LADEN_VANAF } from '@/lib/omzetPerMaandLaden';
@@ -77,6 +81,7 @@ export async function GET(request: NextRequest) {
         .neq('bron', 'excel_import')
         .neq('bron', 'demo')
         .gte('created_at', costsSinceIso)
+        .order('id')
         .range(offset, offset + PAGE - 1);
       if (!data?.length) break;
       rows.push(...(data as LeadRow[]));
@@ -96,6 +101,7 @@ export async function GET(request: NextRequest) {
         .from('lead_assignments')
         .select('id, lead_id, customer_id, batch_id, assigned_at, source')
         .gte('assigned_at', costsSinceIso)
+        .order('id')
         .range(offset, offset + PAGE - 1);
       if (!data?.length) break;
       rows.push(...(data as AssignRow[]));
@@ -106,27 +112,43 @@ export async function GET(request: NextRequest) {
     return { rows, truncated };
   }
 
+  /** De echte advertentiekosten per lead (migratie 174), zoals in Winst en verlies. */
+  async function fetchLeadKosten(): Promise<Map<string, number>> {
+    const uit = new Map<string, number>();
+    for (let p = 0; p < COSTS_LEADS_MAX_PAGES; p++) {
+      const { data, error } = await supabase
+        .from('lead_kosten')
+        .select('lead_id, kosten')
+        .gt('kosten', 0)
+        .order('lead_id')
+        .range(p * PAGE, p * PAGE + PAGE - 1);
+      if (error) throw new Error(`leadkosten: ${error.message}`);
+      for (const k of data ?? []) uit.set(k.lead_id as string, Number(k.kosten) || 0);
+      if (!data || data.length < PAGE) break;
+    }
+    return uit;
+  }
+
   /* ── Wave 1: fetch batches + lastSync + bulk-prijzen + paginated leads & assignments ── */
-  const [batchesRes, lastSyncRes, bulkCustRes, leadBundle, assignBundle] = await Promise.all([
+  const [batchesRes, lastSyncRes, leadBundle, assignBundle, leadKosten, zonderKostendeel, afspraken] = await Promise.all([
     supabase
       .from('customer_batches')
-      .select('id, customer_id, branch, batch_size, leads_delivered, price_per_lead, total_price, status, leads_per_week, created_at, is_paid, batch_kind, customers(name)')
-      .in('status', ['active', 'completed'])
-      .neq('is_paid', false)
+      .select('id, customer_id, branch, batch_size, price_per_lead, total_price, status, created_at, is_paid, batch_kind, mollie_payment_id, leads_delivered_external, extern_bedrag_excl, customers(name)')
+      .in('status', ['active', 'paused', 'completed'])
+      .eq('is_paid', true)
       .order('created_at', { ascending: false })
-      .limit(2500),
+      .limit(1000),
     supabase
       .from('meta_ad_spend')
       .select('synced_at')
       .order('synced_at', { ascending: false })
       .limit(1)
       .single(),
-    supabase
-      .from('customers')
-      .select('id, name, bulk_price_per_lead')
-      .not('bulk_price_per_lead', 'is', null),
     fetchLeadsBounded(),
     fetchAssignmentsBounded(),
+    fetchLeadKosten(),
+    laadKlantenZonderKostendeel(supabase),
+    laadWinstAfspraken(supabase),
   ]);
 
   const allLeads = leadBundle.rows;
@@ -152,8 +174,6 @@ export async function GET(request: NextRequest) {
   const spendTotals = splitSpend(spendFetch.rows);
   const allSpendRows = spendTotals.rows as unknown as SpendRow[];
   const excludedCampaignIds = new Set(spendTotals.excludedCampaignIds);
-
-  const assignmentsInPeriod = allAssignments.filter(a => a.assigned_at >= periodStartIso);
 
   const leadBronById = new Map(allLeads.map(l => [l.id, l.bron]));
 
@@ -212,7 +232,6 @@ export async function GET(request: NextRequest) {
 
   const allBatches = batchesRes.data || [];
   const lastSync = lastSyncRes.data;
-  const bulkCustomers = bulkCustRes.data || [];
 
   const batchById = new Map(allBatches.map((b: { id: string }) => [b.id, b]));
   const leadIdToBranch = new Map(allLeads.map(l => [l.id, l.branch]));
@@ -298,9 +317,6 @@ export async function GET(request: NextRequest) {
       ? Math.round((netAssignmentCount / totalOurLeads) * 100) / 100
       : 0;
 
-  /** Advertentiekosten per relevante toewijzing (bulk/demo vallen buiten de pool, goedgekeurde reclamaties tellen niet als levering). */
-  const costPerAssignment = netAssignmentCount > 0 ? totalAdSpend / netAssignmentCount : 0;
-
   const effectieveCpl =
     netAssignmentCount > 0
       ? Math.round((totalAdSpend / netAssignmentCount) * 100) / 100
@@ -356,175 +372,61 @@ export async function GET(request: NextRequest) {
     };
   }
 
-  // ── Batch-level financials ──
-  interface BatchFinancial {
-    id: string; customer: string; branch: string; batchSize: number; delivered: number;
-    pricePerLead: number; status: string; revenue: number; cost: number; profit: number;
-    marginPct: number; leadsWithCost: number; startDate: string;
-  }
-
-  const batchFinancials: BatchFinancial[] = [];
-  const batchAssignments = new Map<string, { lead_ids: string[] }>();
-  for (const a of assignmentsForCpl) {
-    if (!a.batch_id) continue;
-    if (!batchAssignments.has(a.batch_id)) batchAssignments.set(a.batch_id, { lead_ids: [] });
-    batchAssignments.get(a.batch_id)!.lead_ids.push(a.lead_id);
-  }
-
-  for (const b of allBatches) {
-    const ba = batchAssignments.get(b.id);
-    const n = ba?.lead_ids.length ?? 0;
-    if (n === 0) continue;
-
-    // Reguliere batches betalen per geleverde lead → revenue schaalt met n.
-    // Niche-onderzoeksbatches betalen één eenmalig pakketbedrag (`total_price`)
-    // bij bestelling: elke extra geleverde lead voegt geen extra omzet toe, en
-    // het pakket telt alleen mee in de periode waarin de batch is aangemaakt
-    // (anders dubbeltelling in elke latere maandweergave met leveringen).
-    const oneTimeCountsInPeriod = b.created_at ? b.created_at >= periodStartIso : true;
-    const revenue = batchRevenueForCosts(
-      b as { batch_kind?: string; price_per_lead?: number | null; total_price?: number | null },
-      n,
-      oneTimeCountsInPeriod,
-    );
-    if (revenue <= 0) continue;
-
-    const cust = b.customers as unknown as { name: string } | { name: string }[] | null;
-    const custName = Array.isArray(cust) ? cust[0]?.name : cust?.name || 'Onbekend';
-    const startDate = b.created_at ? b.created_at.split('T')[0] : today;
-
-    let cost = 0;
-    let leadsWithCost = 0;
-    if (ba) {
-      for (const _lid of ba.lead_ids) {
-        cost += costPerAssignment;
-        leadsWithCost++;
-      }
-    }
-
-    const profit = revenue - cost;
-    const marginPct = revenue > 0 ? Math.round((profit / revenue) * 100) : 0;
-
-    batchFinancials.push({
-      id: b.id,
-      customer: custName,
-      branch: b.branch,
-      batchSize: b.batch_size,
-      delivered: n,
-      pricePerLead: b.price_per_lead,
-      status: b.status,
-      revenue: Math.round(revenue * 100) / 100,
-      cost: Math.round(cost * 100) / 100,
-      profit: Math.round(profit * 100) / 100,
-      marginPct,
-      leadsWithCost,
-      startDate,
-    });
-  }
-
-  // ── Customer margins: batch (met ad-kosten uit CPL-pool) vs bulk (omzet apart, geen Meta-ad-kosten) ──
-  const bulkPriceMap = new Map<string, { price: number; name: string }>();
-  for (const c of bulkCustomers) {
-    bulkPriceMap.set(c.id, { price: Number(c.bulk_price_per_lead), name: c.name });
-  }
-
-  const customerMargins: Record<string, { name: string; revenue: number; cost: number; margin: number; leads: number; marginPct: number }> = {};
-  const bulkByCustomer: Record<string, { name: string; count: number; revenue: number }> = {};
-
-  for (const a of assignmentsInPeriod) {
-    const src = a.source || 'distribution';
-    if (src === 'demo') continue;
-
-    if (src === 'bulk_export') {
-      const bp = bulkPriceMap.get(a.customer_id);
-      if (!bp) continue;
-      if (!customerMargins[a.customer_id]) {
-        customerMargins[a.customer_id] = { name: bp.name, revenue: 0, cost: 0, margin: 0, leads: 0, marginPct: 0 };
-      }
-      const cm = customerMargins[a.customer_id];
-      cm.revenue += bp.price;
-      cm.leads += 1;
-      if (!bulkByCustomer[a.customer_id]) bulkByCustomer[a.customer_id] = { name: bp.name, count: 0, revenue: 0 };
-      bulkByCustomer[a.customer_id].count++;
-      bulkByCustomer[a.customer_id].revenue += bp.price;
-      continue;
-    }
-
-    if (a.batch_id) {
-      const b = batchById.get(a.batch_id) as {
-        price_per_lead?: number;
-        total_price?: number;
-        batch_kind?: string;
-        customers?: unknown;
-        customer_id: string;
-      } | undefined;
-      if (!b) continue;
-      if (leadBronById.get(a.lead_id) === 'demo') continue;
-      const cust = b.customers as unknown as { name: string } | { name: string }[] | null;
-      const custName = Array.isArray(cust) ? cust[0]?.name : cust?.name || 'Onbekend';
-      if (!customerMargins[b.customer_id]) {
-        customerMargins[b.customer_id] = { name: custName, revenue: 0, cost: 0, margin: 0, leads: 0, marginPct: 0 };
-      }
-      const cm = customerMargins[b.customer_id];
-
-      // Per assignment: lead-count + advertentiekosten altijd doortellen.
-      // Revenue echter alleen voor reguliere lead-batches (per geleverde lead).
-      // Niche-onderzoek wordt eenmalig afgerekend → revenue zit in `total_price`
-      // en wordt na deze loop één keer per batch aan de omzet toegevoegd.
-      cm.leads += 1;
-      if (isCplPoolAssignment(a)) cm.cost += costPerAssignment;
-      if (b.batch_kind !== 'niche_research' && b.price_per_lead) {
-        cm.revenue += Number(b.price_per_lead);
-      }
-      continue;
-    }
-
-    const bp = bulkPriceMap.get(a.customer_id);
-    if (!bp) continue;
-    if (!customerMargins[a.customer_id]) {
-      customerMargins[a.customer_id] = { name: bp.name, revenue: 0, cost: 0, margin: 0, leads: 0, marginPct: 0 };
-    }
-    const cm = customerMargins[a.customer_id];
-    cm.revenue += bp.price;
-    cm.leads += 1;
-    if (!bulkByCustomer[a.customer_id]) bulkByCustomer[a.customer_id] = { name: bp.name, count: 0, revenue: 0 };
-    bulkByCustomer[a.customer_id].count++;
-    bulkByCustomer[a.customer_id].revenue += bp.price;
-  }
-
-  // Niche-onderzoeksbatches: eenmalige `total_price` als revenue voor batches
-  // die in deze periode zijn besteld (i.p.v. per geleverde lead schalen).
-  // Zonder deze tak telde elke binnenkomende lead in de batch nogmaals
-  // €1.000 als omzet — terwijl de klant maar één keer betaalt.
-  for (const b of allBatches) {
-    if ((b as { batch_kind?: string }).batch_kind !== 'niche_research') continue;
-    if (!b.total_price) continue;
-    if (!b.created_at || b.created_at < periodStartIso) continue;
-    const cust = b.customers as unknown as { name: string } | { name: string }[] | null;
-    const custName = Array.isArray(cust) ? cust[0]?.name : cust?.name || 'Onbekend';
-    if (!customerMargins[b.customer_id]) {
-      customerMargins[b.customer_id] = { name: custName, revenue: 0, cost: 0, margin: 0, leads: 0, marginPct: 0 };
-    }
-    const cm = customerMargins[b.customer_id];
-    cm.revenue += Number(b.total_price);
-  }
-
-  for (const cm of Object.values(customerMargins)) {
-    cm.margin = Math.round((cm.revenue - cm.cost) * 100) / 100;
-    cm.marginPct = cm.revenue > 0 ? Math.round(((cm.revenue - cm.cost) / cm.revenue) * 100) : 0;
-  }
-
   /* ── Totalen ──
      Omzet: dezelfde definitie als de liveslide en Winst en verlies
      (src/lib/omzetPerMaand.ts): betaald, op de dag van betalen, met losse
      facturen, creditnota's en externe facturen, zonder interne klanten en
-     afspraken. Het oude model (geleverde leads × prijs) telde ook onbetaalde
-     en interne levering; dat blijft alleen in de marges per klant en batch. */
+     afspraken. Winst: min de advertentiekosten en min wat er naar een derde
+     gaat (src/lib/winstdeling.ts). */
   const omzetBron = await laadOmzetMetAm(supabase, OMZET_LADEN_VANAF);
-  const omzet = telOmzet(omzetBron.posten, periodStartDateStr, amsterdamYmd(now));
+  const delingen = await laadWinstdelingBijPosten(supabase, omzetBron.posten);
+  const omzet = telOmzet(omzetBron.posten, periodStartDateStr, today);
+  const winstdeling = telWinstdeling(delingen, periodStartDateStr, today);
   const totalRevenue = omzet.totaal;
-  const totalProfit = totalRevenue - totalAdSpend;
-  const roi = totalAdSpend > 0 ? Math.round(((totalRevenue - totalAdSpend) / totalAdSpend) * 100) : 0;
+  const totalProfit = totalRevenue - totalAdSpend - winstdeling;
+  const roi = totalAdSpend > 0 ? Math.round((totalProfit / totalAdSpend) * 100) : 0;
+
+  /* ── Winst per batch en marge per klant, over de leveringen in de periode
+     (src/lib/dashboardBatchWinst.ts) ── */
+  type BatchRij = {
+    id: string; customer_id: string; branch: string; batch_size: number; price_per_lead: number | null; total_price: number | string | null;
+    status: string; created_at: string; is_paid: boolean | null; batch_kind: string | null; mollie_payment_id: string | null;
+    leads_delivered_external: number | null; extern_bedrag_excl: number | string | null; customers: { name: string } | { name: string }[] | null;
+  };
+  const batchRijen = allBatches as unknown as BatchRij[];
+  const facturenPerBatch = await laadFacturenPerBatch(supabase, batchRijen.map(b => b.id));
+  const naamVan = (k: BatchRij['customers']) => (Array.isArray(k) ? k[0]?.name : k?.name) || 'Onbekend';
+  const batchFinancials = batchRegels({
+    batches: batchRijen.map(b => ({
+      id: b.id, customer_id: b.customer_id, klant: naamVan(b.customers), branch: b.branch, batch_kind: b.batch_kind, batch_size: b.batch_size,
+      status: b.status, price_per_lead: b.price_per_lead, aangemaakt: amsterdamYmd(new Date(b.created_at)),
+      omzet: berekenBatchWinst(b, facturenPerBatch.get(b.id) ?? [], null).omzet,
+      winstdeel: winstdeelVanBatch(afspraken, b),
+    })),
+    leveringen: allAssignments,
+    kosten: leadKosten,
+    zonderKostendeel,
+    periodeStartIso: periodStartIso,
+    periodeStartDag: periodStartDateStr,
+  });
+
+  const inPeriode = (dag: string) => dag >= periodStartDateStr && dag <= today;
+  const losPosten = omzetBron.posten.filter(p => !p.batch_id && inPeriode(p.dag));
+  const losDelingen = delingen.filter(p => !p.batch_id && inPeriode(p.dag));
+  const klantNamen = new Map(batchRijen.map(b => [b.customer_id, naamVan(b.customers)]));
+  const ontbrekend = [...new Set(losPosten.map(p => p.customer_id).filter((id): id is string => !!id && !klantNamen.has(id)))];
+  if (ontbrekend.length > 0) {
+    const { data } = await supabase.from('customers').select('id, name').in('id', ontbrekend);
+    for (const k of data ?? []) klantNamen.set(k.id as string, k.name as string);
+  }
+  const customerMargins = klantRegels(
+    batchFinancials,
+    [
+      ...losPosten.map(p => ({ customer_id: p.customer_id, bedrag: p.bedrag, winstdeling: 0 })),
+      ...losDelingen.map(p => ({ customer_id: p.customer_id, bedrag: 0, winstdeling: p.bedrag })),
+    ],
+    id => klantNamen.get(id) ?? 'Onbekend',
+  );
 
   // ── Daily trend (binnen periode, max. ~45 dagen voor leesbaarheid) ──
   const trendCutoff = (() => {
@@ -571,7 +473,7 @@ export async function GET(request: NextRequest) {
     batchRevenue: omzet.perSoort.leads,
     bulkRevenue: omzet.perSoort.bulk,
     omzetPerSoort: omzet.perSoort,
-    bulkByCustomer: Object.values(bulkByCustomer),
+    winstdeling,
     totalRevenue: Math.round(totalRevenue * 100) / 100,
     totalCost: Math.round(totalAdSpend * 100) / 100,
     totalProfit: Math.round(totalProfit * 100) / 100,
@@ -581,8 +483,8 @@ export async function GET(request: NextRequest) {
     totalAssignments,
     globalStartDate,
     branchCosts,
-    customerMargins: Object.values(customerMargins).sort((a, b) => b.margin - a.margin),
-    batchFinancials: batchFinancials.sort((a, b) => b.profit - a.profit),
+    customerMargins,
+    batchFinancials,
     lastSyncAt: lastSync?.synced_at || null,
     dailyTrend: Object.entries(dailyTrend).map(([date, data]) => ({ date, ...data })).sort((a, b) => a.date.localeCompare(b.date)),
     _costsScope: {
@@ -595,7 +497,7 @@ export async function GET(request: NextRequest) {
       assignmentsTruncated,
       maxLeadPages: COSTS_LEADS_MAX_PAGES,
       maxAssignmentPages: COSTS_ASSIGN_MAX_PAGES,
-      batchesCappedAt: 2500,
+      batchesCappedAt: 1000,
       note:
         'CPL en ad-kosten: alleen distributie-toewijzingen (geen bulk_export, geen demo). Leads: geen excel_import of demo. Effectieve CPL trekt goedgekeurde reclamaties af van de toewijzings-noemer (spend telt altijd mee, gereclameerde lead niet als netto-levering). Lookback begrensd; oude data kan ontbreken.',
     },

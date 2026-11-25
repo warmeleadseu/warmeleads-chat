@@ -1,5 +1,9 @@
+import { afTeStaan } from './winstdeling';
+
 /**
  * Winst per batch.
+ *
+ * Winst = gerealiseerde omzet − leadkosten − winstdeling (src/lib/winstdeling.ts).
  *
  * Omzet
  * - Wat er gefactureerd is, excl. btw: een extern ingevuld bedrag gaat voor,
@@ -58,6 +62,9 @@ export type BatchWinst = {
   voortgang: number;
   gerealiseerd: number;
   kosten: number;
+  /** Wat er van deze batch naar een derde gaat; 0 zonder afspraak. */
+  winstdeling: number;
+  /** Na aftrek van de winstdeling. */
   winst: number;
   marge: number | null;
   kostenPerLead: number | null;
@@ -82,6 +89,8 @@ export function berekenBatchWinst(
   batch: WinstBatchInvoer,
   facturen: WinstFactuur[],
   kosten: WinstKosten | null,
+  /** Deel van de winst dat naar een derde gaat (0 tot 1). */
+  winstdeel = 0,
 ): BatchWinst {
   const gewoon = facturen.filter(f => !f.credit);
   const credit = facturen.filter(f => f.credit);
@@ -123,7 +132,9 @@ export function berekenBatchWinst(
   const afgerond = batch.status === 'completed';
   const voortgang = pakket || afgerond ? 1 : grootte > 0 ? Math.min(1, totaalGeleverd / grootte) : 0;
   const gerealiseerd = pakket ? omzet : omzet * voortgang;
-  const winst = gerealiseerd - kostenTotaal;
+  const winstVoorDeling = gerealiseerd - kostenTotaal;
+  const winstdeling = afTeStaan(winstVoorDeling, winstdeel);
+  const winst = winstVoorDeling - winstdeling;
 
   /* Wat de batch naar verwachting oplevert als hij vol is: de rest van de
      leads tegen de gemiddelde kosten tot nu toe. */
@@ -131,7 +142,8 @@ export function berekenBatchWinst(
   if (pakket || voortgang >= 1) prognoseWinst = winst;
   else if (geleverd > 0) {
     const rest = Math.max(0, grootte - totaalGeleverd);
-    prognoseWinst = omzet - (kostenTotaal + rest * (kostenTotaal / geleverd));
+    const voorDeling = omzet - (kostenTotaal + rest * (kostenTotaal / geleverd));
+    prognoseWinst = voorDeling - afTeStaan(voorDeling, winstdeel);
   }
 
   return {
@@ -144,6 +156,7 @@ export function berekenBatchWinst(
     voortgang: Math.round(voortgang * 1000) / 1000,
     gerealiseerd: euro(gerealiseerd),
     kosten: euro(kostenTotaal),
+    winstdeling,
     winst: euro(winst),
     marge: gerealiseerd > 0 ? Math.round((winst / gerealiseerd) * 1000) / 10 : null,
     kostenPerLead: geleverd > 0 ? euro(kostenTotaal / geleverd) : null,
@@ -156,7 +169,7 @@ export function berekenBatchWinst(
   };
 }
 
-export type WinstTotaal = { omzet: number; gerealiseerd: number; kosten: number; winst: number; marge: number | null; prognoseWinst: number };
+export type WinstTotaal = { omzet: number; gerealiseerd: number; kosten: number; winstdeling: number; winst: number; marge: number | null; prognoseWinst: number };
 
 export function telWinstOp(rijen: BatchWinst[]): WinstTotaal {
   const t = rijen.reduce(
@@ -164,15 +177,17 @@ export function telWinstOp(rijen: BatchWinst[]): WinstTotaal {
       omzet: s.omzet + r.omzet,
       gerealiseerd: s.gerealiseerd + r.gerealiseerd,
       kosten: s.kosten + r.kosten,
+      winstdeling: s.winstdeling + r.winstdeling,
       winst: s.winst + r.winst,
       prognoseWinst: s.prognoseWinst + (r.prognoseWinst ?? r.winst),
     }),
-    { omzet: 0, gerealiseerd: 0, kosten: 0, winst: 0, prognoseWinst: 0 },
+    { omzet: 0, gerealiseerd: 0, kosten: 0, winstdeling: 0, winst: 0, prognoseWinst: 0 },
   );
   return {
     omzet: euro(t.omzet),
     gerealiseerd: euro(t.gerealiseerd),
     kosten: euro(t.kosten),
+    winstdeling: euro(t.winstdeling),
     winst: euro(t.winst),
     marge: t.gerealiseerd > 0 ? Math.round((t.winst / t.gerealiseerd) * 1000) / 10 : null,
     prognoseWinst: euro(t.prognoseWinst),
