@@ -13,6 +13,7 @@ import { meetingRequestTemplate } from './meeting_request';
 import { welcomeCustomerTemplate } from './welcome_customer';
 import { reEngageTemplate } from './re_engage';
 import { customTemplate } from './custom';
+import { campagneTemplate } from './campagne';
 import { neiBegunIntroTemplate } from './nei_begun_intro';
 import { applyMergeTags } from './_helpers';
 
@@ -27,6 +28,7 @@ const TEMPLATES: EmailTemplate[] = [
   reEngageTemplate,
   neiBegunIntroTemplate,
   customTemplate,
+  campagneTemplate,
 ];
 
 const REGISTRY = new Map<string, EmailTemplate>(TEMPLATES.map(t => [t.key, t]));

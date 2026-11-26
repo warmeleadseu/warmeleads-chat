@@ -19,6 +19,7 @@ import {
   ClockIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
+import GeplandeMailingen from './GeplandeMailingen';
 
 /* ── Interfaces ──────────────────────────────────────────── */
 
@@ -387,6 +388,9 @@ export default function EmailLogPage() {
           </div>
         </div>
       </div>
+
+      {/* Geplande mailingen: wachten op goedkeuring of gepland */}
+      <GeplandeMailingen />
 
       {/* Tabs */}
       <div className="flex flex-wrap items-center gap-1 bg-white border border-slate-200 rounded-xl p-1">

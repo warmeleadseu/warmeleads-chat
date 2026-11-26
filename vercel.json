@@ -61,6 +61,10 @@
       "schedule": "* * * * *"
     },
     {
+      "path": "/api/cron/geplande-mailingen",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/geplande-leveringen",
       "schedule": "* * * * *"
     },
