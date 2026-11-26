@@ -7,8 +7,12 @@ import {
   PlusIcon,
   CalendarIcon,
   ClockIcon,
+  BellAlertIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
+import { SEINTJE_KEUZES, STANDAARD_SEINTJE, leesSeintje } from '@/lib/prospectTerugbellen';
+import { momentLabel } from '@/lib/terugbellen';
+import { useProspectTerugbellen } from '../../_terugbellen/context';
 
 export interface Task {
   id: string;
@@ -20,6 +24,8 @@ export interface Task {
   completed_at: string | null;
   assigned_to_admin_id: string | null;
   created_at: string;
+  /** Seintje vooraf in minuten (migratie 203); null = geen pop-up. */
+  seintje_min?: number | null;
 }
 
 function dueClass(dueAt: string | null, completed: boolean): { label: string; cls: string } {
@@ -55,6 +61,10 @@ export function TaskList({ prospectId, tasks, onChange }: Props) {
   const [title, setTitle] = useState('');
   const [dueAt, setDueAt] = useState('');
   const [type, setType] = useState<'todo' | 'call' | 'email' | 'meeting' | 'followup'>('todo');
+  /* Bij bellen met een tijdstip standaard een seintje vooraf; '' = geen. */
+  const [seintje, setSeintje] = useState<string>(String(STANDAARD_SEINTJE));
+  const { aan: terugbellenAan } = useProspectTerugbellen();
+  const metSeintje = terugbellenAan && type === 'call' && !!dueAt;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -69,6 +79,7 @@ export function TaskList({ prospectId, tasks, onChange }: Props) {
           title: title.trim(),
           type,
           due_at: dueAt ? new Date(dueAt).toISOString() : null,
+          ...(metSeintje && leesSeintje(seintje) ? { seintje_min: leesSeintje(seintje) } : {}),
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -168,6 +179,20 @@ export function TaskList({ prospectId, tasks, onChange }: Props) {
                 className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-brand-purple/50"
               />
             </div>
+            {metSeintje && (
+              <label className="flex items-center gap-2 text-xs font-medium text-slate-500">
+                <BellAlertIcon className="h-4 w-4 text-sky-600" />
+                Seintje vooraf
+                <select
+                  value={seintje}
+                  onChange={e => setSeintje(e.target.value)}
+                  className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm text-slate-700 outline-none focus:border-brand-purple/50"
+                >
+                  {SEINTJE_KEUZES.map(m => <option key={m} value={m}>{m} minuten</option>)}
+                  <option value="">Geen seintje</option>
+                </select>
+              </label>
+            )}
             <div className="flex justify-end gap-2">
               <button
                 type="button"
@@ -226,9 +251,16 @@ export function TaskList({ prospectId, tasks, onChange }: Props) {
                   <div className="mt-0.5 flex flex-wrap items-center gap-3 text-[11px]">
                     <span className={`inline-flex items-center gap-1 ${due.cls}`}>
                       {t.due_at ? <ClockIcon className="h-3 w-3" /> : <CalendarIcon className="h-3 w-3" />}
-                      {due.label}
+                      {/* Terugbelafspraak: met de tijd erbij. */}
+                      {!completed && t.due_at && leesSeintje(t.seintje_min) ? momentLabel(t.due_at) : due.label}
                     </span>
                     <span className="text-slate-400">{t.type}</span>
+                    {!completed && t.due_at && leesSeintje(t.seintje_min) && (
+                      <span className="inline-flex items-center gap-1 text-sky-600">
+                        <BellAlertIcon className="h-3 w-3" />
+                        Seintje {t.seintje_min} min vooraf
+                      </span>
+                    )}
                   </div>
                 </div>
                 <button

@@ -50,6 +50,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { AdminContext, type AdminUser } from './adminContext';
 import { AdminConfirmProvider } from '@/components/admin/ui/AdminConfirmProvider';
+import { ProspectTerugbelProvider } from './_terugbellen/context';
 import { adminFetch } from '@/lib/adminAuth';
 import {
   adminAuthDebugClient,
@@ -680,6 +681,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   return (
     <AdminConfirmProvider>
     <AdminContext.Provider value={{ user, logout: handleLogout }}>
+      <ProspectTerugbelProvider adminId={user.id}>
       <div className="min-h-screen bg-slate-50">
         <Sidebar user={user} onLogout={handleLogout} pendingReclamations={pendingReclamations} pendingTasks={pendingTasks} restleads={restleads} />
         <MobileHeader user={user} onLogout={handleLogout} pendingReclamations={pendingReclamations} pendingTasks={pendingTasks} restleads={restleads} />
@@ -689,6 +691,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           </div>
         </main>
       </div>
+      </ProspectTerugbelProvider>
     </AdminContext.Provider>
     </AdminConfirmProvider>
   );

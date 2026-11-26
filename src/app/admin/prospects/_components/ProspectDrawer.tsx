@@ -25,6 +25,9 @@ import {
   BuildingOffice2Icon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
+import { leesSeintje, POPUP_TOT_MIN } from '@/lib/prospectTerugbellen';
+import { momentLabel } from '@/lib/terugbellen';
+import { PROSPECT_TAAK_EVENT, useProspectTerugbellen, type ProspectTaakEvent } from '../../_terugbellen/context';
 import { openCustomerPortalAsAdmin } from '@/lib/adminOpenPortal';
 import {
   PROSPECT_STATUSES,
@@ -128,6 +131,34 @@ export function ProspectDrawer({
   const [composeOpen, setComposeOpen] = useState(false);
   const [linkedCustomerPortal, setLinkedCustomerPortal] = useState<LinkedCustomerPortal | null>(null);
   const [openingPortal, setOpeningPortal] = useState(false);
+  const { aan: terugbellenAan, plan: planTerugbellen } = useProspectTerugbellen();
+
+  /* Terugbelafspraak gepland, verzet of afgerond (ook vanuit de pop-up): taken opnieuw laden. */
+  useEffect(() => {
+    if (!open) return;
+    const herlaad = (e: Event) => {
+      if ((e as CustomEvent<ProspectTaakEvent>).detail?.prospect_id !== prospectId) return;
+      void adminFetch(`/api/admin/prospects/${prospectId}/tasks`)
+        .then(r => (r.ok ? r.json() : null))
+        .then((d: { tasks?: Task[] } | null) => { if (d?.tasks) setTasks(d.tasks); })
+        .catch(() => {});
+    };
+    window.addEventListener(PROSPECT_TAAK_EVENT, herlaad);
+    return () => window.removeEventListener(PROSPECT_TAAK_EVENT, herlaad);
+  }, [open, prospectId]);
+
+  /* De eerstvolgende open terugbelafspraak: de knop verzet die in plaats van een nieuwe te maken. */
+  const terugbelTaak = tasks
+    .filter(t => !t.completed_at && t.due_at && leesSeintje(t.seintje_min) && Date.parse(t.due_at) > Date.now() - POPUP_TOT_MIN * 60_000)
+    .sort((a, b) => Date.parse(a.due_at!) - Date.parse(b.due_at!))[0];
+  const terugbellen = () => {
+    if (!prospect) return;
+    planTerugbellen({
+      prospect_id: prospect.id,
+      bedrijf: prospect.company_name,
+      taak: terugbelTaak ? { id: terugbelTaak.id, due_at: terugbelTaak.due_at!, seintje_min: leesSeintje(terugbelTaak.seintje_min)!, description: terugbelTaak.description } : null,
+    });
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -364,10 +395,23 @@ export function ProspectDrawer({
                   </>
                 )}
               </div>
+              {prospect && !loading && terugbellenAan && (
+                <button
+                  type="button"
+                  onClick={terugbellen}
+                  title={terugbelTaak ? 'Terugbelafspraak verzetten' : 'Terugbellen inplannen met een seintje vooraf'}
+                  className="ml-3 inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-lg border border-sky-200 bg-sky-50 px-3 text-xs font-semibold text-sky-700 hover:bg-sky-100"
+                >
+                  <ClockIcon className="h-4 w-4" />
+                  <span className="hidden sm:inline">{terugbelTaak ? `Terugbellen ${momentLabel(terugbelTaak.due_at!)}` : 'Terugbellen'}</span>
+                  <span className="sm:hidden">{terugbelTaak ? momentLabel(terugbelTaak.due_at!) : 'Terugbellen'}</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={onClose}
-                className="ml-3 inline-flex h-10 w-10 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100"
+                aria-label="Sluiten"
+                className="ml-2 inline-flex h-10 w-10 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100"
               >
                 <XMarkIcon className="h-5 w-5" />
               </button>

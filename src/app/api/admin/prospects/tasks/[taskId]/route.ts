@@ -3,6 +3,7 @@ import { createServerClient } from '@/lib/supabase';
 import { verifyAdmin, unauthorized, forbidden } from '@/lib/adminAuth';
 import { logAudit } from '@/lib/audit';
 import { isAccountManagerScope } from '@/lib/prospects';
+import { seintjeKolomOntbreekt, taakWijzigingen, zonderSeintje } from '@/lib/prospectTerugbellen';
 
 async function loadTask(supabase: ReturnType<typeof createServerClient>, taskId: string) {
   const { data } = await supabase
@@ -29,6 +30,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ tas
     due_at?: unknown;
     completed?: unknown;
     assigned_to_admin_id?: unknown;
+    seintje_min?: unknown;
   };
   try {
     body = await request.json();
@@ -48,6 +50,11 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ tas
   if (typeof body.title === 'string') updates.title = body.title.trim();
   if ('description' in body) updates.description = typeof body.description === 'string' ? body.description : null;
   if ('due_at' in body) updates.due_at = typeof body.due_at === 'string' && body.due_at ? body.due_at : null;
+  if (typeof updates.due_at === 'string' && !Number.isFinite(Date.parse(updates.due_at))) {
+    return NextResponse.json({ error: 'Ongeldige datum' }, { status: 400 });
+  }
+  /* Seintje vooraf en, na verzetten, opnieuw een seintje (migratie 203). */
+  Object.assign(updates, taakWijzigingen(body, { due_at: (task.due_at as string | null) ?? null }));
   if ('assigned_to_admin_id' in body) {
     updates.assigned_to_admin_id =
       typeof body.assigned_to_admin_id === 'string' && body.assigned_to_admin_id ? body.assigned_to_admin_id : null;
@@ -61,12 +68,15 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ tas
     }
   }
 
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('prospect_tasks')
     .update(updates)
     .eq('id', params.taskId)
     .select()
     .single();
+  if (seintjeKolomOntbreekt(error)) {
+    ({ data, error } = await supabase.from('prospect_tasks').update(zonderSeintje(updates)).eq('id', params.taskId).select().single());
+  }
 
   if (error) {
     return NextResponse.json({ error: 'Taak bijwerken mislukt' }, { status: 500 });

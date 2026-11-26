@@ -3,6 +3,7 @@ import { createServerClient } from '@/lib/supabase';
 import { verifyAdmin, unauthorized, forbidden } from '@/lib/adminAuth';
 import { logAudit } from '@/lib/audit';
 import { loadAccessibleProspect } from '@/lib/prospects';
+import { leesSeintje, seintjeKolomOntbreekt, zonderSeintje } from '@/lib/prospectTerugbellen';
 
 const ALLOWED_TYPES = ['todo', 'call', 'email', 'meeting', 'followup'] as const;
 type TaskType = (typeof ALLOWED_TYPES)[number];
@@ -49,6 +50,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     description?: unknown;
     due_at?: unknown;
     assigned_to_admin_id?: unknown;
+    seintje_min?: unknown;
   };
   try {
     body = await request.json();
@@ -61,6 +63,15 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     return NextResponse.json({ error: 'Titel is verplicht' }, { status: 400 });
   }
   const type = isAllowedType(body.type) ? body.type : 'todo';
+  const dueAt = typeof body.due_at === 'string' && body.due_at ? body.due_at : null;
+  if (dueAt && !Number.isFinite(Date.parse(dueAt))) {
+    return NextResponse.json({ error: 'Ongeldige datum' }, { status: 400 });
+  }
+  /* Seintje vooraf (migratie 203): alleen bij een taak met een tijdstip. */
+  const seintje = leesSeintje(body.seintje_min);
+  if (seintje && !dueAt) {
+    return NextResponse.json({ error: 'Kies een datum en tijd voor het seintje' }, { status: 400 });
+  }
 
   const supabase = createServerClient();
   const access = await loadAccessibleProspect(supabase, admin, params.id);
@@ -79,16 +90,20 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     type,
     title,
     description: typeof body.description === 'string' ? body.description : null,
-    due_at: typeof body.due_at === 'string' && body.due_at ? body.due_at : null,
+    due_at: dueAt,
     assigned_to_admin_id: assignedTo,
     created_by_admin_id: admin.id,
+    ...(seintje ? { seintje_min: seintje } : {}),
   };
 
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('prospect_tasks')
     .insert(insert)
     .select()
     .single();
+  if (seintjeKolomOntbreekt(error)) {
+    ({ data, error } = await supabase.from('prospect_tasks').insert(zonderSeintje(insert)).select().single());
+  }
 
   if (error) {
     return NextResponse.json({ error: 'Taak aanmaken mislukt' }, { status: 500 });

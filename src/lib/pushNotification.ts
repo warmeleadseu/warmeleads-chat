@@ -37,8 +37,12 @@ export async function sendPushToCustomer(customerId: string, payload: PushPayloa
 
 export type PushAanmelding = { id: string; endpoint: string; p256dh: string; auth: string };
 
-/** Stuurt naar deze aanmeldingen en ruimt verlopen aanmeldingen op. */
-export async function verstuurPush(subs: PushAanmelding[], payload: PushPayload): Promise<{ sent: number; failed: number; cleaned: number }> {
+/** Stuurt naar deze aanmeldingen en ruimt verlopen aanmeldingen op (in de tabel waar ze vandaan komen). */
+export async function verstuurPush(
+  subs: PushAanmelding[],
+  payload: PushPayload,
+  tabel: 'push_subscriptions' | 'admin_push_subscriptions' = 'push_subscriptions',
+): Promise<{ sent: number; failed: number; cleaned: number }> {
   if (!VAPID_PUBLIC || !VAPID_PRIVATE || subs.length === 0) return { sent: 0, failed: 0, cleaned: 0 };
   const supabase = createServerClient();
   const message = JSON.stringify(payload);
@@ -61,7 +65,7 @@ export async function verstuurPush(subs: PushAanmelding[], payload: PushPayload)
       } catch (err: unknown) {
         const statusCode = (err as { statusCode?: number })?.statusCode;
         if (statusCode === 410 || statusCode === 404) {
-          await supabase.from('push_subscriptions').delete().eq('id', sub.id);
+          await supabase.from(tabel).delete().eq('id', sub.id);
           cleaned++;
         } else {
           failed++;

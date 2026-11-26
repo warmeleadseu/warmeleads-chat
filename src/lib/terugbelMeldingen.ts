@@ -3,6 +3,7 @@ import { EMAIL_BASE_URL, layout, sendEmail } from './email';
 import { verstuurPush, type PushAanmelding } from './pushNotification';
 import { amsterdamYmd } from './appointmentSlots';
 import { EIGEN_TOT_MIN, SEINTJE_MIN, groepeerMomenten, momentLabel, nlTijd } from './terugbellen';
+import { MAX_SEINTJE_MIN, POPUP_TOT_MIN, TERUGBEL_TITEL, seintjeNu } from './prospectTerugbellen';
 
 /**
  * Seintjes buiten het portaal om: een pushmelding vijf minuten van tevoren en
@@ -80,6 +81,53 @@ export async function stuurSeintjes(supabase: SupabaseClient, nu: Date = new Dat
     verstuurd += r.sent;
   }
   return { momenten, verstuurd, aanwezig: true };
+}
+
+/**
+ * Pushmeldingen voor terugbelafspraken van accountmanagers met prospects
+ * (migratie 203): 5 of 15 minuten van tevoren, naar wie de taak heeft. Elke taak
+ * één keer; na verzetten opnieuw (de taak-API wist herinnerd_op).
+ */
+export async function stuurProspectSeintjes(supabase: SupabaseClient, nu: Date = new Date()): Promise<{ momenten: number; verstuurd: number }> {
+  const { data, error } = await supabase
+    .from('prospect_tasks')
+    .select('id, due_at, seintje_min, title, description, prospect_id, assigned_to_admin_id, prospect:prospects!inner(company_name, contact_person, city)')
+    .is('completed_at', null)
+    .is('herinnerd_op', null)
+    .not('seintje_min', 'is', null)
+    .not('assigned_to_admin_id', 'is', null)
+    .gte('due_at', new Date(nu.getTime() - POPUP_TOT_MIN * MIN).toISOString())
+    .lte('due_at', new Date(nu.getTime() + MAX_SEINTJE_MIN * MIN).toISOString())
+    .order('due_at')
+    .limit(200);
+  if (nogNietAanwezig(error)) return { momenten: 0, verstuurd: 0 };
+  if (error) throw new Error(`prospecttaken: ${error.message}`);
+
+  type P = { company_name: string; contact_person: string | null; city: string | null };
+  type T = { id: string; due_at: string; seintje_min: number; title: string; description: string | null; prospect_id: string; assigned_to_admin_id: string; prospect: Een<P> };
+  let momenten = 0;
+  let verstuurd = 0;
+  for (const t of (data ?? []) as unknown as T[]) {
+    if (!seintjeNu(t, nu)) continue;
+    const { data: geclaimd } = await supabase
+      .from('prospect_tasks').update({ herinnerd_op: nu.toISOString() }).eq('id', t.id).eq('due_at', t.due_at).is('herinnerd_op', null).select('id');
+    if (!geclaimd || geclaimd.length === 0) continue;
+    momenten++;
+    const { data: subs } = await supabase
+      .from('admin_push_subscriptions').select('id, endpoint, p256dh, auth').eq('admin_user_id', t.assigned_to_admin_id);
+    if (!subs || subs.length === 0) continue;
+    const p = een(t.prospect);
+    const wie = [p?.company_name, p?.contact_person].filter(Boolean).join(' · ') || 'Een prospect';
+    const notitie = t.description?.trim() || (t.title.trim() !== TERUGBEL_TITEL ? t.title.trim() : '');
+    const r = await verstuurPush(subs as PushAanmelding[], {
+      title: `Terugbellen om ${nlTijd(t.due_at)}`,
+      body: notitie ? `${wie} · ${notitie}` : wie,
+      url: `/admin/prospects?id=${t.prospect_id}`,
+      tag: `prospect-terugbellen-${t.id}`,
+    }, 'admin_push_subscriptions');
+    verstuurd += r.sent;
+  }
+  return { momenten, verstuurd };
 }
 
 const esc = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
