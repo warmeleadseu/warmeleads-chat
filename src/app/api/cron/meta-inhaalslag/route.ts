@@ -175,6 +175,10 @@ async function ronde(supabase: ReturnType<typeof createServerClient>) {
      zelf uit, zodat zo'n lek de leads niet meer kost. */
   const lekken = await haalLekLeads(supabase, cred.accessToken);
   const lekLeads = lekken.leads.filter((l) => !isBinnen(l) && !ontbreekt.some((o) => o.id === l.id));
+  /* In de logs zichtbaar wat er per lekkende advertentie gebeurt (de cron-uitkomst zelf ziet niemand). */
+  if (lekken.advertenties.length > 0) {
+    console.info('[cron/meta-inhaalslag] lekken', JSON.stringify({ advertenties: lekken.advertenties, al_binnen: lekken.leads.length - lekLeads.length, in_te_laden: lekLeads.length }));
+  }
 
   if (ontbreekt.length === 0 && lekLeads.length === 0) {
     return NextResponse.json({ ok: true, ontbreekt: 0, ingeladen: 0, klaar: true, metaMoment, lekken: lekken.advertenties });
