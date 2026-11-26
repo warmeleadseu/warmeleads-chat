@@ -51,6 +51,7 @@ import {
 import { AdminContext, type AdminUser } from './adminContext';
 import { AdminConfirmProvider } from '@/components/admin/ui/AdminConfirmProvider';
 import { ProspectTerugbelProvider } from './_terugbellen/context';
+import { AdminAppKnop, useAdminManifest } from './_components/AdminApp';
 import { adminFetch } from '@/lib/adminAuth';
 import {
   adminAuthDebugClient,
@@ -368,9 +369,12 @@ function MobileHeader({
     <>
       <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-slate-200 bg-white px-4 lg:hidden">
         <Image src="/warmeleads-logo-2026.png" alt="WarmeLeads" width={110} height={33} className="h-6 w-auto" />
-        <button onClick={() => setOpen(true)} className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-slate-600 transition hover:bg-slate-50 active:bg-slate-100">
-          <Bars3Icon className="h-5 w-5" />
-        </button>
+        <div className="flex items-center gap-2">
+          <AdminAppKnop />
+          <button onClick={() => setOpen(true)} aria-label="Menu" className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-slate-600 transition hover:bg-slate-50 active:bg-slate-100">
+            <Bars3Icon className="h-5 w-5" />
+          </button>
+        </div>
       </header>
       <AnimatePresence>
         {open && (
@@ -468,6 +472,8 @@ function RouteBlocked() {
 }
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
+  /* Op de telefoon installeert het admin-paneel als eigen app (WL Admin). */
+  useAdminManifest();
   const pathname = usePathname();
   const [user, setUser] = useState<AdminUser | null>(null);
   const [loading, setLoading] = useState(true);
