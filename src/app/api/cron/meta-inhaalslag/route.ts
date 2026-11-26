@@ -269,11 +269,22 @@ async function haalLekLeads(
 ): Promise<{ leads: MetaLead[]; advertenties: { ad_id: string; campagne: string; meta_leads: number; opgehaald: number; fout?: string }[] }> {
   const vanaf = new Date(Date.now() - LEK_INHAAL_DAGEN * 86_400_000).toISOString().slice(0, 10);
   const spend = await alleSpendRegels(supabase, vanaf);
-  const adIds = [...new Set(spend.filter((r) => (Number(r.leads_count) || 0) > 0 && r.ad_id).map((r) => r.ad_id as string))];
+  /* Wat er per advertentie binnenkwam, in pagina's: één vraag geeft er hooguit
+     1000 terug, en een afgekapte lijst liet advertenties die prima werken als
+     lek tellen. Iets ruimer terug dan de periode, voor leads van net daarvoor. */
+  const binnenVanaf = new Date(Date.now() - (LEK_INHAAL_DAGEN + 14) * 86_400_000).toISOString();
   const binnenPerAd = new Map<string, number>();
-  for (let i = 0; i < adIds.length; i += 150) {
-    const { data } = await supabase.from('leads').select('meta_ad_id').in('meta_ad_id', adIds.slice(i, i + 150));
+  for (let p = 0; p < 50; p++) {
+    const { data, error } = await supabase
+      .from('leads')
+      .select('id, meta_ad_id')
+      .gte('created_at', binnenVanaf)
+      .not('meta_ad_id', 'is', null)
+      .order('id')
+      .range(p * 1000, p * 1000 + 999);
+    if (error) throw new Error(`leads per advertentie: ${error.message}`);
     for (const r of data ?? []) binnenPerAd.set(String(r.meta_ad_id), (binnenPerAd.get(String(r.meta_ad_id)) ?? 0) + 1);
+    if (!data || data.length < 1000) break;
   }
   const lekken = lekAdvertenties(spend, binnenPerAd).slice(0, 20);
 
