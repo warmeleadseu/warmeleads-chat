@@ -1255,6 +1255,9 @@ function CustomerDetailPanel({
                     {c.signup_source === 'website' && (
                       <span className="rounded-full bg-brand-purple/10 px-2.5 py-1 text-xs font-medium text-brand-purple">Website</span>
                     )}
+                    {c.signup_source === 'decemberactie' && (
+                      <span className="rounded-full bg-orange-100 px-2.5 py-1 text-xs font-medium text-orange-700" title="Aangemeld via de decemberactie-mail: Decemberbonus, geen welkomstkorting">Decemberactie</span>
+                    )}
                   </div>
                 )}
               </div>
@@ -2367,7 +2370,7 @@ function WelcomeOfferBlock({ customer, onUpdated }: { customer: Customer; onUpda
           {customer.signup_source && (
             <div className="flex items-center justify-between text-xs">
               <span className="text-slate-500">Herkomst</span>
-              <span className="font-medium text-slate-700">{customer.signup_source === 'website' ? 'Website (self-service)' : 'Admin'}</span>
+              <span className="font-medium text-slate-700">{customer.signup_source === 'website' ? 'Website (self-service)' : customer.signup_source === 'decemberactie' ? 'Website, via decemberactie-mail (geen welkomstkorting)' : 'Admin'}</span>
             </div>
           )}
           <div className="flex gap-2 pt-1">

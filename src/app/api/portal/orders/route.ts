@@ -4,6 +4,7 @@ import { createServerClient } from '@/lib/supabase';
 import { hasPermission, forbidden, PERMISSIONS } from '@/lib/portalPermissions';
 import { createBatchPayment } from '@/lib/mollie';
 import { bepaalBestelPrijs } from '@/lib/bestelPrijs';
+import { actieNotitie, decemberactieLoopt } from '@/lib/decemberactie';
 import { computeInvoiceVat, mollieBtwLabel } from '@/lib/invoiceVat';
 import { loadWelcomeOfferStatus, welcomeDiscountAmount } from '@/lib/welcomeOffer';
 import { validateLeadBranchSlug } from '@/lib/nicheResearch';
@@ -62,7 +63,7 @@ export async function POST(request: NextRequest) {
 
     const { data: custData } = await supabase
       .from('customers')
-      .select('id, name, email, contact_person, country, vat_id')
+      .select('id, name, email, contact_person, country, vat_id, signup_source')
       .eq('id', customer.id)
       .single();
 
@@ -252,7 +253,7 @@ export async function POST(request: NextRequest) {
         leads_per_week,
         leads_per_day,
         lead_filters,
-        notes: notes || null,
+        notes: [notes, (custData as { signup_source?: string | null } | null)?.signup_source === 'decemberactie' && decemberactieLoopt() ? actieNotitie(branch, batch_size) : null].filter(Boolean).join(' · ') || null,
         source_batch_id: source_batch_id || null,
         status: 'pending',
         welcome_discount_applied: welcomeEligible && discountAmount > 0,

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { decemberactieLoopt } from '@/lib/decemberactie';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -93,6 +94,12 @@ export default function GratisAccountPage() {
   const [passwordConfirm, setPasswordConfirm] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+  /* Via de decemberactie-mail (?actie=decemberactie): geen welkomstkorting,
+     wel de Decemberbonus. Zie src/lib/decemberactie.ts. */
+  const [decemberactie, setDecemberactie] = useState(false);
+  useEffect(() => {
+    setDecemberactie(new URLSearchParams(window.location.search).get('actie') === 'decemberactie' && decemberactieLoopt());
+  }, []);
 
   const [emailAvailable, setEmailAvailable] = useState<boolean | null>(null);
   const [emailChecking, setEmailChecking] = useState(false);
@@ -266,6 +273,7 @@ export default function GratisAccountPage() {
           phone,
           password,
           branches: selectedBranches,
+          ...(decemberactie ? { actie: 'decemberactie' } : {}),
           kvk_nummer: kvkNummer || undefined,
           targets,
           ...(kvkAddress ? {
@@ -315,7 +323,11 @@ export default function GratisAccountPage() {
               Gratis account aanmaken
             </h1>
             <p className="mx-auto mt-3 max-w-lg text-[15px] leading-relaxed text-white/60 md:text-lg">
-              Ontdek ons leadportaal en ontvang <span className="font-semibold text-brand-orange">20% welkomstkorting</span> op je eerste batch
+              {decemberactie ? (
+                <>Maak je account aan en bestel met de <span className="font-semibold text-brand-orange">Decemberbonus</span>: voor elke 3 leads 1 gratis lead</>
+              ) : (
+                <>Ontdek ons leadportaal en ontvang <span className="font-semibold text-brand-orange">20% welkomstkorting</span> op je eerste batch</>
+              )}
             </p>
           </div>
         </section>
@@ -804,9 +816,11 @@ export default function GratisAccountPage() {
                           <SparklesIcon className="h-5 w-5 text-brand-purple" />
                         </div>
                         <div>
-                          <p className="text-sm font-bold text-slate-900">20% welkomstkorting</p>
+                          <p className="text-sm font-bold text-slate-900">{decemberactie ? 'Decemberbonus' : '20% welkomstkorting'}</p>
                           <p className="mt-0.5 text-xs text-slate-500">
-                            Automatisch toegepast op je eerste bestelling. 14 dagen geldig na registratie.
+                            {decemberactie
+                              ? 'Voor elke 3 leads die je tot en met 31 december bestelt, krijg je 1 gratis lead bij je volgende bestelling.'
+                              : 'Automatisch toegepast op je eerste bestelling. 14 dagen geldig na registratie.'}
                           </p>
                         </div>
                       </div>

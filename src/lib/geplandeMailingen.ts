@@ -128,7 +128,7 @@ export function controleerBewerking(
 const wacht = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 /** Waar {{bestel_link}} een prospect heen stuurt. */
-export const PROSPECT_LINK = `${EMAIL_BASE_URL}/gratis-account`;
+export const PROSPECT_LINK = `${EMAIL_BASE_URL}/gratis-account?actie=decemberactie`;
 
 const BESTEL_LINK = /\{\{\s*bestel_link\s*\}\}/gi;
 

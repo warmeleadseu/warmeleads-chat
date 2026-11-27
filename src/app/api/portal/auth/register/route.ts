@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { decemberactieLoopt } from '@/lib/decemberactie';
 import { createServerClient } from '@/lib/supabase';
 import bcrypt from 'bcryptjs';
 import { sendEmail } from '@/lib/email';
@@ -22,7 +23,10 @@ export async function POST(request: NextRequest) {
     if (limited) return response!;
 
     const body = await request.json();
-    const { name, contact_person, email, phone, password, branches, kvk_nummer, targets, street, house_number, postcode, city } = body;
+    const { name, contact_person, email, phone, password, branches, kvk_nummer, targets, street, house_number, postcode, city, actie } = body;
+    /* Aangemeld via de decemberactie-mail: de Decemberbonus in plaats van de
+       welkomstkorting (die twee stapelen niet). */
+    const viaDecemberactie = actie === 'decemberactie' && decemberactieLoopt();
 
     if (!name || !contact_person || !email || !phone || !password) {
       return NextResponse.json({ error: 'Alle verplichte velden moeten ingevuld zijn' }, { status: 400 });
@@ -73,9 +77,9 @@ export async function POST(request: NextRequest) {
         city: city || null,
         is_active: true,
         portal_active: true,
-        signup_source: 'website',
-        welcome_offer_used: false,
-        welcome_offer_expires_at: welcomeExpiry,
+        signup_source: viaDecemberactie ? 'decemberactie' : 'website',
+        welcome_offer_used: viaDecemberactie,
+        welcome_offer_expires_at: viaDecemberactie ? null : welcomeExpiry,
         demo_mode: true,
       })
       .select('id, name, email, contact_person, branches, demo_mode, signup_source')
