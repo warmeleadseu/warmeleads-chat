@@ -4,12 +4,13 @@ import { computeInvoiceVat, mollieBtwLabel } from './invoiceVat';
 import { loadWelcomeOfferStatus, welcomeDiscountAmount } from './welcomeOffer';
 import { deliveryModelForNewBatch } from './batchDeliveryModel';
 import type { HerbestelBron } from './herbestelToken';
+import { bepaalBestelPrijs } from './bestelPrijs';
 
 /**
  * Een batch opnieuw bestellen vanaf een link in de mail, zonder inloggen.
  *
  * Zelfde bestelling als nabestellen in het portaal (`/api/portal/orders` met
- * source_batch_id): dezelfde prijs per lead, hetzelfde dag- en weekmaximum en
+ * source_batch_id): de actuele staffelprijs (src/lib/bestelPrijs.ts), hetzelfde dag- en weekmaximum en
  * dezelfde filters als de batch waar de link bij hoort, betaling via Mollie, en
  * na betaling maakt de webhook de batch aan (met de Meta-campagnes van de
  * vorige batch). Alleen de grootte kan de klant aanpassen.
@@ -107,13 +108,19 @@ export async function berekenHerbestelling(
   supabase: SupabaseClient,
   g: HerbestelGegevens,
   grootte: number,
-): Promise<{ subtotaal: number; korting: number; totaalExcl: number; totaalIncl: number; btwLabel: string; welkomst: boolean }> {
-  const welkomst = (await loadWelcomeOfferStatus(supabase, g.klant.id)).active;
-  const subtotaal = Math.round(g.batch.price_per_lead * grootte * 100) / 100;
+): Promise<{ prijsPerLead: number; landelijkeKorting: number; subtotaal: number; korting: number; totaalExcl: number; totaalIncl: number; btwLabel: string; welkomst: boolean }> {
+  const [welkomstStatus, prijs] = await Promise.all([
+    loadWelcomeOfferStatus(supabase, g.klant.id),
+    bepaalBestelPrijs(supabase, { customerId: g.klant.id, branch: g.batch.branch, grootte, sourceBatchId: g.batch.id }),
+  ]);
+  const welkomst = welkomstStatus.active;
+  /* Zonder staffel (zou niet moeten): de prijs van de vorige batch. */
+  const prijsPerLead = prijs?.pricePerLead ?? g.batch.price_per_lead;
+  const subtotaal = Math.round(prijsPerLead * grootte * 100) / 100;
   const korting = welkomst ? welcomeDiscountAmount(subtotaal) : 0;
   const totaalExcl = Math.round((subtotaal - korting) * 100) / 100;
   const btw = computeInvoiceVat({ subtotalExclBtw: totaalExcl, country: g.klant.country ?? 'NL', customerVatId: g.klant.vat_id });
-  return { subtotaal, korting, totaalExcl, totaalIncl: btw.total_incl_btw, btwLabel: mollieBtwLabel(btw.vat_mode), welkomst: welkomst && korting > 0 };
+  return { prijsPerLead, landelijkeKorting: prijs?.landelijkeKorting ?? 0, subtotaal, korting, totaalExcl, totaalIncl: btw.total_incl_btw, btwLabel: mollieBtwLabel(btw.vat_mode), welkomst: welkomst && korting > 0 };
 }
 
 /** Maakt de bestelling en de Mollie-betaling; de webhook doet de rest. */
@@ -129,7 +136,7 @@ export async function startHerbestelling(
       customer_id: g.klant.id,
       branch: g.batch.branch,
       batch_size: opts.grootte,
-      price_per_lead: g.batch.price_per_lead,
+      price_per_lead: bedrag.prijsPerLead,
       total_price: bedrag.totaalExcl,
       leads_per_week: g.batch.leads_per_week,
       leads_per_day: g.batch.leads_per_day,

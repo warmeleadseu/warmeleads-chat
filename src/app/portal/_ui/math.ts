@@ -36,6 +36,17 @@ export function computeSpeedPresets(effectiveSize: number, targetDays: number[] 
 /**
  * Vind de best-passende staffel voor de gegeven hoeveelheid.
  */
+/** Staffelprijs min de landelijke korting als het werkgebied landelijk is (zelfde als de server, src/lib/bestelPrijs.ts). */
+export function bestelPrijsPerLead(
+  p: { tiers?: PricingTier[] | null; nationwide_discount?: number | null; landelijk?: boolean } | null | undefined,
+  size: number,
+  fallback = 0,
+): number {
+  const staffel = findTierPrice(p?.tiers, size, fallback);
+  const korting = p?.landelijk ? Number(p.nationwide_discount) || 0 : 0;
+  return Math.max(0, Math.round((staffel - korting) * 100) / 100);
+}
+
 export function findTierPrice(tiers: PricingTier[] | null | undefined, size: number, fallback = 0): number {
   if (!tiers || tiers.length === 0) return fallback;
   const sorted = [...tiers].sort((a, b) => b.min_leads - a.min_leads);

@@ -19,5 +19,5 @@ export { ToastProvider, useToast } from './ToastHost';
 export type { ToastType } from './ToastHost';
 export { STATUS_MAPS, getStatusStyle } from './status';
 export type { StatusScope, StatusStyle } from './status';
-export { computeQuickSizes, computeSpeedPresets, findTierPrice, isActiveTier } from './math';
+export { bestelPrijsPerLead, computeQuickSizes, computeSpeedPresets, findTierPrice, isActiveTier } from './math';
 export type { PricingTier } from './math';

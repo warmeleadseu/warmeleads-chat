@@ -9,12 +9,13 @@ import { useSearchParams } from 'next/navigation';
  * eromheen; na betaling start de levering vanzelf.
  */
 
-type Keuze = { grootte: number; totaal_excl: number; totaal_incl: number; korting: number; btw: string };
+type Keuze = { grootte: number; prijs_per_lead?: number; totaal_excl: number; totaal_incl: number; korting: number; btw: string };
 type Gegevens = {
   bedrijf: string;
   contactpersoon: string | null;
   branche: string;
   prijs_per_lead: number;
+  landelijke_korting?: number;
   vorige_grootte: number;
   leads_per_dag: number | null;
   leads_per_week: number | null;
@@ -134,7 +135,7 @@ export default function HerbestelClient({ id }: { id: string }) {
       <p className="text-sm text-slate-500">{data.bedrijf}</p>
 
       <div className="mt-4 space-y-1 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
-        <p>Zelfde voorwaarden als je vorige batch: <strong className="text-slate-900">{euro(data.prijs_per_lead)}</strong> per lead (excl. btw), zelfde regio{data.met_filters ? ' en filters' : ''}{tempo ? `, ${tempo}` : ''}.</p>
+        <p><strong className="text-slate-900">{euro(keuze?.prijs_per_lead ?? data.prijs_per_lead)}</strong> per lead (excl. btw){data.landelijke_korting ? ` (incl. ${euro(data.landelijke_korting)} korting voor landelijke dekking)` : ''}. Zelfde regio{data.met_filters ? ' en filters' : ''}{tempo ? `, ${tempo}` : ''}.</p>
       </div>
 
       {data.al_nabesteld && (

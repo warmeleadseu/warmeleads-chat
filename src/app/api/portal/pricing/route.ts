@@ -3,6 +3,7 @@ import { createServerClient } from '@/lib/supabase';
 import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { hasPermission, forbidden, PERMISSIONS } from '@/lib/portalPermissions';
 import { mergeCustomTiers } from '@/lib/pricing';
+import { dektLandelijk, laadWerkgebied } from '@/lib/bestelPrijs';
 
 export async function GET(request: NextRequest) {
   const session = await verifyCustomer(request);
@@ -49,6 +50,18 @@ export async function GET(request: NextRequest) {
     : (branchData.nationwide_discount || 0);
   const minBatchSize = branchData.min_batch_size || 10;
 
+  /* Landelijke korting: zelfde werkgebied als de nieuwe batch krijgt (laatste
+     batch in deze branche, anders het werkgebied van de klant). */
+  const { data: laatste } = await supabase
+    .from('customer_batches')
+    .select('id')
+    .eq('customer_id', customer.id)
+    .eq('branch', branch)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const landelijk = dektLandelijk(await laadWerkgebied(supabase, customer.id, request.nextUrl.searchParams.get('batch') || (laatste?.id as string | undefined) || null));
+
   return NextResponse.json({
     branch: branchData.slug,
     branch_name: branchData.name,
@@ -56,5 +69,6 @@ export async function GET(request: NextRequest) {
     min_batch_size: minBatchSize,
     nationwide_discount: Number(nationwideDiscount),
     is_custom: !!hasCustomPricing,
+    landelijk,
   });
 }

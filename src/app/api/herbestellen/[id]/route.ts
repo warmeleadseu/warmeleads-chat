@@ -56,14 +56,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     bedrijf: g.klant.name,
     contactpersoon: g.klant.contact_person,
     branche: g.brancheNaam,
-    prijs_per_lead: g.batch.price_per_lead,
+    prijs_per_lead: prijzen[0]?.prijsPerLead ?? g.batch.price_per_lead,
+    landelijke_korting: prijzen[0]?.landelijkeKorting ?? 0,
     vorige_grootte: g.vorigeGrootte,
     leads_per_dag: g.batch.leads_per_day,
     leads_per_week: g.batch.leads_per_week,
     met_filters: g.batch.lead_filters.length > 0,
     al_nabesteld: g.alNabesteld,
     doorlopend: { aan: doorloop?.aan === true, mag_aanzetten: doorloop?.zelf === 'ok' },
-    keuzes: prijzen.map(p => ({ grootte: p.grootte, totaal_excl: p.totaalExcl, totaal_incl: p.totaalIncl, korting: p.korting, btw: p.btwLabel })),
+    keuzes: prijzen.map(p => ({ grootte: p.grootte, prijs_per_lead: p.prijsPerLead, totaal_excl: p.totaalExcl, totaal_incl: p.totaalIncl, korting: p.korting, btw: p.btwLabel })),
   }, { headers: { 'Cache-Control': 'no-store' } });
 }
 

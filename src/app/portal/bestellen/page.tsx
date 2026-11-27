@@ -41,7 +41,7 @@ import {
   SheetModal,
   computeQuickSizes,
   computeSpeedPresets,
-  findTierPrice,
+  bestelPrijsPerLead,
   useToast,
 } from '../_ui';
 import NewCustomerOrderView from './NewCustomerOrderView';
@@ -268,7 +268,7 @@ export default function BestellenPage() {
     : null;
 
   const dynamicPricePerLead = useMemo(() => {
-    return findTierPrice(pricingData?.tiers, effectiveSize, sourceBatch?.price_per_lead || 0);
+    return bestelPrijsPerLead(pricingData, effectiveSize, sourceBatch?.price_per_lead || 0);
   }, [pricingData, effectiveSize, sourceBatch]);
 
   const pricePerLead = dynamicPricePerLead;
@@ -611,7 +611,7 @@ export default function BestellenPage() {
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {QUICK_SIZES.map(size => {
                 const isActive = !useCustom && batchSize === size;
-                const sizePrice = findTierPrice(pricingData?.tiers, size, pricePerLead);
+                const sizePrice = bestelPrijsPerLead(pricingData, size, pricePerLead);
                 const price = roundMoney(size * sizePrice * (1 + btwRate));
                 return (
                   <ChoiceTile

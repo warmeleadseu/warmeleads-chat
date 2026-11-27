@@ -34,6 +34,8 @@ export interface PricingData {
   min_batch_size: number;
   nationwide_discount: number;
   is_custom: boolean;
+  /** Werkgebied dekt heel NL of BE: de landelijke korting geldt. */
+  landelijk?: boolean;
 }
 
 export interface WelcomeDiscountState {

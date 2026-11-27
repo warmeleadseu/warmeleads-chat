@@ -132,7 +132,7 @@ export function TekstBewerken({ id, options, verstuurOp, onKlaar }: {
   );
 }
 
-type Klant = { id: string; naam: string; contact: string | null; email: string | null; branches: string[]; afgemeld: boolean };
+type Klant = { id: string; naam: string; contact: string | null; email: string | null; branches: string[]; lopend: string[]; afgemeld: boolean };
 
 export function OntvangersKiezen({ id, ontvangers, onKlaar }: {
   id: string; ontvangers: string[]; onKlaar: (opgeslagen: boolean) => void;
@@ -190,6 +190,15 @@ export function OntvangersKiezen({ id, ontvangers, onKlaar }: {
     return n;
   });
 
+  /* Klanten met een lopende batch: in de gekozen branche, of in welke branche dan ook. */
+  const loopt = (k: Klant) => (branche ? k.lopend.includes(branche) : k.lopend.length > 0);
+  const lopendGekozen = (klanten ?? []).filter(k => gekozen.has(k.id) && loopt(k)).length;
+  const sluitLopendUit = () => setGekozen(s => {
+    const n = new Set(s);
+    for (const k of klanten ?? []) if (loopt(k)) n.delete(k.id);
+    return n;
+  });
+
   const opslaan = async () => {
     setBezig(true);
     setFout(null);
@@ -219,6 +228,15 @@ export function OntvangersKiezen({ id, ontvangers, onKlaar }: {
           {alleBranches.map(b => <option key={b} value={b}>Kocht ooit {b}</option>)}
         </select>
         <input value={zoek} onChange={e => setZoek(e.target.value)} placeholder="Zoek op naam of e-mail" className="min-w-40 flex-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs" />
+        <button
+          type="button"
+          disabled={lopendGekozen === 0}
+          onClick={sluitLopendUit}
+          title={branche ? `Haalt klanten met een actieve, gepauzeerde of nog te betalen ${branche}-batch uit de selectie` : 'Haalt klanten met een actieve, gepauzeerde of nog te betalen batch (welke branche ook) uit de selectie'}
+          className={`${knop} border-slate-200 bg-white text-slate-700 hover:bg-slate-50`}
+        >
+          Sluit actieve klanten/batches uit{branche ? ` (${branche})` : ''} ({lopendGekozen})
+        </button>
       </div>
 
       <div className="max-h-80 overflow-y-auto rounded-lg border border-slate-200">
@@ -242,6 +260,7 @@ export function OntvangersKiezen({ id, ontvangers, onKlaar }: {
                 <td className="px-2 py-1.5">
                   <span className="font-medium text-slate-800">{k.naam}</span>
                   {k.contact && <span className="text-slate-500"> · {k.contact}</span>}
+                  {k.lopend.length > 0 && <span className="ml-1 rounded bg-emerald-50 px-1 text-[10px] text-emerald-700">loopt: {k.lopend.join(', ')}</span>}
                   {k.afgemeld && <span className="ml-1 rounded bg-slate-100 px-1 text-[10px] text-slate-500">afgemeld, krijgt hem niet</span>}
                 </td>
                 <td className="px-2 py-1.5 text-slate-500">{k.email}</td>

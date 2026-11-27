@@ -19,7 +19,7 @@ import {
   StickyCheckoutBar,
   T,
   computeQuickSizes,
-  findTierPrice,
+  bestelPrijsPerLead,
   useToast,
 } from '../_ui';
 import type { PricingData, WelcomeDiscountState } from './types';
@@ -73,7 +73,7 @@ export default function NewCustomerOrderView({
   const minBatchSize = pricingData?.min_batch_size || 10;
 
   const dynamicPrice = useMemo(() => {
-    return findTierPrice(pricingData?.tiers, effectiveSize, 0);
+    return bestelPrijsPerLead(pricingData, effectiveSize, 0);
   }, [pricingData, effectiveSize]);
 
   const subtotalBefore = effectiveSize * dynamicPrice;
@@ -185,7 +185,7 @@ export default function NewCustomerOrderView({
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {QUICK_SIZES.map(size => {
               const isActive = !useCustom && batchSize === size;
-              const sizePrice = findTierPrice(pricingData?.tiers, size, dynamicPrice);
+              const sizePrice = bestelPrijsPerLead(pricingData, size, dynamicPrice);
               const raw = size * sizePrice;
               const disc = welcomeDiscount.active ? raw * 0.20 : 0;
               const price = roundMoney((raw - disc) * (1 + btwRate));

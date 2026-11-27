@@ -3,7 +3,7 @@ import { verifyCustomer, portalUnauthorized, logImpersonatedWrite } from '@/lib/
 import { createServerClient } from '@/lib/supabase';
 import { hasPermission, forbidden, PERMISSIONS } from '@/lib/portalPermissions';
 import { createBatchPayment } from '@/lib/mollie';
-import { calculatePricePerLead, mergeCustomTiers } from '@/lib/pricing';
+import { bepaalBestelPrijs } from '@/lib/bestelPrijs';
 import { computeInvoiceVat, mollieBtwLabel } from '@/lib/invoiceVat';
 import { loadWelcomeOfferStatus, welcomeDiscountAmount } from '@/lib/welcomeOffer';
 import { validateLeadBranchSlug } from '@/lib/nicheResearch';
@@ -175,6 +175,9 @@ export async function POST(request: NextRequest) {
     let leads_per_week: number | null = null;
     let leads_per_day: number | null = null;
     let lead_filters: unknown[] = [];
+    /* Alleen nog terugval als de branche geen staffel heeft; de prijs komt uit bepaalBestelPrijs. */
+    let vorigePrijs: number | null = null;
+    let werkgebiedBatchId: string | null = source_batch_id || null;
 
     if (source_batch_id) {
       const { data: sourceBatch } = await supabase
@@ -186,17 +189,17 @@ export async function POST(request: NextRequest) {
 
       if (sourceBatch) {
         branch = branch || sourceBatch.branch;
-        price_per_lead = sourceBatch.price_per_lead;
+        vorigePrijs = sourceBatch.price_per_lead;
         leads_per_week = sourceBatch.leads_per_week;
         leads_per_day = sourceBatch.leads_per_day;
         lead_filters = sourceBatch.lead_filters || [];
       }
     }
 
-    if (!branch || !price_per_lead) {
+    if (!branch || !vorigePrijs) {
       const { data: latestBatch } = await supabase
         .from('customer_batches')
-        .select('branch, price_per_lead, leads_per_week, leads_per_day, lead_filters')
+        .select('id, branch, price_per_lead, leads_per_week, leads_per_day, lead_filters')
         .eq('customer_id', customer.id)
         .order('created_at', { ascending: false })
         .limit(1)
@@ -204,7 +207,8 @@ export async function POST(request: NextRequest) {
 
       if (latestBatch) {
         branch = branch || latestBatch.branch;
-        price_per_lead = price_per_lead || latestBatch.price_per_lead;
+        vorigePrijs = vorigePrijs || latestBatch.price_per_lead;
+        werkgebiedBatchId = werkgebiedBatchId || latestBatch.id;
         leads_per_week = leads_per_week || latestBatch.leads_per_week;
         leads_per_day = leads_per_day || latestBatch.leads_per_day;
         lead_filters = lead_filters.length > 0 ? lead_filters : (latestBatch.lead_filters || []);
@@ -217,43 +221,9 @@ export async function POST(request: NextRequest) {
 
     if (!branch && body.branch) branch = body.branch;
 
-    if (!price_per_lead && branch) {
-      const [{ data: branchData }, { data: customPricing }] = await Promise.all([
-        supabase
-          .from('branches')
-          .select('pricing_tiers, nationwide_discount')
-          .eq('slug', branch)
-          .single(),
-        supabase
-          .from('customer_pricing')
-          .select('pricing_tiers, nationwide_discount')
-          .eq('customer_id', customer.id)
-          .eq('branch_slug', branch)
-          .maybeSingle(),
-      ]);
-
-      if (branchData) {
-        const branchTiers = branchData.pricing_tiers || [];
-        const hasCustom = !!(customPricing?.pricing_tiers?.length);
-        const customTiers = hasCustom ? customPricing!.pricing_tiers : [];
-        const tiers = customTiers.length > 0
-          ? mergeCustomTiers(branchTiers, customTiers)
-          : branchTiers;
-
-        const nationwideDiscount = hasCustom && customPricing!.nationwide_discount != null
-          ? customPricing!.nationwide_discount
-          : (branchData.nationwide_discount || 0);
-
-        const result = calculatePricePerLead(tiers, batch_size, {
-          nationwideDiscount: Number(nationwideDiscount),
-          isNationwide: false,
-          isCustom: hasCustom,
-        });
-
-        if (result) {
-          price_per_lead = result.price_per_lead;
-        }
-      }
+    if (branch) {
+      const prijs = await bepaalBestelPrijs(supabase, { customerId: customer.id, branch, grootte: batch_size, sourceBatchId: werkgebiedBatchId });
+      price_per_lead = prijs ? prijs.pricePerLead : vorigePrijs;
     }
 
     if (!branch || !price_per_lead) {
