@@ -170,6 +170,7 @@ export async function POST(request: NextRequest) {
           typeof body.account_manager_id === 'string' ? body.account_manager_id : null,
         branch: typeof body.branch === 'string' ? body.branch : null,
         source: typeof body.source === 'string' ? body.source : null,
+        voicemail: typeof body.voicemail === 'string' ? body.voicemail : null,
         has_open_tasks:
           typeof body.has_open_tasks === 'string' || typeof body.has_open_tasks === 'boolean'
             ? body.has_open_tasks

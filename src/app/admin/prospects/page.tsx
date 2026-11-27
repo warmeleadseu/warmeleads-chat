@@ -34,6 +34,7 @@ import { ConvertToCustomerDialog } from './_components/ConvertToCustomerDialog';
 import { ExportProspectsDialog } from './_components/ExportProspectsDialog';
 import { ProspectsKanban, type KanbanProspect } from './_components/ProspectsKanban';
 import { ProspectTypeBadge } from './_components/ProspectTypeBadge';
+import { VoicemailBadge, type VoicemailSamenvatting } from './_components/VoicemailTeller';
 
 interface ProspectListRow extends KanbanProspect {
   email: string | null;
@@ -65,11 +66,12 @@ export default function ProspectsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [amFilter, setAmFilter] = useState<string>('all');
   const [branchFilter, setBranchFilter] = useState<string>('all');
+  const [voicemailFilter, setVoicemailFilter] = useState<string>('all');
 
   useEffect(() => {
     setPage(1);
     setSelected(new Set());
-  }, [deferredSearch, statusFilter, amFilter, branchFilter]);
+  }, [deferredSearch, statusFilter, amFilter, branchFilter, voicemailFilter]);
 
   const [prospects, setProspects] = useState<ProspectListRow[]>([]);
   const [total, setTotal] = useState(0);
@@ -111,6 +113,7 @@ export default function ProspectsPage() {
         if (statusFilter !== 'all') params.set('status', statusFilter);
         if (amFilter !== 'all') params.set('account_manager_id', amFilter);
         if (branchFilter !== 'all') params.set('branch', branchFilter);
+        if (voicemailFilter !== 'all') params.set('voicemail', voicemailFilter);
         params.set('include_stats', '1');
 
         const res = await adminFetch(`/api/admin/prospects?${params}`);
@@ -130,7 +133,7 @@ export default function ProspectsPage() {
         setRefreshing(false);
       }
     },
-    [page, limit, deferredSearch, statusFilter, amFilter, branchFilter, view],
+    [page, limit, deferredSearch, statusFilter, amFilter, branchFilter, voicemailFilter, view],
   );
 
   useEffect(() => {
@@ -234,7 +237,8 @@ export default function ProspectsPage() {
   };
 
   const onProspectUpdated = (p: ProspectDetail) => {
-    setProspects(prev => prev.map(x => (x.id === p.id ? { ...x, ...p, open_task_count: x.open_task_count } : x)));
+    const vm = (p as { voicemail?: VoicemailSamenvatting }).voicemail;
+    setProspects(prev => prev.map(x => (x.id === p.id ? { ...x, ...p, open_task_count: x.open_task_count, voicemail: vm ?? x.voicemail } : x)));
   };
 
   const onProspectDeleted = (id: string) => {
@@ -372,6 +376,17 @@ export default function ProspectsPage() {
               ))}
             </select>
           )}
+          <select
+            value={voicemailFilter}
+            onChange={e => setVoicemailFilter(e.target.value)}
+            aria-label="Voicemail"
+            className="w-full min-w-0 max-w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand-purple/50 sm:w-auto"
+          >
+            <option value="all">Voicemail: alle</option>
+            <option value="1">1× voicemail</option>
+            <option value="2">2× voicemail</option>
+            <option value="3plus">3× of vaker voicemail</option>
+          </select>
           <button
             type="button"
             onClick={() => fetchData(true)}
@@ -594,6 +609,7 @@ export default function ProspectsPage() {
           status: statusFilter,
           account_manager_id: amFilter,
           branch: branchFilter,
+          voicemail: voicemailFilter,
         }}
       />
     </div>
@@ -777,6 +793,7 @@ function ListView({
                 </td>
                 <td className="px-3 py-2.5">
                   <StatusBadge status={p.status} size="sm" />
+                  {p.voicemail?.aantal ? <div className="mt-1"><VoicemailBadge vm={p.voicemail} /></div> : null}
                 </td>
                 <td className="px-3 py-2.5">
                   <span className="inline-flex items-center gap-1 text-xs text-slate-700">

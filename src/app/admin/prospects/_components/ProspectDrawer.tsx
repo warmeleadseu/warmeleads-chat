@@ -35,6 +35,7 @@ import {
   type ProspectStatus,
 } from '@/lib/prospects';
 import { StatusBadge } from './StatusBadge';
+import { VoicemailTeller, type VoicemailSamenvatting } from './VoicemailTeller';
 import { ActivityTimeline, type Activity } from './ActivityTimeline';
 import { TaskList, type Task } from './TaskList';
 import { ProspectFormFields, EMPTY_PROSPECT, type ProspectFormState } from './ProspectFormFields';
@@ -471,6 +472,12 @@ export function ProspectDrawer({
                   openingPortal={openingPortal}
                   onOpenCustomerPortal={openCustomerPortal}
                   onStatus={setStatus}
+                  onVoicemail={(p, vm) => {
+                    const nieuw = p as ProspectDetail;
+                    setProspect(nieuw);
+                    onUpdated({ ...nieuw, voicemail: vm } as ProspectDetail);
+                    refreshActivities(nieuw.id);
+                  }}
                   onAssign={setAssignment}
                   onConvert={() => onConvert(prospect)}
                   onCompose={() => setComposeOpen(true)}
@@ -746,6 +753,7 @@ function Overview({
   openingPortal,
   onOpenCustomerPortal,
   onStatus,
+  onVoicemail,
   onAssign,
   onConvert,
   onCompose,
@@ -759,6 +767,7 @@ function Overview({
   openingPortal: boolean;
   onOpenCustomerPortal: (customerId: string) => void;
   onStatus: (s: ProspectStatus) => void;
+  onVoicemail: (prospect: unknown, vm: VoicemailSamenvatting | null) => void;
   onAssign: (id: string | null) => void;
   onConvert: () => void;
   onCompose: () => void;
@@ -806,6 +815,7 @@ function Overview({
             );
           })}
         </div>
+        <VoicemailTeller prospectId={prospect.id} onGewijzigd={onVoicemail} />
         {prospect.status === 'verloren' && prospect.lost_reason && (
           <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700">
             <strong>Verloren omdat:</strong> {prospect.lost_reason}

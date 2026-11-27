@@ -25,6 +25,7 @@ import {
   phoneSearchDigitVariants,
   sanitizePostgrestIlike,
 } from './phoneSearch';
+import { prospectIdsVoorVoicemailFilter } from './prospectVoicemail';
 
 export interface ProspectListFilterInput {
   search?: string | null;
@@ -33,6 +34,8 @@ export interface ProspectListFilterInput {
   branch?: string | null;
   source?: string | null;
   has_open_tasks?: string | boolean | null;
+  /** Aantal keer voicemail: '1', '2' of '3plus'. */
+  voicemail?: string | null;
 }
 
 export function readProspectListFiltersFromUrl(
@@ -45,6 +48,7 @@ export function readProspectListFiltersFromUrl(
     branch: searchParams.get('branch'),
     source: searchParams.get('source'),
     has_open_tasks: searchParams.get('has_open_tasks'),
+    voicemail: searchParams.get('voicemail'),
   };
 }
 
@@ -140,6 +144,10 @@ export async function buildProspectFilterApplicator(
   const branch = filters.branch || null;
   const source = filters.source && isValidSource(filters.source) ? filters.source : null;
   const amId = !isAccountManagerScope(admin) ? filters.account_manager_id : null;
+  /* Voicemailfilter: de prospects met precies 1 of 2, of 3+ voicemails. */
+  const voicemailIds = filters.voicemail && ['1', '2', '3plus'].includes(filters.voicemail)
+    ? await prospectIdsVoorVoicemailFilter(supabase, filters.voicemail)
+    : null;
 
   return function applyFilters<Q>(query: Q): Q {
     let q = applyAmScope(query as never, admin) as Q;
@@ -162,6 +170,10 @@ export async function buildProspectFilterApplicator(
     }
     if (source) {
       q = (q as unknown as { eq: (c: string, v: string) => Q }).eq('source', source);
+    }
+    if (voicemailIds) {
+      const ids = voicemailIds.length ? voicemailIds.slice(0, 2000) : ['00000000-0000-0000-0000-000000000000'];
+      q = (q as unknown as { in: (c: string, v: string[]) => Q }).in('id', ids);
     }
     if (hasOpenTasks) {
       q = (q as unknown as { not: (c: string, op: string, v: null) => Q }).not(

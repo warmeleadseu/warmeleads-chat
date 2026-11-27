@@ -1,5 +1,6 @@
 'use client';
 
+import { VoicemailBadge, type VoicemailSamenvatting } from './VoicemailTeller';
 import { useMemo, useRef, useState } from 'react';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import { ClockIcon, UserIcon, BriefcaseIcon } from '@heroicons/react/24/outline';
@@ -20,6 +21,8 @@ export interface KanbanProspect {
   contact_person: string | null;
   next_action_at: string | null;
   open_task_count?: number;
+  /** Voicemailteller (lijst-API). */
+  voicemail?: VoicemailSamenvatting | null;
   branches?: string[] | null;
   source?: string | null;
   source_metadata?: Record<string, unknown> | null;
@@ -142,6 +145,7 @@ export function ProspectsKanban({ prospects, amNames, branchNames = {}, onMove, 
                               >
                                 <div className="flex items-start justify-between gap-2">
                                   <p className="line-clamp-2 text-sm font-semibold text-slate-900">{p.company_name}</p>
+                                  <VoicemailBadge vm={p.voicemail} />
                                 </div>
                                 <div className="mt-1.5">
                                   <ProspectTypeBadge

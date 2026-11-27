@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { laadVoicemails, type VoicemailSamenvatting } from '@/lib/prospectVoicemail';
 import { createServerClient } from '@/lib/supabase';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { logAudit } from '@/lib/audit';
@@ -74,9 +75,10 @@ export async function GET(request: NextRequest) {
   // Enrich met counts (open tasks + activities)
   const taskCounts: Record<string, number> = {};
   const activityCounts: Record<string, number> = {};
+  let voicemails = new Map<string, VoicemailSamenvatting>();
 
   if (ids.length > 0) {
-    const [tasksRes, actsRes] = await Promise.all([
+    const [tasksRes, actsRes, vm] = await Promise.all([
       supabase
         .from('prospect_tasks')
         .select('prospect_id')
@@ -86,7 +88,9 @@ export async function GET(request: NextRequest) {
         .from('prospect_activities')
         .select('prospect_id')
         .in('prospect_id', ids),
+      laadVoicemails(supabase, ids).catch(() => new Map<string, VoicemailSamenvatting>()),
     ]);
+    voicemails = vm;
 
     for (const r of tasksRes.data || []) {
       taskCounts[r.prospect_id] = (taskCounts[r.prospect_id] || 0) + 1;
@@ -100,6 +104,7 @@ export async function GET(request: NextRequest) {
     ...p,
     open_task_count: taskCounts[p.id] || 0,
     activity_count: activityCounts[p.id] || 0,
+    voicemail: voicemails.get(p.id) ?? { aantal: 0, momenten: [] },
   }));
 
   // Statusfacets (alleen op page=1 of expliciet)

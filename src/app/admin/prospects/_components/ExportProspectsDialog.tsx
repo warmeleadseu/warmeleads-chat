@@ -20,6 +20,7 @@ export interface ExportProspectsDialogProps {
     branch?: string;
     source?: string;
     has_open_tasks?: '1' | null;
+    voicemail?: string;
   };
   onExported?: (count: number) => void;
 }
@@ -66,6 +67,7 @@ export function ExportProspectsDialog({
           body.account_manager_id = filters.account_manager_id;
         }
         if (filters.branch && filters.branch !== 'all') body.branch = filters.branch;
+        if (filters.voicemail && filters.voicemail !== 'all') body.voicemail = filters.voicemail;
         if (filters.source && filters.source !== 'all') body.source = filters.source;
         if (filters.has_open_tasks) body.has_open_tasks = filters.has_open_tasks;
       }
