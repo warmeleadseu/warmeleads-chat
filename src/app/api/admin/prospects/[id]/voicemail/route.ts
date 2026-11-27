@@ -4,6 +4,8 @@ import { verifyAdmin, unauthorized, forbidden } from '@/lib/adminAuth';
 import { logAudit } from '@/lib/audit';
 import { loadAccessibleProspect, PROSPECT_STATUS_LABELS } from '@/lib/prospects';
 import { laadVoicemails, VOICEMAIL_ZET_STATUS_VANUIT } from '@/lib/prospectVoicemail';
+import { CONTACTMAIL_BIJ_VOICEMAIL } from '@/lib/contactverzoek';
+import { stuurContactverzoek, type ContactmailUitslag } from '@/lib/contactverzoekServer';
 
 /**
  * "Voicemail +1" in de prospectkaart: legt een belpoging met uitkomst
@@ -13,9 +15,9 @@ import { laadVoicemails, VOICEMAIL_ZET_STATUS_VANUIT } from '@/lib/prospectVoice
  * verkeerde klik), inclusief de statuswijziging die hij deed.
  */
 
-async function antwoord(supabase: ReturnType<typeof createServerClient>, id: string, prospect: unknown) {
+async function antwoord(supabase: ReturnType<typeof createServerClient>, id: string, prospect: unknown, contactmail: ContactmailUitslag | null = null) {
   const vm = await laadVoicemails(supabase, [id]);
-  return NextResponse.json({ success: true, prospect, voicemail: vm.get(id) ?? { aantal: 0, momenten: [] } });
+  return NextResponse.json({ success: true, prospect, voicemail: vm.get(id) ?? { aantal: 0, momenten: [] }, contactmail });
 }
 
 export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
@@ -73,8 +75,15 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
   });
   if (error) return NextResponse.json({ error: 'Opslaan mislukt' }, { status: 500 });
 
-  logAudit({ adminId: admin.id, adminName: admin.name, action: 'prospect.voicemail', entityType: 'prospect', entityId: id, details: { status_van: vorige, status_gezet: zetStatus } });
-  return antwoord(supabase, id, prospect);
+  /* Derde voicemail: één keer een mail met contactverzoek (zie src/lib/contactverzoek.ts). */
+  let contactmail: ContactmailUitslag | null = null;
+  const aantal = (await laadVoicemails(supabase, [id])).get(id)?.aantal ?? 0;
+  if (aantal === CONTACTMAIL_BIJ_VOICEMAIL) {
+    contactmail = await stuurContactverzoek(supabase, id, admin.id).catch(e => ({ verstuurd: false, reden: e instanceof Error ? e.message : 'Versturen mislukt' }));
+  }
+
+  logAudit({ adminId: admin.id, adminName: admin.name, action: 'prospect.voicemail', entityType: 'prospect', entityId: id, details: { status_van: vorige, status_gezet: zetStatus, aantal, contactmail } });
+  return antwoord(supabase, id, prospect, contactmail);
 }
 
 export async function DELETE(request: NextRequest, props: { params: Promise<{ id: string }> }) {

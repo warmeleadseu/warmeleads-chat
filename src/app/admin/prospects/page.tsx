@@ -34,7 +34,7 @@ import { ConvertToCustomerDialog } from './_components/ConvertToCustomerDialog';
 import { ExportProspectsDialog } from './_components/ExportProspectsDialog';
 import { ProspectsKanban, type KanbanProspect } from './_components/ProspectsKanban';
 import { ProspectTypeBadge } from './_components/ProspectTypeBadge';
-import { VoicemailBadge, type VoicemailSamenvatting } from './_components/VoicemailTeller';
+import { VoicemailCel, type VoicemailSamenvatting } from './_components/VoicemailTeller';
 
 interface ProspectListRow extends KanbanProspect {
   email: string | null;
@@ -748,6 +748,7 @@ function ListView({
               <th className="px-3 py-2.5">Type</th>
               <th className="px-3 py-2.5">Contact</th>
               <th className="px-3 py-2.5">Status</th>
+              <th className="px-3 py-2.5">Voicemail</th>
               <th className="px-3 py-2.5">AM</th>
               <th className="px-3 py-2.5">Volgende actie</th>
               <th className="px-3 py-2.5 text-right">Bijgewerkt</th>
@@ -793,7 +794,9 @@ function ListView({
                 </td>
                 <td className="px-3 py-2.5">
                   <StatusBadge status={p.status} size="sm" />
-                  {p.voicemail?.aantal ? <div className="mt-1"><VoicemailBadge vm={p.voicemail} /></div> : null}
+                </td>
+                <td className="px-3 py-2.5">
+                  <VoicemailCel vm={p.voicemail} />
                 </td>
                 <td className="px-3 py-2.5">
                   <span className="inline-flex items-center gap-1 text-xs text-slate-700">
