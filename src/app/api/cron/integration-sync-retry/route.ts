@@ -347,7 +347,7 @@ export async function GET(request: NextRequest) {
 
   /* Na de pogingen van deze ronde: wat dan nog een dag lang niets aflevert,
      is een storing waar iemand iets mee moet. */
-  let storingen: { inStoring: number; gemeld: number } | null = null;
+  let storingen: { inStoring: number; gemeld: number; klantenGemeld: number } | null = null;
   try {
     storingen = await meldIntegratieStoringen(supabase);
   } catch (err) {

@@ -32,6 +32,7 @@ const moment = (iso: string) => new Date(iso).toLocaleString('nl-NL', { weekday:
 export default function GeplandeMailingen() {
   const [mailingen, setMailingen] = useState<Mailing[]>([]);
   const [magGoedkeuren, setMagGoedkeuren] = useState(false);
+  const [aanwezig, setAanwezig] = useState<boolean | null>(null);
   const [bezig, setBezig] = useState<string | null>(null);
   const [melding, setMelding] = useState<{ id: string; tekst: string; fout: boolean } | null>(null);
   const [open, setOpen] = useState<Record<string, 'voorbeeld' | 'ontvangers' | null>>({});
@@ -40,7 +41,8 @@ export default function GeplandeMailingen() {
     try {
       const res = await adminFetch('/api/admin/emails/geplande');
       if (!res.ok) return;
-      const d = (await res.json()) as { mailingen?: Mailing[]; mag_goedkeuren?: boolean };
+      const d = (await res.json()) as { mailingen?: Mailing[]; mag_goedkeuren?: boolean; aanwezig?: boolean };
+      setAanwezig(d.aanwezig !== false);
       setMailingen(d.mailingen ?? []);
       setMagGoedkeuren(!!d.mag_goedkeuren);
     } catch { /* volgende keer */ }
@@ -63,7 +65,7 @@ export default function GeplandeMailingen() {
     }
   };
 
-  if (mailingen.length === 0) return null;
+  if (aanwezig === null) return null;
   const knop = 'inline-flex min-h-9 items-center gap-1.5 rounded-lg border px-3 text-xs font-semibold disabled:opacity-50';
 
   return (
@@ -71,6 +73,13 @@ export default function GeplandeMailingen() {
       <h2 className="mb-3 flex items-center gap-2 text-sm font-bold text-slate-800">
         <CalendarDaysIcon className="h-5 w-5 text-orange-500" /> Geplande mailingen
       </h2>
+      {mailingen.length === 0 && (
+        <p className="text-sm text-slate-500">
+          {aanwezig
+            ? 'Er staan nu geen mailingen klaar. Klaargezette mailingen verschijnen hier om te bekijken, te testen en goed te keuren.'
+            : 'Nog niet actief: de database-aanpassing voor geplande mailingen (migratie 204) moet nog worden doorgevoerd.'}
+        </p>
+      )}
       <ul className="space-y-3">
         {mailingen.map(m => {
           const s = STATUS[m.status] ?? STATUS.concept;

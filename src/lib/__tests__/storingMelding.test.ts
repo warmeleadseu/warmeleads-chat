@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('@/lib/email', () => ({ sendEmail: vi.fn(), EMAIL_BASE_URL: 'https://www.warmeleads.eu' }));
+vi.mock('@/lib/email', () => ({ sendEmail: vi.fn(), EMAIL_BASE_URL: 'https://www.warmeleads.eu', layout: (_t: string, h: string) => h, cta: (t: string, u: string) => `<a href="${u}">${t}</a>` }));
 
-import { bepaalStoringen, bouwStoringMail, providerLabel, storingSleutel, type FoutRij } from '../integrations/storingMelding';
+import { bepaalStoringen, bouwKlantMail, bouwStoringMail, moetKlantOpnieuwKoppelen, providerLabel, storingSleutel, type FoutRij } from '../integrations/storingMelding';
 
 const NU = new Date('2026-10-07T12:00:00Z');
 const uurGeleden = (u: number) => new Date(NU.getTime() - u * 3_600_000).toISOString();
@@ -70,5 +70,35 @@ describe('providerLabel', () => {
     expect(providerLabel('teamleader')).toBe('Teamleader');
     expect(providerLabel('outbound_webhook')).toBe('Webhook (API-koppeling)');
     expect(providerLabel('partner_snelraak')).toBe('Snelraak');
+  });
+});
+
+describe('klant zelf mailen bij verlopen toegang', () => {
+  it('alleen als de klant opnieuw moet koppelen', () => {
+    expect(moetKlantOpnieuwKoppelen({ provider: 'teamleader', laatsteFout: 'Teamleader weigerde de toegang (HTTP 400): The refresh token is invalid.' })).toBe(true);
+    expect(moetKlantOpnieuwKoppelen({ provider: 'teamleader', laatsteFout: 'Token exchange faalde (400)' })).toBe(true);
+    expect(moetKlantOpnieuwKoppelen({ provider: 'teamleader', laatsteFout: 'Veld postcode ongeldig' })).toBe(false);
+    expect(moetKlantOpnieuwKoppelen({ provider: 'outbound_webhook', laatsteFout: 'refresh token' })).toBe(false);
+  });
+
+  it('noemt het aantal, sinds wanneer, en linkt naar de integraties', () => {
+    const [s] = bepaalStoringen([fout('ek', 'teamleader', 30), fout('ek', 'teamleader', 28)], new Map([[storingSleutel('ek', 'teamleader'), '2026-09-01T17:00:12Z']]), NU);
+    const { onderwerp, html } = bouwKlantMail(s, 'Jan & Co');
+    expect(onderwerp).toBe('Actie nodig: uw Teamleader-koppeling moet opnieuw verbonden worden (2 leads niet doorgezet)');
+    expect(html).toContain('sinds 1 september');
+    expect(html).toContain('Jan &amp; Co');
+    expect(html).toContain('/portal/account?tab=integraties');
+    expect(html).toContain('60 dagen');
+  });
+});
+
+describe('storingsmail aan beheer', () => {
+  it('telt sinds de laatste geslaagde levering en noemt 60 dagen nasturen', () => {
+    const [s] = bepaalStoringen([fout('ek', 'teamleader', 30, 'The refresh token is invalid.')], new Map([[storingSleutel('ek', 'teamleader'), '2026-09-01T17:00:12Z']]), NU);
+    const { html } = bouwStoringMail([{ ...s, klant: 'Energiekompas' }]);
+    expect(html).toContain('sinds de laatste geslaagde levering');
+    expect(html).toContain('60 dagen');
+    expect(html).not.toContain('72 uur');
+    expect(html).toContain('krijgen hier zelf ook een mail over');
   });
 });
