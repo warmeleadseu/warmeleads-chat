@@ -42,6 +42,7 @@ export default function GeplandeMailingen() {
   const [bezig, setBezig] = useState<string | null>(null);
   const [melding, setMelding] = useState<{ id: string; tekst: string; fout: boolean } | null>(null);
   const [open, setOpen] = useState<Record<string, Paneel | null>>({});
+  const [tab, setTab] = useState<'reminders' | 'prospects'>('reminders');
 
   const laad = useCallback(async () => {
     try {
@@ -72,6 +73,10 @@ export default function GeplandeMailingen() {
   };
 
   if (aanwezig === null) return null;
+  /* Alleen naar prospects: tabblad Prospects; met klanten erin: Reminders. */
+  const isProspectMailing = (m: Mailing) => m.ontvangers.length === 0 && (m.prospect_ontvangers?.length ?? 0) > 0;
+  const perTab = { reminders: mailingen.filter(m => !isProspectMailing(m)), prospects: mailingen.filter(isProspectMailing) };
+  const zichtbaar = perTab[tab];
   const knop = 'inline-flex min-h-9 items-center gap-1.5 rounded-lg border px-3 text-xs font-semibold disabled:opacity-50';
 
   return (
@@ -79,6 +84,19 @@ export default function GeplandeMailingen() {
       <h2 className="mb-3 flex items-center gap-2 text-sm font-bold text-slate-800">
         <CalendarDaysIcon className="h-5 w-5 text-orange-500" /> Geplande mailingen
       </h2>
+      {mailingen.length > 0 && (
+        <div className="mb-3 flex gap-1 border-b border-slate-200">
+          {(['reminders', 'prospects'] as const).map(t => (
+            <button key={t} type="button" onClick={() => setTab(t)}
+              className={`-mb-px border-b-2 px-3 py-2 text-xs font-semibold ${tab === t ? 'border-orange-500 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+              {t === 'reminders' ? 'Reminders' : 'Prospects'} ({perTab[t].length})
+            </button>
+          ))}
+        </div>
+      )}
+      {mailingen.length > 0 && zichtbaar.length === 0 && (
+        <p className="text-sm text-slate-500">Geen mailingen in dit tabblad.</p>
+      )}
       {mailingen.length === 0 && (
         <p className="text-sm text-slate-500">
           {aanwezig
@@ -87,7 +105,7 @@ export default function GeplandeMailingen() {
         </p>
       )}
       <ul className="space-y-3">
-        {mailingen.map(m => {
+        {zichtbaar.map(m => {
           const s = STATUS[m.status] ?? STATUS.concept;
           const toon = open[m.id] ?? null;
           const wissel = (w: Paneel) => setOpen(o => ({ ...o, [m.id]: o[m.id] === w ? null : w }));
