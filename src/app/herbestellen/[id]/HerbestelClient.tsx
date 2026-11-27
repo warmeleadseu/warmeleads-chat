@@ -151,9 +151,13 @@ export default function HerbestelClient({ id }: { id: string }) {
 
       <div className="mt-4 space-y-1 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
         <p><strong className="text-slate-900">{euro(keuze?.prijs_per_lead ?? data.prijs_per_lead)}</strong> per lead (excl. btw){data.landelijke_korting ? ` (incl. ${euro(data.landelijke_korting)} korting voor landelijke dekking)` : ''}. Zelfde regio{data.met_filters ? ' en filters' : ''}{tempo ? `, ${tempo}` : ''}.</p>
-        <p className="pt-1 text-xs text-slate-500">
-          Heb je een andere prijsafspraak met je accountmanager? Neem dan even contact met ons op voordat je bestelt, via{' '}
-          <a href="tel:+31850477067" className="font-semibold text-brand-purple underline">085 047 7067</a> of door op de mail te antwoorden. Dan zetten we het voor je klaar.
+      </div>
+
+      <div className="mt-3 flex gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <span aria-hidden className="mt-0.5 text-base leading-none">💬</span>
+        <p>
+          <strong>Andere prijsafspraak met je accountmanager?</strong> Neem dan even contact met ons op voordat je bestelt, via{' '}
+          <a href="tel:+31850477067" className="font-semibold underline">085 047 7067</a> of door op de mail te antwoorden. Dan zetten we je bestelling met jouw prijs voor je klaar.
         </p>
       </div>
 
