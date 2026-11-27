@@ -30,6 +30,7 @@ export async function GET(request: NextRequest) {
     let voorbeeld: { onderwerp: string; html: string; aan: string } | null = null;
     let fout: string | null = null;
     let ontvangers: { id: string; naam: string; email: string | null }[] = [];
+    let prospects: { id: string; naam: string; email: string | null }[] = [];
     if (m.status === 'concept' || m.status === 'goedgekeurd') {
       try {
         const afzender = await laadAfzender(supabase, m.afzender_admin_id ?? admin.id);
@@ -41,12 +42,21 @@ export async function GET(request: NextRequest) {
       const { data: klanten } = await supabase.from('customers').select('id, name, email, is_active').in('id', m.ontvangers.slice(0, MAX_LIJST));
       ontvangers = (klanten ?? []).filter(k => k.is_active).map(k => ({ id: k.id as string, naam: (k.name as string) ?? '', email: (k.email as string) ?? null }))
         .sort((a, b) => a.naam.localeCompare(b.naam, 'nl'));
+      const pIds = (m.prospect_ontvangers ?? []).slice(0, MAX_LIJST);
+      if (pIds.length) {
+        const { data: ps } = await supabase.from('prospects').select('id, company_name, contact_person, email').in('id', pIds);
+        prospects = (ps ?? []).map(p => ({ id: p.id as string, naam: (p.company_name as string) || (p.contact_person as string) || '', email: (p.email as string) ?? null }))
+          .sort((a, b) => a.naam.localeCompare(b.naam, 'nl'));
+      }
     }
     mailingen.push({
       ...m,
       afzender_naam: m.afzender_admin_id ? naam.get(m.afzender_admin_id) ?? null : null,
       goedgekeurd_door_naam: m.goedgekeurd_door ? naam.get(m.goedgekeurd_door) ?? null : null,
-      aantal_ontvangers: m.ontvangers.length,
+      aantal_ontvangers: m.ontvangers.length + (m.prospect_ontvangers?.length ?? 0),
+      prospect_ontvangers: m.prospect_ontvangers ?? [],
+      prospects_mogelijk: 'prospect_ontvangers' in m,
+      actieve_prospects: prospects,
       actieve_ontvangers: ontvangers,
       voorbeeld,
       voorbeeld_fout: fout,

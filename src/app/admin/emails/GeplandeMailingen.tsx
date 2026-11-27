@@ -14,6 +14,8 @@ import { OntvangersKiezen, TekstBewerken } from './MailingBewerken';
 type Mailing = {
   id: string; naam: string; status: string; verstuur_op: string; aantal_ontvangers: number;
   options: Record<string, unknown>; ontvangers: string[];
+  prospect_ontvangers?: string[]; prospects_mogelijk?: boolean;
+  actieve_prospects?: { id: string; naam: string; email: string | null }[];
   actieve_ontvangers: { id: string; naam: string; email: string | null }[];
   afzender_naam: string | null; goedgekeurd_door_naam: string | null; goedgekeurd_op: string | null;
   verstuurd: number; mislukt: number; opt_out: number; fout: string | null; aangemaakt_door: string | null;
@@ -54,7 +56,7 @@ export default function GeplandeMailingen() {
   useEffect(() => { void laad(); }, [laad]);
 
   const doe = async (m: Mailing, actie: 'test' | 'goedkeuren' | 'annuleren' | 'naar_concept') => {
-    if (actie === 'goedkeuren' && !confirm(`"${m.naam}" goedkeuren? Hij gaat ${moment(m.verstuur_op)} naar ${m.actieve_ontvangers.length} klanten.`)) return;
+    if (actie === 'goedkeuren' && !confirm(`"${m.naam}" goedkeuren? Hij gaat ${moment(m.verstuur_op)} naar ${m.actieve_ontvangers.length} klanten${m.actieve_prospects?.length ? ` en ${m.actieve_prospects.length} prospects` : ''}.`)) return;
     if (actie === 'annuleren' && !confirm(`"${m.naam}" annuleren?`)) return;
     setBezig(`${m.id}:${actie}`);
     setMelding(null);
@@ -97,7 +99,7 @@ export default function GeplandeMailingen() {
                   <p className="text-xs text-slate-500">
                     {moment(m.verstuur_op)} · {m.status === 'verstuurd' || m.status === 'bezig'
                       ? `${m.verstuurd} verstuurd${m.mislukt ? `, ${m.mislukt} mislukt` : ''}${m.opt_out ? `, ${m.opt_out} afgemeld` : ''}`
-                      : `${m.actieve_ontvangers.length || m.aantal_ontvangers} klanten`}
+                      : `${m.actieve_ontvangers.length || m.aantal_ontvangers} klanten${m.actieve_prospects?.length ? ` + ${m.actieve_prospects.length} prospects` : ''}`}
                     {m.afzender_naam ? ` · afzender ${m.afzender_naam}` : ''}
                     {m.aangemaakt_door ? ` · klaargezet door ${m.aangemaakt_door}` : ''}
                   </p>
@@ -155,6 +157,8 @@ export default function GeplandeMailingen() {
                   key={`${m.id}:ontvangers`}
                   id={m.id}
                   ontvangers={m.ontvangers}
+                  prospectOntvangers={m.prospect_ontvangers ?? []}
+                  prospectsMogelijk={!!m.prospects_mogelijk}
                   onKlaar={opgeslagen => {
                     setOpen(o => ({ ...o, [m.id]: null }));
                     if (opgeslagen) { setMelding({ id: m.id, tekst: 'Ontvangers opgeslagen.', fout: false }); void laad(); }
@@ -165,7 +169,7 @@ export default function GeplandeMailingen() {
                 <div className="mt-3 max-h-72 overflow-y-auto rounded-lg border border-slate-200">
                   <table className="w-full text-xs">
                     <tbody>
-                      {m.actieve_ontvangers.map(o => (
+                      {[...m.actieve_ontvangers, ...(m.actieve_prospects ?? []).map(p => ({ ...p, naam: `${p.naam} (prospect)` }))].map(o => (
                         <tr key={o.id} className="border-b border-slate-100 last:border-0">
                           <td className="px-3 py-1.5 font-medium text-slate-800">{o.naam}</td>
                           <td className="px-3 py-1.5 text-slate-500">{o.email ?? 'geen e-mailadres'}</td>

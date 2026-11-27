@@ -133,77 +133,86 @@ export function TekstBewerken({ id, options, verstuurOp, onKlaar }: {
 }
 
 type Klant = { id: string; naam: string; contact: string | null; email: string | null; branches: string[]; lopend: string[]; afgemeld: boolean };
+type Prospect = { id: string; naam: string; contact: string | null; email: string | null; branches: string[]; status: string; klant_geworden: boolean; afgemeld: boolean };
 
-export function OntvangersKiezen({ id, ontvangers, onKlaar }: {
-  id: string; ontvangers: string[]; onKlaar: (opgeslagen: boolean) => void;
-}) {
-  const [klanten, setKlanten] = useState<Klant[] | null>(null);
-  const [laadFout, setLaadFout] = useState<string | null>(null);
-  const [gekozen, setGekozen] = useState<Set<string>>(() => new Set(ontvangers));
-  const [zoek, setZoek] = useState('');
-  const [branche, setBranche] = useState('');
-  const [toon, setToon] = useState<'gekozen' | 'alle'>('gekozen');
-  const [bezig, setBezig] = useState(false);
+/** Prospectstatussen die je meestal niet wilt mailen. */
+const AFGESLOTEN = new Set(['gewonnen', 'verloren', 'niet_relevant']);
+const STATUS_LABEL: Record<string, string> = {
+  nieuw: 'Nieuw', contact: 'Contact', voicemail: 'Voicemail', mail_verstuurd: 'Mail verstuurd', gekwalificeerd: 'Gekwalificeerd',
+  voorstel: 'Voorstel', gewonnen: 'Gewonnen', verloren: 'Verloren', niet_relevant: 'Niet relevant',
+};
+
+/** Branchegroep: thuisbatterij_partners hoort bij thuisbatterij, zonnepaneel_partners bij zonnepanelen. */
+export function brancheGroep(slug: string): string {
+  const s = slug.replace(/_partners$/, '');
+  return s === 'zonnepaneel' ? 'zonnepanelen' : s;
+}
+
+function useLijst<T>(url: string, sleutel: string, aan: boolean): { lijst: T[] | null; fout: string | null } {
+  const [lijst, setLijst] = useState<T[] | null>(null);
   const [fout, setFout] = useState<string | null>(null);
-
   useEffect(() => {
+    if (!aan || lijst) return;
     let weg = false;
     void (async () => {
       try {
-        const res = await adminFetch('/api/admin/emails/geplande/klanten');
+        const res = await adminFetch(url);
         if (!res.ok) throw new Error();
-        const d = (await res.json()) as { klanten: Klant[] };
-        if (!weg) setKlanten(d.klanten);
+        const d = (await res.json()) as Record<string, T[]>;
+        if (!weg) setLijst(d[sleutel] ?? []);
       } catch {
-        if (!weg) setLaadFout('Klanten laden mislukt');
+        if (!weg) setFout('Laden mislukt');
       }
     })();
     return () => { weg = true; };
-  }, []);
+  }, [url, sleutel, aan, lijst]);
+  return { lijst, fout };
+}
 
-  const bekend = useMemo(() => new Set((klanten ?? []).map(k => k.id)), [klanten]);
-  /* Ontvangers die geen actief account met e-mailadres meer hebben, krijgen
-     de mail toch niet; die vallen bij opslaan weg. */
-  const onbereikbaar = klanten ? ontvangers.filter(o => !bekend.has(o)).length : 0;
-  const alleBranches = useMemo(() => [...new Set((klanten ?? []).flatMap(k => k.branches))].sort(), [klanten]);
+function wisselIn(s: Set<string>, id: string): Set<string> {
+  const n = new Set(s);
+  if (n.has(id)) n.delete(id); else n.add(id);
+  return n;
+}
 
-  const zichtbaar = useMemo(() => {
-    const q = zoek.trim().toLowerCase();
-    return (klanten ?? [])
-      .filter(k => toon === 'alle' || gekozen.has(k.id))
-      .filter(k => !branche || k.branches.includes(branche))
-      .filter(k => !q || `${k.naam} ${k.contact ?? ''} ${k.email ?? ''}`.toLowerCase().includes(q));
-  }, [klanten, toon, gekozen, branche, zoek]);
+function zetIn(s: Set<string>, ids: string[], aan: boolean): Set<string> {
+  const n = new Set(s);
+  for (const id of ids) { if (aan) n.add(id); else n.delete(id); }
+  return n;
+}
 
-  const selectie = [...gekozen].filter(x => bekend.has(x));
-  const erbij = selectie.filter(x => !ontvangers.includes(x)).length;
-  const eraf = ontvangers.filter(x => bekend.has(x) && !gekozen.has(x)).length;
+function Verschil({ nu, voor, bekend }: { nu: string[]; voor: string[]; bekend: Set<string> }) {
+  const erbij = nu.filter(x => !voor.includes(x)).length;
+  const eraf = voor.filter(x => bekend.has(x) && !nu.includes(x)).length;
+  if (!erbij && !eraf) return null;
+  return <> ({erbij ? `+${erbij}` : ''}{erbij && eraf ? ', ' : ''}{eraf ? `−${eraf}` : ''} t.o.v. nu)</>;
+}
 
-  const wissel = (kid: string) => setGekozen(s => {
-    const n = new Set(s);
-    if (n.has(kid)) n.delete(kid); else n.add(kid);
-    return n;
-  });
-  const zetZichtbaar = (aan: boolean) => setGekozen(s => {
-    const n = new Set(s);
-    for (const k of zichtbaar) { if (aan) n.add(k.id); else n.delete(k.id); }
-    return n;
-  });
+export function OntvangersKiezen({ id, ontvangers, prospectOntvangers = [], prospectsMogelijk = false, onKlaar }: {
+  id: string; ontvangers: string[]; prospectOntvangers?: string[]; prospectsMogelijk?: boolean; onKlaar: (opgeslagen: boolean) => void;
+}) {
+  const [tab, setTab] = useState<'klanten' | 'prospects'>('klanten');
+  const [gekozen, setGekozen] = useState<Set<string>>(() => new Set(ontvangers));
+  const [pGekozen, setPGekozen] = useState<Set<string>>(() => new Set(prospectOntvangers));
+  const klantenLijst = useLijst<Klant>('/api/admin/emails/geplande/klanten', 'klanten', true);
+  const prospectLijst = useLijst<Prospect>('/api/admin/emails/geplande/prospects', 'prospects', tab === 'prospects' || prospectOntvangers.length > 0);
+  const [bezig, setBezig] = useState(false);
+  const [fout, setFout] = useState<string | null>(null);
 
-  /* Klanten met een lopende batch: in de gekozen branche, of in welke branche dan ook. */
-  const loopt = (k: Klant) => (branche ? k.lopend.includes(branche) : k.lopend.length > 0);
-  const lopendGekozen = (klanten ?? []).filter(k => gekozen.has(k.id) && loopt(k)).length;
-  const sluitLopendUit = () => setGekozen(s => {
-    const n = new Set(s);
-    for (const k of klanten ?? []) if (loopt(k)) n.delete(k.id);
-    return n;
-  });
+  const klanten = klantenLijst.lijst;
+  const prospects = prospectLijst.lijst;
+  const bekendK = useMemo(() => new Set((klanten ?? []).map(k => k.id)), [klanten]);
+  const bekendP = useMemo(() => new Set((prospects ?? []).map(p => p.id)), [prospects]);
+  const selectieK = [...gekozen].filter(x => bekendK.has(x));
+  /* Zolang de prospectlijst nog niet geladen is: de opgeslagen keuze houden. */
+  const selectieP = prospects ? [...pGekozen].filter(x => bekendP.has(x)) : [...pGekozen];
+  const totaal = selectieK.length + selectieP.length;
 
   const opslaan = async () => {
     setBezig(true);
     setFout(null);
     try {
-      const f = await bewaar(id, { ontvangers: selectie });
+      const f = await bewaar(id, prospectsMogelijk ? { ontvangers: selectieK, prospect_ontvangers: selectieP } : { ontvangers: selectieK });
       if (f) setFout(f);
       else onKlaar(true);
     } finally {
@@ -211,16 +220,79 @@ export function OntvangersKiezen({ id, ontvangers, onKlaar }: {
     }
   };
 
-  if (laadFout) return <p className="mt-3 text-xs text-rose-600">{laadFout}</p>;
-  if (!klanten) return <p className="mt-3 text-xs text-slate-500">Klanten laden…</p>;
-
-  const allesAan = zichtbaar.length > 0 && zichtbaar.every(k => gekozen.has(k.id));
+  const tabKnop = (t: 'klanten' | 'prospects', label: string) => (
+    <button type="button" onClick={() => setTab(t)}
+      className={`-mb-px border-b-2 px-3 py-2 text-xs font-semibold ${tab === t ? 'border-orange-500 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+      {label}
+    </button>
+  );
 
   return (
     <div className="mt-3 space-y-2 rounded-lg border border-slate-200 p-3">
+      <div className="flex gap-1 border-b border-slate-200">
+        {tabKnop('klanten', `Klanten die eerder afnamen (${selectieK.length})`)}
+        {tabKnop('prospects', `Prospects (${selectieP.length})`)}
+      </div>
+
+      {tab === 'klanten' && (
+        klantenLijst.fout ? <p className="text-xs text-rose-600">Klanten laden mislukt</p>
+          : !klanten ? <p className="text-xs text-slate-500">Klanten laden…</p>
+            : <KlantenLijst klanten={klanten} gekozen={gekozen} setGekozen={setGekozen} ontvangers={ontvangers} />
+      )}
+      {tab === 'prospects' && (
+        !prospectsMogelijk ? <p className="text-xs text-slate-500">Prospects als ontvanger zijn nog niet actief: de database-aanpassing (migratie 205) moet nog worden doorgevoerd.</p>
+          : prospectLijst.fout ? <p className="text-xs text-rose-600">Prospects laden mislukt</p>
+            : !prospects ? <p className="text-xs text-slate-500">Prospects laden…</p>
+              : <ProspectsLijst prospects={prospects} gekozen={pGekozen} setGekozen={setPGekozen} />
+      )}
+
+      <p className="text-[11px] text-slate-500">
+        Totaal {totaal} ontvangers: {selectieK.length} klanten<Verschil nu={selectieK} voor={ontvangers} bekend={bekendK} /> en {selectieP.length} prospects
+        {prospects && <Verschil nu={selectieP} voor={prospectOntvangers} bekend={bekendP} />}.
+        {selectieP.length > 0 && ' Prospects hebben nog geen batch: de bestelknop stuurt hen naar een gratis account met welkomstkorting.'}
+      </p>
+      {fout && <p className="text-xs text-rose-600">{fout}</p>}
+      <div className="flex flex-wrap gap-2">
+        <button type="button" disabled={bezig || totaal === 0 || !klanten} onClick={() => void opslaan()} className={`${knop} border-orange-500 bg-orange-500 text-white hover:bg-orange-600`}>
+          {bezig ? 'Opslaan…' : `Ontvangers opslaan (${totaal})`}
+        </button>
+        <button type="button" disabled={bezig} onClick={() => onKlaar(false)} className={`${knop} border-slate-200 bg-white text-slate-700`}>Sluiten</button>
+      </div>
+    </div>
+  );
+}
+
+function KlantenLijst({ klanten, gekozen, setGekozen, ontvangers }: {
+  klanten: Klant[]; gekozen: Set<string>; setGekozen: (f: (s: Set<string>) => Set<string>) => void; ontvangers: string[];
+}) {
+  const [zoek, setZoek] = useState('');
+  const [branche, setBranche] = useState('');
+  const [toon, setToon] = useState<'gekozen' | 'alle'>('gekozen');
+
+  const bekend = useMemo(() => new Set(klanten.map(k => k.id)), [klanten]);
+  /* Ontvangers zonder actief account met e-mailadres krijgen de mail toch niet; die vallen bij opslaan weg. */
+  const onbereikbaar = ontvangers.filter(o => !bekend.has(o)).length;
+  const alleBranches = useMemo(() => [...new Set(klanten.flatMap(k => k.branches))].sort(), [klanten]);
+  const aantalGekozen = klanten.filter(k => gekozen.has(k.id)).length;
+
+  const zichtbaar = useMemo(() => {
+    const q = zoek.trim().toLowerCase();
+    return klanten
+      .filter(k => toon === 'alle' || gekozen.has(k.id))
+      .filter(k => !branche || k.branches.includes(branche))
+      .filter(k => !q || `${k.naam} ${k.contact ?? ''} ${k.email ?? ''}`.toLowerCase().includes(q));
+  }, [klanten, toon, gekozen, branche, zoek]);
+
+  /* Klanten met een lopende batch: in de gekozen branche, of in welke branche dan ook. */
+  const loopt = (k: Klant) => (branche ? k.lopend.includes(branche) : k.lopend.length > 0);
+  const lopendGekozen = klanten.filter(k => gekozen.has(k.id) && loopt(k)).length;
+  const allesAan = zichtbaar.length > 0 && zichtbaar.every(k => gekozen.has(k.id));
+
+  return (
+    <>
       <div className="flex flex-wrap items-center gap-2">
         <div className="inline-flex overflow-hidden rounded-lg border border-slate-200 text-xs font-semibold">
-          <button type="button" onClick={() => setToon('gekozen')} className={`px-3 py-1.5 ${toon === 'gekozen' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600'}`}>Geselecteerd ({selectie.length})</button>
+          <button type="button" onClick={() => setToon('gekozen')} className={`px-3 py-1.5 ${toon === 'gekozen' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600'}`}>Geselecteerd ({aantalGekozen})</button>
           <button type="button" onClick={() => setToon('alle')} className={`px-3 py-1.5 ${toon === 'alle' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600'}`}>Alle klanten ({klanten.length})</button>
         </div>
         <select value={branche} onChange={e => setBranche(e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs">
@@ -231,7 +303,7 @@ export function OntvangersKiezen({ id, ontvangers, onKlaar }: {
         <button
           type="button"
           disabled={lopendGekozen === 0}
-          onClick={sluitLopendUit}
+          onClick={() => setGekozen(s => zetIn(s, klanten.filter(loopt).map(k => k.id), false))}
           title={branche ? `Haalt klanten met een actieve, gepauzeerde of nog te betalen ${branche}-batch uit de selectie` : 'Haalt klanten met een actieve, gepauzeerde of nog te betalen batch (welke branche ook) uit de selectie'}
           className={`${knop} border-slate-200 bg-white text-slate-700 hover:bg-slate-50`}
         >
@@ -244,7 +316,7 @@ export function OntvangersKiezen({ id, ontvangers, onKlaar }: {
           <thead className="sticky top-0 bg-slate-50">
             <tr className="border-b border-slate-200 text-left text-slate-500">
               <th className="w-8 px-3 py-1.5">
-                <input type="checkbox" aria-label="Alles in deze lijst" checked={allesAan} onChange={e => zetZichtbaar(e.target.checked)} />
+                <input type="checkbox" aria-label="Alles in deze lijst" checked={allesAan} onChange={e => setGekozen(s => zetIn(s, zichtbaar.map(k => k.id), e.target.checked))} />
               </th>
               <th className="px-2 py-1.5 font-semibold">Klant ({zichtbaar.length})</th>
               <th className="px-2 py-1.5 font-semibold">E-mail</th>
@@ -253,9 +325,9 @@ export function OntvangersKiezen({ id, ontvangers, onKlaar }: {
           </thead>
           <tbody>
             {zichtbaar.map(k => (
-              <tr key={k.id} onClick={() => wissel(k.id)} className={`cursor-pointer border-b border-slate-100 last:border-0 hover:bg-slate-50 ${gekozen.has(k.id) ? '' : 'text-slate-400'}`}>
+              <tr key={k.id} onClick={() => setGekozen(s => wisselIn(s, k.id))} className={`cursor-pointer border-b border-slate-100 last:border-0 hover:bg-slate-50 ${gekozen.has(k.id) ? '' : 'text-slate-400'}`}>
                 <td className="px-3 py-1.5">
-                  <input type="checkbox" checked={gekozen.has(k.id)} onChange={() => wissel(k.id)} onClick={e => e.stopPropagation()} aria-label={k.naam} />
+                  <input type="checkbox" checked={gekozen.has(k.id)} onChange={() => setGekozen(s => wisselIn(s, k.id))} onClick={e => e.stopPropagation()} aria-label={k.naam} />
                 </td>
                 <td className="px-2 py-1.5">
                   <span className="font-medium text-slate-800">{k.naam}</span>
@@ -273,18 +345,92 @@ export function OntvangersKiezen({ id, ontvangers, onKlaar }: {
           </tbody>
         </table>
       </div>
+      {onbereikbaar > 0 && (
+        <p className="text-[11px] text-slate-500">{onbereikbaar} eerdere ontvanger{onbereikbaar === 1 ? ' heeft' : 's hebben'} geen actief account met e-mailadres meer en {onbereikbaar === 1 ? 'valt' : 'vallen'} weg.</p>
+      )}
+    </>
+  );
+}
 
-      <p className="text-[11px] text-slate-500">
-        {selectie.length} ontvangers{erbij || eraf ? ` (${erbij ? `+${erbij}` : ''}${erbij && eraf ? ', ' : ''}${eraf ? `−${eraf}` : ''} t.o.v. nu)` : ''}.
-        {onbereikbaar > 0 && ` ${onbereikbaar} eerdere ontvanger${onbereikbaar === 1 ? ' heeft' : 's hebben'} geen actief account met e-mailadres meer en ${onbereikbaar === 1 ? 'valt' : 'vallen'} weg.`}
-      </p>
-      {fout && <p className="text-xs text-rose-600">{fout}</p>}
-      <div className="flex flex-wrap gap-2">
-        <button type="button" disabled={bezig || selectie.length === 0} onClick={() => void opslaan()} className={`${knop} border-orange-500 bg-orange-500 text-white hover:bg-orange-600`}>
-          {bezig ? 'Opslaan…' : `Ontvangers opslaan (${selectie.length})`}
-        </button>
-        <button type="button" disabled={bezig} onClick={() => onKlaar(false)} className={`${knop} border-slate-200 bg-white text-slate-700`}>Sluiten</button>
+function ProspectsLijst({ prospects, gekozen, setGekozen }: {
+  prospects: Prospect[]; gekozen: Set<string>; setGekozen: (f: (s: Set<string>) => Set<string>) => void;
+}) {
+  const [zoek, setZoek] = useState('');
+  const [groep, setGroep] = useState('');
+  const [toon, setToon] = useState<'gekozen' | 'alle'>('alle');
+  const [verbergAfgesloten, setVerbergAfgesloten] = useState(true);
+
+  const groepen = useMemo(() => {
+    const n = new Map<string, number>();
+    for (const p of prospects) for (const g of new Set(p.branches.map(brancheGroep))) n.set(g, (n.get(g) ?? 0) + 1);
+    return [...n.entries()].sort((a, b) => b[1] - a[1]);
+  }, [prospects]);
+  const aantalGekozen = prospects.filter(p => gekozen.has(p.id)).length;
+
+  const zichtbaar = useMemo(() => {
+    const q = zoek.trim().toLowerCase();
+    return prospects
+      .filter(p => toon === 'alle' || gekozen.has(p.id))
+      .filter(p => !groep || p.branches.some(b => brancheGroep(b) === groep))
+      .filter(p => !verbergAfgesloten || gekozen.has(p.id) || (!AFGESLOTEN.has(p.status) && !p.klant_geworden))
+      .filter(p => !q || `${p.naam} ${p.contact ?? ''} ${p.email ?? ''}`.toLowerCase().includes(q));
+  }, [prospects, toon, gekozen, groep, verbergAfgesloten, zoek]);
+  const allesAan = zichtbaar.length > 0 && zichtbaar.every(p => gekozen.has(p.id));
+
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="inline-flex overflow-hidden rounded-lg border border-slate-200 text-xs font-semibold">
+          <button type="button" onClick={() => setToon('gekozen')} className={`px-3 py-1.5 ${toon === 'gekozen' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600'}`}>Geselecteerd ({aantalGekozen})</button>
+          <button type="button" onClick={() => setToon('alle')} className={`px-3 py-1.5 ${toon === 'alle' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600'}`}>Alle prospects ({prospects.length})</button>
+        </div>
+        <select value={groep} onChange={e => setGroep(e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs">
+          <option value="">Alle branches</option>
+          {groepen.map(([g, n]) => <option key={g} value={g}>{g} ({n})</option>)}
+        </select>
+        <input value={zoek} onChange={e => setZoek(e.target.value)} placeholder="Zoek op naam of e-mail" className="min-w-40 flex-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs" />
+        <label className="inline-flex items-center gap-1.5 text-xs text-slate-600">
+          <input type="checkbox" checked={verbergAfgesloten} onChange={e => setVerbergAfgesloten(e.target.checked)} />
+          Verberg gewonnen, verloren en niet relevant
+        </label>
       </div>
-    </div>
+
+      <div className="max-h-80 overflow-y-auto rounded-lg border border-slate-200">
+        <table className="w-full text-xs">
+          <thead className="sticky top-0 bg-slate-50">
+            <tr className="border-b border-slate-200 text-left text-slate-500">
+              <th className="w-8 px-3 py-1.5">
+                <input type="checkbox" aria-label="Alles in deze lijst" checked={allesAan} onChange={e => setGekozen(s => zetIn(s, zichtbaar.map(p => p.id), e.target.checked))} />
+              </th>
+              <th className="px-2 py-1.5 font-semibold">Prospect ({zichtbaar.length})</th>
+              <th className="px-2 py-1.5 font-semibold">E-mail</th>
+              <th className="hidden px-2 py-1.5 font-semibold sm:table-cell">Branche</th>
+              <th className="hidden px-2 py-1.5 font-semibold sm:table-cell">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {zichtbaar.map(p => (
+              <tr key={p.id} onClick={() => setGekozen(s => wisselIn(s, p.id))} className={`cursor-pointer border-b border-slate-100 last:border-0 hover:bg-slate-50 ${gekozen.has(p.id) ? '' : 'text-slate-400'}`}>
+                <td className="px-3 py-1.5">
+                  <input type="checkbox" checked={gekozen.has(p.id)} onChange={() => setGekozen(s => wisselIn(s, p.id))} onClick={e => e.stopPropagation()} aria-label={p.naam} />
+                </td>
+                <td className="px-2 py-1.5">
+                  <span className="font-medium text-slate-800">{p.naam}</span>
+                  {p.contact && <span className="text-slate-500"> · {p.contact}</span>}
+                  {p.klant_geworden && <span className="ml-1 rounded bg-emerald-50 px-1 text-[10px] text-emerald-700">al klant</span>}
+                  {p.afgemeld && <span className="ml-1 rounded bg-slate-100 px-1 text-[10px] text-slate-500">afgemeld, krijgt hem niet</span>}
+                </td>
+                <td className="px-2 py-1.5 text-slate-500">{p.email}</td>
+                <td className="hidden px-2 py-1.5 text-slate-500 sm:table-cell">{p.branches.join(', ')}</td>
+                <td className="hidden px-2 py-1.5 text-slate-500 sm:table-cell">{STATUS_LABEL[p.status] ?? p.status}</td>
+              </tr>
+            ))}
+            {zichtbaar.length === 0 && (
+              <tr><td colSpan={5} className="px-3 py-4 text-center text-slate-500">Geen prospects in deze lijst</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }

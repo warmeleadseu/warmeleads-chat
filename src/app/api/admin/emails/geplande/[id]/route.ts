@@ -88,6 +88,15 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
     const { data: bestaand } = await supabase.from('customers').select('id').in('id', ids);
     if ((bestaand ?? []).length !== ids.length) return NextResponse.json({ error: 'Een of meer ontvangers bestaan niet (meer)' }, { status: 400 });
   }
+  if (Array.isArray(uit.wijziging.prospect_ontvangers)) {
+    if (!('prospect_ontvangers' in m)) return NextResponse.json({ error: 'Prospects als ontvanger zijn nog niet actief (migratie 205).' }, { status: 400 });
+    const ids = uit.wijziging.prospect_ontvangers as string[];
+    for (let i = 0; i < ids.length; i += 500) {
+      const deel = ids.slice(i, i + 500);
+      const { data: bestaand } = await supabase.from('prospects').select('id').in('id', deel);
+      if ((bestaand ?? []).length !== deel.length) return NextResponse.json({ error: 'Een of meer prospects bestaan niet (meer)' }, { status: 400 });
+    }
+  }
 
   const { data: bijgewerkt, error } = await supabase
     .from('geplande_mailingen')
@@ -104,6 +113,8 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
       velden: Object.keys(uit.wijziging),
       ontvangers_voor: m.ontvangers.length,
       ontvangers_na: Array.isArray(uit.wijziging.ontvangers) ? (uit.wijziging.ontvangers as string[]).length : m.ontvangers.length,
+      prospects_voor: m.prospect_ontvangers?.length ?? 0,
+      prospects_na: Array.isArray(uit.wijziging.prospect_ontvangers) ? (uit.wijziging.prospect_ontvangers as string[]).length : m.prospect_ontvangers?.length ?? 0,
     },
   }).catch(() => {});
   return NextResponse.json({ success: true });

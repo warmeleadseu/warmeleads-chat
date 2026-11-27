@@ -43,7 +43,7 @@ export const campagneTemplate: EmailTemplate = {
   key: 'campagne',
   label: 'Campagne (met tabellen)',
   description: 'Actiemail met tabellen, kopjes en knoppen, voor geplande mailingen. Merge-tags zoals {{first_name}} en {{am_phone}} worden ingevuld.',
-  applicableTo: ['customer'],
+  applicableTo: ['customer', 'prospect'],
   scope: 'marketing',
   options: [
     { key: 'subject_override', label: 'Onderwerp', type: 'text', description: 'Verplicht. Merge-tags worden ondersteund.' },

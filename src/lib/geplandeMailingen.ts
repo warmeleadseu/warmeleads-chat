@@ -22,6 +22,8 @@ export type GeplandeMailing = {
   template_key: string;
   options: Record<string, unknown>;
   ontvangers: string[];
+  /** Prospects (migratie 205); ontbreekt de kolom nog, dan undefined. */
+  prospect_ontvangers?: string[] | null;
   afzender_admin_id: string | null;
   verstuur_op: string;
   status: MailingStatus;
@@ -63,6 +65,7 @@ export const BEWERKBARE_OPTIES = ['subject_override', 'preheader', 'body', 'cta_
 export type Bewerking = {
   options?: Record<string, unknown>;
   ontvangers?: unknown;
+  prospect_ontvangers?: unknown;
   verstuur_op?: unknown;
   naam?: unknown;
 };
@@ -76,7 +79,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  * opnieuw iemand goedkeurt.
  */
 export function controleerBewerking(
-  m: Pick<GeplandeMailing, 'status' | 'options'>,
+  m: Pick<GeplandeMailing, 'status' | 'options'> & Partial<Pick<GeplandeMailing, 'ontvangers' | 'prospect_ontvangers'>>,
   invoer: Bewerking,
   nu: Date = new Date(),
 ): { fout: string } | { wijziging: Record<string, unknown> } {
@@ -95,12 +98,16 @@ export function controleerBewerking(
     if (String(opties.body).length > 200_000) return { fout: 'De mail is te lang' };
     wijziging.options = opties;
   }
-  if (invoer.ontvangers !== undefined) {
-    if (!Array.isArray(invoer.ontvangers) || !invoer.ontvangers.every(x => typeof x === 'string' && UUID.test(x))) return { fout: 'Ongeldige ontvangers' };
-    const uniek = [...new Set(invoer.ontvangers as string[])];
-    if (uniek.length === 0) return { fout: 'Kies minstens één ontvanger' };
-    if (uniek.length > MAX_ONTVANGERS) return { fout: `Hooguit ${MAX_ONTVANGERS} ontvangers per mailing` };
-    wijziging.ontvangers = uniek;
+  const lijst = (v: unknown): string[] | null =>
+    Array.isArray(v) && v.every(x => typeof x === 'string' && UUID.test(x)) ? [...new Set(v as string[])] : null;
+  if (invoer.ontvangers !== undefined || invoer.prospect_ontvangers !== undefined) {
+    const klanten = invoer.ontvangers === undefined ? (m.ontvangers ?? []) : lijst(invoer.ontvangers);
+    const prospects = invoer.prospect_ontvangers === undefined ? (m.prospect_ontvangers ?? []) : lijst(invoer.prospect_ontvangers);
+    if (!klanten || !prospects) return { fout: 'Ongeldige ontvangers' };
+    if (klanten.length + prospects.length === 0) return { fout: 'Kies minstens één ontvanger' };
+    if (klanten.length + prospects.length > MAX_ONTVANGERS) return { fout: `Hooguit ${MAX_ONTVANGERS} ontvangers per mailing` };
+    if (invoer.ontvangers !== undefined) wijziging.ontvangers = klanten;
+    if (invoer.prospect_ontvangers !== undefined) wijziging.prospect_ontvangers = prospects;
   }
   if (invoer.verstuur_op !== undefined) {
     const t = typeof invoer.verstuur_op === 'string' ? Date.parse(invoer.verstuur_op) : NaN;
@@ -119,6 +126,9 @@ export function controleerBewerking(
 
 
 const wacht = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+/** Waar {{bestel_link}} een prospect heen stuurt. */
+export const PROSPECT_LINK = `${EMAIL_BASE_URL}/gratis-account`;
 
 const BESTEL_LINK = /\{\{\s*bestel_link\s*\}\}/gi;
 
@@ -168,13 +178,16 @@ export async function laadBestelLinks(supabase: SupabaseClient, klantIds: string
 /** Rendert de mailing voor de ontvangers (of alleen de eerste, voor voorbeeld en test). */
 export async function renderMailing(
   supabase: SupabaseClient,
-  m: Pick<GeplandeMailing, 'template_key' | 'options' | 'ontvangers'>,
+  m: Pick<GeplandeMailing, 'template_key' | 'options' | 'ontvangers'> & Partial<Pick<GeplandeMailing, 'prospect_ontvangers'>>,
   afzender: AdminRow,
   alleenEerste = false,
 ): Promise<{ gerenderd: ComposeRenderResult[]; overgeslagen: number }> {
   const template = getTemplate(m.template_key);
   if (!template) throw new Error(`Onbekende template ${m.template_key}`);
+  const prospectIds = m.prospect_ontvangers ?? [];
+  /* Voor voorbeeld en test: de eerste klant, of de eerste prospect als er geen klanten zijn. */
   const ids = alleenEerste ? m.ontvangers.slice(0, 1) : m.ontvangers;
+  const pIds = alleenEerste ? (ids.length ? [] : prospectIds.slice(0, 1)) : prospectIds;
   /* Klanten die niet meer actief zijn, slaan we over. */
   const actief = new Set<string>();
   for (let i = 0; i < ids.length; i += 200) {
@@ -184,20 +197,29 @@ export async function renderMailing(
   const { resolved } = await resolveRecipients(
     supabase,
     { id: afzender.id, role: afzender.role },
-    ids.filter(id => actief.has(id)).map(id => ({ type: 'customer' as const, id })),
+    [
+      ...ids.filter(id => actief.has(id)).map(id => ({ type: 'customer' as const, id })),
+      ...pIds.map(id => ({ type: 'prospect' as const, id })),
+    ],
   );
+  const totaal = ids.length + pIds.length;
   if (!gebruiktBestelLink(m.options)) {
     const gerenderd = await renderForRecipients(supabase, afzender, resolved, { template, optionValues: m.options });
-    return { gerenderd, overgeslagen: ids.length - gerenderd.length };
+    return { gerenderd, overgeslagen: totaal - gerenderd.length };
   }
-  /* Met persoonlijke bestellink: per ontvanger zijn eigen link invullen. */
-  const links = await laadBestelLinks(supabase, resolved.map(r => r.recipient.id), String(m.options.actie_branche ?? ''));
+  /* Met persoonlijke bestellink: per ontvanger zijn eigen link invullen.
+     Een prospect heeft nog geen batch: die gaat naar een gratis account
+     (met welkomstkorting op de eerste bestelling). */
+  const klantIds = resolved.filter(r => r.recipient.type === 'customer').map(r => r.recipient.id);
+  const links = await laadBestelLinks(supabase, klantIds, String(m.options.actie_branche ?? ''));
   const gerenderd: ComposeRenderResult[] = [];
   for (const r of resolved) {
-    const url = links.get(r.recipient.id) ?? `${EMAIL_BASE_URL}/portal/bestellen`;
+    const url = r.recipient.type === 'prospect'
+      ? PROSPECT_LINK
+      : links.get(r.recipient.id) ?? `${EMAIL_BASE_URL}/portal/bestellen`;
     gerenderd.push(...(await renderForRecipients(supabase, afzender, [r], { template, optionValues: vulBestelLink(m.options, url) })));
   }
-  return { gerenderd, overgeslagen: ids.length - gerenderd.length };
+  return { gerenderd, overgeslagen: totaal - gerenderd.length };
 }
 
 /** Laadt de afzender en controleert dat die mag versturen. */
@@ -247,7 +269,7 @@ export async function verstuurMailing(supabase: SupabaseClient, m: GeplandeMaili
       html: g.html,
       text: g.text,
       scope: template.scope,
-      customerId: g.recipient.recipient.id,
+      ...(g.recipient.recipient.type === 'prospect' ? { prospectId: g.recipient.recipient.id } : { customerId: g.recipient.recipient.id }),
       templateKey: template.key,
       templateOptions: { geplande_mailing_id: m.id, naam: m.naam },
       unsubscribeToken: g.recipient.unsubscribeToken,

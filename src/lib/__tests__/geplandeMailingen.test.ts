@@ -65,3 +65,17 @@ describe('geplande mailing bewerken', () => {
     expect(controleerBewerking(concept, {}, NU)).toMatchObject({ fout: 'Niets om op te slaan' });
   });
 });
+
+describe('ontvangers: klanten en prospects', () => {
+  const id = '12e76ec9-0f59-4766-9198-665d5fdc2fde';
+  const p = 'a1468442-d31c-400d-ad09-3999ea18734a';
+  const m = { status: 'concept' as const, options: {}, ontvangers: [id], prospect_ontvangers: [] as string[] };
+  it('alleen prospects mag, zolang het totaal niet nul is', () => {
+    expect(controleerBewerking(m, { ontvangers: [], prospect_ontvangers: [p] }, NU)).toEqual({ wijziging: { ontvangers: [], prospect_ontvangers: [p] } });
+    expect(controleerBewerking(m, { ontvangers: [], prospect_ontvangers: [] }, NU)).toMatchObject({ fout: expect.stringMatching(/minstens/) });
+  });
+  it('telt de bestaande klanten mee als alleen prospects wijzigen', () => {
+    expect(controleerBewerking(m, { prospect_ontvangers: [] }, NU)).toEqual({ wijziging: { prospect_ontvangers: [] } });
+    expect(controleerBewerking(m, { prospect_ontvangers: ['geen-uuid'] }, NU)).toMatchObject({ fout: 'Ongeldige ontvangers' });
+  });
+});
