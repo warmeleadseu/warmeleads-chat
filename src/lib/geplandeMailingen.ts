@@ -55,6 +55,67 @@ export function magActie(status: MailingStatus, actie: Actie, verstuurOp: string
   return status === 'goedgekeurd' ? null : 'Alleen een goedgekeurde mailing kan terug naar concept';
 }
 
+/** Velden van een campagnemail die in het admin-paneel bewerkt kunnen worden. */
+export const BEWERKBARE_OPTIES = ['subject_override', 'preheader', 'body', 'cta_label', 'cta_url'] as const;
+
+export type Bewerking = {
+  options?: Record<string, unknown>;
+  ontvangers?: unknown;
+  verstuur_op?: unknown;
+  naam?: unknown;
+};
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Controleert een bewerking van tekst, ontvangers of verzendmoment en geeft
+ * de databasewijziging terug. Alleen een concept mag worden bewerkt: een
+ * goedgekeurde mailing eerst terug naar concept, zodat er na elke wijziging
+ * opnieuw iemand goedkeurt.
+ */
+export function controleerBewerking(
+  m: Pick<GeplandeMailing, 'status' | 'options'>,
+  invoer: Bewerking,
+  nu: Date = new Date(),
+): { fout: string } | { wijziging: Record<string, unknown> } {
+  if (m.status !== 'concept') return { fout: 'Alleen een concept kan worden bewerkt. Zet hem eerst terug naar concept.' };
+  const wijziging: Record<string, unknown> = {};
+  if (invoer.options) {
+    const opties = { ...m.options };
+    for (const k of BEWERKBARE_OPTIES) {
+      const v = invoer.options[k];
+      if (v === undefined) continue;
+      if (typeof v !== 'string') return { fout: `Ongeldige waarde voor ${k}` };
+      opties[k] = k === 'body' ? v : v.trim();
+    }
+    if (!String(opties.subject_override ?? '').trim()) return { fout: 'Het onderwerp mag niet leeg zijn' };
+    if (!String(opties.body ?? '').replace(/<[^>]*>/g, '').trim()) return { fout: 'De mail mag niet leeg zijn' };
+    if (String(opties.body).length > 200_000) return { fout: 'De mail is te lang' };
+    wijziging.options = opties;
+  }
+  if (invoer.ontvangers !== undefined) {
+    if (!Array.isArray(invoer.ontvangers) || !invoer.ontvangers.every(x => typeof x === 'string' && UUID.test(x))) return { fout: 'Ongeldige ontvangers' };
+    const uniek = [...new Set(invoer.ontvangers as string[])];
+    if (uniek.length === 0) return { fout: 'Kies minstens één ontvanger' };
+    if (uniek.length > MAX_ONTVANGERS) return { fout: `Hooguit ${MAX_ONTVANGERS} ontvangers per mailing` };
+    wijziging.ontvangers = uniek;
+  }
+  if (invoer.verstuur_op !== undefined) {
+    const t = typeof invoer.verstuur_op === 'string' ? Date.parse(invoer.verstuur_op) : NaN;
+    if (Number.isNaN(t)) return { fout: 'Ongeldig verzendmoment' };
+    if (t < nu.getTime() - 5 * 60_000) return { fout: 'Het verzendmoment ligt in het verleden' };
+    if (t > nu.getTime() + 90 * 24 * 3_600_000) return { fout: 'Het verzendmoment ligt te ver vooruit' };
+    wijziging.verstuur_op = new Date(t).toISOString();
+  }
+  if (invoer.naam !== undefined) {
+    if (typeof invoer.naam !== 'string' || !invoer.naam.trim()) return { fout: 'De naam mag niet leeg zijn' };
+    wijziging.naam = invoer.naam.trim().slice(0, 200);
+  }
+  if (Object.keys(wijziging).length === 0) return { fout: 'Niets om op te slaan' };
+  return { wijziging };
+}
+
+
 const wacht = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 /** Rendert de mailing voor de ontvangers (of alleen de eerste, voor voorbeeld en test). */

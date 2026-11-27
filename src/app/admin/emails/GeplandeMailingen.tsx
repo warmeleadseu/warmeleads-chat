@@ -1,8 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { CalendarDaysIcon, CheckCircleIcon, EyeIcon, PaperAirplaneIcon, UsersIcon, XCircleIcon } from '@heroicons/react/24/outline';
+import { CalendarDaysIcon, CheckCircleIcon, EyeIcon, PaperAirplaneIcon, PencilSquareIcon, UsersIcon, XCircleIcon } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
+import { OntvangersKiezen, TekstBewerken } from './MailingBewerken';
 
 /**
  * Geplande mailingen (migratie 204): bekijken, testmail naar jezelf,
@@ -12,6 +13,7 @@ import { adminFetch } from '@/lib/adminAuth';
 
 type Mailing = {
   id: string; naam: string; status: string; verstuur_op: string; aantal_ontvangers: number;
+  options: Record<string, unknown>; ontvangers: string[];
   actieve_ontvangers: { id: string; naam: string; email: string | null }[];
   afzender_naam: string | null; goedgekeurd_door_naam: string | null; goedgekeurd_op: string | null;
   verstuurd: number; mislukt: number; opt_out: number; fout: string | null; aangemaakt_door: string | null;
@@ -27,6 +29,8 @@ const STATUS: Record<string, { label: string; cls: string }> = {
   mislukt: { label: 'Mislukt', cls: 'bg-rose-100 text-rose-700' },
 };
 
+type Paneel = 'voorbeeld' | 'ontvangers' | 'bewerken';
+
 const moment = (iso: string) => new Date(iso).toLocaleString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Amsterdam' });
 
 export default function GeplandeMailingen() {
@@ -35,7 +39,7 @@ export default function GeplandeMailingen() {
   const [aanwezig, setAanwezig] = useState<boolean | null>(null);
   const [bezig, setBezig] = useState<string | null>(null);
   const [melding, setMelding] = useState<{ id: string; tekst: string; fout: boolean } | null>(null);
-  const [open, setOpen] = useState<Record<string, 'voorbeeld' | 'ontvangers' | null>>({});
+  const [open, setOpen] = useState<Record<string, Paneel | null>>({});
 
   const laad = useCallback(async () => {
     try {
@@ -84,7 +88,7 @@ export default function GeplandeMailingen() {
         {mailingen.map(m => {
           const s = STATUS[m.status] ?? STATUS.concept;
           const toon = open[m.id] ?? null;
-          const wissel = (w: 'voorbeeld' | 'ontvangers') => setOpen(o => ({ ...o, [m.id]: o[m.id] === w ? null : w }));
+          const wissel = (w: Paneel) => setOpen(o => ({ ...o, [m.id]: o[m.id] === w ? null : w }));
           return (
             <li key={m.id} className="rounded-lg border border-slate-200 p-3">
               <div className="flex flex-wrap items-start justify-between gap-2">
@@ -107,6 +111,9 @@ export default function GeplandeMailingen() {
               {(m.status === 'concept' || m.status === 'goedgekeurd') && (
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button type="button" onClick={() => wissel('voorbeeld')} className={`${knop} border-slate-200 text-slate-700 hover:bg-slate-50`}><EyeIcon className="h-4 w-4" /> Voorbeeld</button>
+                  {m.status === 'concept' && (
+                    <button type="button" onClick={() => wissel('bewerken')} className={`${knop} border-slate-200 text-slate-700 hover:bg-slate-50`}><PencilSquareIcon className="h-4 w-4" /> Bewerken</button>
+                  )}
                   <button type="button" onClick={() => wissel('ontvangers')} className={`${knop} border-slate-200 text-slate-700 hover:bg-slate-50`}><UsersIcon className="h-4 w-4" /> Ontvangers</button>
                   <button type="button" disabled={!!bezig} onClick={() => void doe(m, 'test')} className={`${knop} border-slate-200 text-slate-700 hover:bg-slate-50`}><PaperAirplaneIcon className="h-4 w-4" /> Stuur test naar mij</button>
                   {magGoedkeuren && m.status === 'concept' && (
@@ -120,6 +127,9 @@ export default function GeplandeMailingen() {
                   )}
                 </div>
               )}
+              {m.status === 'goedgekeurd' && magGoedkeuren && toon !== null && (
+                <p className="mt-2 text-xs text-slate-500">Iets aanpassen? Zet hem eerst terug naar concept; daarna keurt u hem opnieuw goed.</p>
+              )}
               {melding?.id === m.id && <p className={`mt-2 text-xs ${melding.fout ? 'text-rose-600' : 'text-emerald-700'}`}>{melding.tekst}</p>}
 
               {toon === 'voorbeeld' && m.voorbeeld && (
@@ -128,7 +138,30 @@ export default function GeplandeMailingen() {
                   <iframe title={`Voorbeeld ${m.naam}`} srcDoc={m.voorbeeld.html} sandbox="" className="h-[640px] w-full rounded-lg border border-slate-200 bg-white" />
                 </div>
               )}
-              {toon === 'ontvangers' && (
+              {toon === 'bewerken' && m.status === 'concept' && (
+                <TekstBewerken
+                  key={`${m.id}:tekst`}
+                  id={m.id}
+                  options={m.options}
+                  verstuurOp={m.verstuur_op}
+                  onKlaar={opgeslagen => {
+                    setOpen(o => ({ ...o, [m.id]: opgeslagen ? 'voorbeeld' : null }));
+                    if (opgeslagen) { setMelding({ id: m.id, tekst: 'Opgeslagen. Stuur uzelf gerust nog een test.', fout: false }); void laad(); }
+                  }}
+                />
+              )}
+              {toon === 'ontvangers' && m.status === 'concept' && (
+                <OntvangersKiezen
+                  key={`${m.id}:ontvangers`}
+                  id={m.id}
+                  ontvangers={m.ontvangers}
+                  onKlaar={opgeslagen => {
+                    setOpen(o => ({ ...o, [m.id]: null }));
+                    if (opgeslagen) { setMelding({ id: m.id, tekst: 'Ontvangers opgeslagen.', fout: false }); void laad(); }
+                  }}
+                />
+              )}
+              {toon === 'ontvangers' && m.status !== 'concept' && (
                 <div className="mt-3 max-h-72 overflow-y-auto rounded-lg border border-slate-200">
                   <table className="w-full text-xs">
                     <tbody>

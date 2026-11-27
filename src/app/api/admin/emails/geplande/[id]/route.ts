@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { logAudit } from '@/lib/audit';
-import { laadAfzender, magActie, stuurTest, type Actie, type GeplandeMailing } from '@/lib/geplandeMailingen';
+import { controleerBewerking, laadAfzender, magActie, stuurTest, type Actie, type Bewerking, type GeplandeMailing } from '@/lib/geplandeMailingen';
 
 /**
  * Acties op een geplande mailing: testmail naar jezelf, goedkeuren,
@@ -62,6 +62,49 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
   await logAudit({
     adminId: admin.id, adminName: admin.name, action: `email.geplande_mailing_${actie}`,
     entityType: 'geplande_mailing', entityId: id, details: { naam: m.naam, ontvangers: m.ontvangers.length, verstuur_op: m.verstuur_op },
+  }).catch(() => {});
+  return NextResponse.json({ success: true });
+}
+
+/**
+ * Bewerken vanuit het admin-paneel: tekst, ontvangers, verzendmoment of
+ * naam. Alleen een concept; goedkeuren blijft daarna een aparte stap.
+ */
+export async function PATCH(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const { id } = await props.params;
+  const admin = await verifyAdmin(request);
+  if (!admin) return unauthorized();
+  const invoer = (await request.json().catch(() => ({}))) as Bewerking;
+  const supabase = createServerClient();
+  const { data } = await supabase.from('geplande_mailingen').select('*').eq('id', id).maybeSingle();
+  const m = data as GeplandeMailing | null;
+  if (!m) return NextResponse.json({ error: 'Mailing niet gevonden' }, { status: 404 });
+
+  const uit = controleerBewerking(m, invoer);
+  if ('fout' in uit) return NextResponse.json({ error: uit.fout }, { status: 400 });
+
+  if (Array.isArray(uit.wijziging.ontvangers)) {
+    const ids = uit.wijziging.ontvangers as string[];
+    const { data: bestaand } = await supabase.from('customers').select('id').in('id', ids);
+    if ((bestaand ?? []).length !== ids.length) return NextResponse.json({ error: 'Een of meer ontvangers bestaan niet (meer)' }, { status: 400 });
+  }
+
+  const { data: bijgewerkt, error } = await supabase
+    .from('geplande_mailingen')
+    .update({ ...uit.wijziging, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .eq('status', 'concept')
+    .select('id');
+  if (error || !bijgewerkt?.length) return NextResponse.json({ error: 'Opslaan mislukt, ververs de pagina' }, { status: 409 });
+  await logAudit({
+    adminId: admin.id, adminName: admin.name, action: 'email.geplande_mailing_bewerkt',
+    entityType: 'geplande_mailing', entityId: id,
+    details: {
+      naam: m.naam,
+      velden: Object.keys(uit.wijziging),
+      ontvangers_voor: m.ontvangers.length,
+      ontvangers_na: Array.isArray(uit.wijziging.ontvangers) ? (uit.wijziging.ontvangers as string[]).length : m.ontvangers.length,
+    },
   }).catch(() => {});
   return NextResponse.json({ success: true });
 }
