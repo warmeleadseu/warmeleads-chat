@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { laadVoicemails, type VoicemailSamenvatting } from '@/lib/prospectVoicemail';
+import { eerdereAmsMetNaam, laadAmHistorie, metNamen, type AmPeriodeMetNaam } from '@/lib/prospectAmHistorie';
 import { createServerClient } from '@/lib/supabase';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { logAudit } from '@/lib/audit';
@@ -76,9 +77,10 @@ export async function GET(request: NextRequest) {
   const taskCounts: Record<string, number> = {};
   const activityCounts: Record<string, number> = {};
   let voicemails = new Map<string, VoicemailSamenvatting>();
+  let amHistorie = new Map<string, AmPeriodeMetNaam[]>();
 
   if (ids.length > 0) {
-    const [tasksRes, actsRes, vm] = await Promise.all([
+    const [tasksRes, actsRes, vm, ah] = await Promise.all([
       supabase
         .from('prospect_tasks')
         .select('prospect_id')
@@ -89,8 +91,10 @@ export async function GET(request: NextRequest) {
         .select('prospect_id')
         .in('prospect_id', ids),
       laadVoicemails(supabase, ids).catch(() => new Map<string, VoicemailSamenvatting>()),
+      laadAmHistorie(supabase, prospects || []).then(h => metNamen(supabase, h)).catch(() => new Map<string, AmPeriodeMetNaam[]>()),
     ]);
     voicemails = vm;
+    amHistorie = ah;
 
     for (const r of tasksRes.data || []) {
       taskCounts[r.prospect_id] = (taskCounts[r.prospect_id] || 0) + 1;
@@ -105,6 +109,7 @@ export async function GET(request: NextRequest) {
     open_task_count: taskCounts[p.id] || 0,
     activity_count: activityCounts[p.id] || 0,
     voicemail: voicemails.get(p.id) ?? { aantal: 0, momenten: [] },
+    eerdere_ams: eerdereAmsMetNaam(amHistorie.get(p.id) ?? [], p.account_manager_id),
   }));
 
   // Statusfacets (alleen op page=1 of expliciet)

@@ -31,6 +31,14 @@ export async function POST(request: NextRequest) {
   const supabase = createServerClient();
   const now = new Date().toISOString();
 
+  /* Wie had ze vóór deze actie, zodat de AM-historie compleet blijft. */
+  const vorigeAm = new Map<string, string | null>();
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data: rijen } = await supabase.from('prospects').select('id, account_manager_id').in('id', ids.slice(i, i + 200));
+    for (const r of rijen || []) vorigeAm.set(r.id as string, (r.account_manager_id as string | null) ?? null);
+  }
+  const van = (pid: string) => vorigeAm.get(pid) ?? null;
+
   if (body.strategy === 'unassign') {
     const { data: updatedRows, error } = await supabase
       .from('prospects')
@@ -49,7 +57,7 @@ export async function POST(request: NextRequest) {
           admin_user_id: admin.id,
           type: 'assignment',
           title: 'Toewijzing verwijderd (bulk)',
-          metadata: { bulk: true },
+          metadata: { bulk: true, from: van(pid), to: null },
         })),
       );
     }
@@ -96,7 +104,7 @@ export async function POST(request: NextRequest) {
           admin_user_id: admin.id,
           type: 'assignment',
           title: `Toegewezen aan ${amRow.name} (bulk)`,
-          metadata: { bulk: true, to: amId },
+          metadata: { bulk: true, from: van(pid), to: amId },
         })),
       );
     }
@@ -160,7 +168,7 @@ export async function POST(request: NextRequest) {
             admin_user_id: admin.id,
             type: 'assignment',
             title: `Toegewezen aan ${am.name} (round-robin)`,
-            metadata: { bulk: true, strategy: 'round_robin', to: am.id },
+            metadata: { bulk: true, strategy: 'round_robin', from: van(pid), to: am.id },
           })),
         );
       }

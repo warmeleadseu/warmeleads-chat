@@ -35,6 +35,7 @@ import { ExportProspectsDialog } from './_components/ExportProspectsDialog';
 import { ProspectsKanban, type KanbanProspect } from './_components/ProspectsKanban';
 import { ProspectTypeBadge } from './_components/ProspectTypeBadge';
 import { VoicemailCel, type VoicemailSamenvatting } from './_components/VoicemailTeller';
+import { EerdereAmsRegel, type EerdereAm } from './_components/AmHistorie';
 
 interface ProspectListRow extends KanbanProspect {
   email: string | null;
@@ -45,6 +46,7 @@ interface ProspectListRow extends KanbanProspect {
   source_metadata: Record<string, unknown> | null;
   created_at: string;
   status_changed_at: string | null;
+  eerdere_ams?: EerdereAm[];
 }
 
 type ViewMode = 'list' | 'kanban';
@@ -805,6 +807,7 @@ function ListView({
                       <span className="text-slate-400">Niet toegewezen</span>
                     )}
                   </span>
+                  <EerdereAmsRegel eerdere={p.eerdere_ams} />
                 </td>
                 <td className="px-3 py-2.5">
                   {p.next_action_at ? (

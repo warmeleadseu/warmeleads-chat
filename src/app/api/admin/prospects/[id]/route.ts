@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
+import { laadAmHistorie, metNamen } from '@/lib/prospectAmHistorie';
 import { verifyAdmin, unauthorized, forbidden } from '@/lib/adminAuth';
 import { logAudit } from '@/lib/audit';
 import {
@@ -71,8 +72,11 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
     }
   }
 
+  const am_historie = (await laadAmHistorie(supabase, [access.prospect]).then(h => metNamen(supabase, h)).catch(() => new Map())).get(access.prospect.id) ?? [];
+
   return NextResponse.json({
     prospect: access.prospect,
+    am_historie,
     tasks: tasksRes.data || [],
     activities: activitiesRes.data || [],
     account_manager: amRes.data || null,

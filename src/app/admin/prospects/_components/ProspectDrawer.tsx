@@ -38,6 +38,8 @@ import { StatusBadge } from './StatusBadge';
 import { VoicemailTeller, type VoicemailSamenvatting } from './VoicemailTeller';
 import { ActivityTimeline, type Activity } from './ActivityTimeline';
 import { TaskList, type Task } from './TaskList';
+import { AmHistorieBlok } from './AmHistorie';
+import { eerdereAmsMetNaam, type AmPeriodeMetNaam } from '@/lib/prospectAmHistorie';
 import { ProspectFormFields, EMPTY_PROSPECT, type ProspectFormState } from './ProspectFormFields';
 import { ComposeMailDrawer } from '../../_components/ComposeMailDrawer';
 import { MailHistory } from '../../_components/MailHistory';
@@ -124,6 +126,7 @@ export function ProspectDrawer({
   const [tasks, setTasks] = useState<Task[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [am, setAm] = useState<AdminUserOption | null>(null);
+  const [amHistorie, setAmHistorie] = useState<AmPeriodeMetNaam[]>([]);
   const [editForm, setEditForm] = useState<ProspectFormState>(EMPTY_PROSPECT);
   const [savingEdit, setSavingEdit] = useState(false);
   const [showLost, setShowLost] = useState(false);
@@ -179,6 +182,7 @@ export function ProspectDrawer({
           setTasks(data.tasks || []);
           setActivities(data.activities || []);
           setAm(data.account_manager || null);
+          setAmHistorie(data.am_historie || []);
           const p = data.prospect as ProspectDetail;
           setEditForm({
             company_name: p.company_name || '',
@@ -294,7 +298,8 @@ export function ProspectDrawer({
     if (res.ok && data.prospect) {
       setProspect(data.prospect);
       setAm(amId ? ams.find(a => a.id === amId) || null : null);
-      onUpdated(data.prospect);
+      if (Array.isArray(data.am_historie)) setAmHistorie(data.am_historie);
+      onUpdated(Array.isArray(data.am_historie) ? ({ ...data.prospect, eerdere_ams: eerdereAmsMetNaam(data.am_historie, amId) } as ProspectDetail) : data.prospect);
     } else {
       setDrawerError(data?.error || 'AM toewijzen mislukt');
     }
@@ -479,6 +484,7 @@ export function ProspectDrawer({
                     refreshActivities(nieuw.id);
                   }}
                   onAssign={setAssignment}
+                  amHistorie={amHistorie}
                   onConvert={() => onConvert(prospect)}
                   onCompose={() => setComposeOpen(true)}
                 />
@@ -755,6 +761,7 @@ function Overview({
   onStatus,
   onVoicemail,
   onAssign,
+  amHistorie,
   onConvert,
   onCompose,
 }: {
@@ -769,6 +776,7 @@ function Overview({
   onStatus: (s: ProspectStatus) => void;
   onVoicemail: (prospect: unknown, vm: VoicemailSamenvatting | null) => void;
   onAssign: (id: string | null) => void;
+  amHistorie: AmPeriodeMetNaam[];
   onConvert: () => void;
   onCompose: () => void;
 }) {
@@ -950,6 +958,7 @@ function Overview({
             </span>
           )}
         </div>
+        <AmHistorieBlok historie={amHistorie} />
       </div>
 
       {prospect.converted_to_customer_id && (

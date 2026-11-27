@@ -3,6 +3,7 @@ import { createServerClient } from '@/lib/supabase';
 import { verifyAdmin, unauthorized, forbidden } from '@/lib/adminAuth';
 import { logAudit } from '@/lib/audit';
 import { isAccountManagerScope, loadAccessibleProspect } from '@/lib/prospects';
+import { laadAmHistorie, metNamen } from '@/lib/prospectAmHistorie';
 
 export async function PATCH(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -86,5 +87,6 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
     },
   });
 
-  return NextResponse.json({ success: true, prospect: data });
+  const am_historie = (await laadAmHistorie(supabase, [data]).then(h => metNamen(supabase, h)).catch(() => new Map())).get(data.id) ?? [];
+  return NextResponse.json({ success: true, prospect: data, am_historie });
 }
