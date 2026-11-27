@@ -1,5 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { ALLOWED_FROM_DOMAIN } from './email';
+import { ALLOWED_FROM_DOMAIN, EMAIL_BASE_URL } from './email';
+import { herbestelUrl } from './herbestelToken';
+import { DECEMBERACTIE_TOT_DAG } from './decemberactie';
 import { sendAsAdmin } from './email/sendAsAdmin';
 import { loadAdminFull, renderForRecipients, resolveRecipients, type AdminRow, type ComposeRenderResult } from './email/composeContext';
 import { getTemplate } from './email/templates';
@@ -118,6 +120,51 @@ export function controleerBewerking(
 
 const wacht = (ms: number) => new Promise(r => setTimeout(r, ms));
 
+const BESTEL_LINK = /\{\{\s*bestel_link\s*\}\}/gi;
+
+/** Gebruikt de mailing de persoonlijke bestellink? */
+export function gebruiktBestelLink(options: Record<string, unknown>): boolean {
+  return Object.values(options).some(v => typeof v === 'string' && new RegExp(BESTEL_LINK.source, 'i').test(v));
+}
+
+/** Vult {{bestel_link}} in alle tekstvelden in. */
+export function vulBestelLink(options: Record<string, unknown>, url: string): Record<string, unknown> {
+  const uit: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(options)) uit[k] = typeof v === 'string' ? v.replace(BESTEL_LINK, url) : v;
+  return uit;
+}
+
+/**
+ * Persoonlijke bestellink per klant: de herbestelpagina van zijn laatste
+ * betaalde leadbatch in de branche van de actie, zonder inloggen, geldig tot
+ * het einde van de decemberactie. Kan die batch niet online opnieuw worden
+ * besteld (handmatige of onbeperkte levering, geen prijs), dan het portaal.
+ */
+export async function laadBestelLinks(supabase: SupabaseClient, klantIds: string[], branche: string): Promise<Map<string, string>> {
+  const portaal = `${EMAIL_BASE_URL}/portal/bestellen`;
+  const links = new Map<string, string>(klantIds.map(id => [id, portaal]));
+  if (!branche) return links;
+  for (let i = 0; i < klantIds.length; i += 200) {
+    const { data } = await supabase
+      .from('customer_batches')
+      .select('id, customer_id, delivery_model, price_per_lead, created_at')
+      .in('customer_id', klantIds.slice(i, i + 200))
+      .eq('branch', branche)
+      .eq('batch_kind', 'leads')
+      .eq('is_paid', true)
+      .order('created_at', { ascending: false });
+    const gehad = new Set<string>();
+    for (const b of data ?? []) {
+      const k = b.customer_id as string;
+      if (gehad.has(k)) continue;
+      gehad.add(k);
+      const kan = !['manual', 'unlimited'].includes(String(b.delivery_model ?? '')) && Number(b.price_per_lead) > 0;
+      if (kan) links.set(k, herbestelUrl(b.id as string, 'decemberactie', { totDag: DECEMBERACTIE_TOT_DAG }));
+    }
+  }
+  return links;
+}
+
 /** Rendert de mailing voor de ontvangers (of alleen de eerste, voor voorbeeld en test). */
 export async function renderMailing(
   supabase: SupabaseClient,
@@ -139,7 +186,17 @@ export async function renderMailing(
     { id: afzender.id, role: afzender.role },
     ids.filter(id => actief.has(id)).map(id => ({ type: 'customer' as const, id })),
   );
-  const gerenderd = await renderForRecipients(supabase, afzender, resolved, { template, optionValues: m.options });
+  if (!gebruiktBestelLink(m.options)) {
+    const gerenderd = await renderForRecipients(supabase, afzender, resolved, { template, optionValues: m.options });
+    return { gerenderd, overgeslagen: ids.length - gerenderd.length };
+  }
+  /* Met persoonlijke bestellink: per ontvanger zijn eigen link invullen. */
+  const links = await laadBestelLinks(supabase, resolved.map(r => r.recipient.id), String(m.options.actie_branche ?? ''));
+  const gerenderd: ComposeRenderResult[] = [];
+  for (const r of resolved) {
+    const url = links.get(r.recipient.id) ?? `${EMAIL_BASE_URL}/portal/bestellen`;
+    gerenderd.push(...(await renderForRecipients(supabase, afzender, [r], { template, optionValues: vulBestelLink(m.options, url) })));
+  }
   return { gerenderd, overgeslagen: ids.length - gerenderd.length };
 }
 

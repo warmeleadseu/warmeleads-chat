@@ -5,6 +5,7 @@ import { loadWelcomeOfferStatus, welcomeDiscountAmount } from './welcomeOffer';
 import { deliveryModelForNewBatch } from './batchDeliveryModel';
 import type { HerbestelBron } from './herbestelToken';
 import { bepaalBestelPrijs } from './bestelPrijs';
+import { actieNotitie } from './decemberactie';
 
 /**
  * Een batch opnieuw bestellen vanaf een link in de mail, zonder inloggen.
@@ -46,6 +47,8 @@ export type HerbestelGegevens = {
   };
   klant: { id: string; name: string; email: string; contact_person: string | null; country: string | null; vat_id: string | null };
   brancheNaam: string;
+  /** Kleinste bestelling in deze branche (branches.min_batch_size). */
+  brancheMin: number;
   vorigeGrootte: number;
   /** Er loopt al een nieuwere batch in dezelfde branche (actief, gepauzeerd of wacht op betaling). */
   alNabesteld: boolean;
@@ -75,7 +78,7 @@ export async function laadHerbestelling(
   }
 
   const [{ data: branche }, { data: later }] = await Promise.all([
-    supabase.from('branches').select('name').eq('slug', b.branch).maybeSingle(),
+    supabase.from('branches').select('name, min_batch_size').eq('slug', b.branch).maybeSingle(),
     supabase
       .from('customer_batches')
       .select('id')
@@ -97,6 +100,7 @@ export async function laadHerbestelling(
       },
       klant: { id: k.id, name: k.name, email: k.email, contact_person: k.contact_person, country: k.country, vat_id: k.vat_id },
       brancheNaam: (branche?.name as string | undefined) || b.branch,
+      brancheMin: Math.max(HERBESTEL_MIN, Number(branche?.min_batch_size) || HERBESTEL_MIN),
       vorigeGrootte: oorspronkelijkeGrootte(b),
       alNabesteld: (later ?? []).length > 0,
     },
@@ -141,7 +145,9 @@ export async function startHerbestelling(
       leads_per_week: g.batch.leads_per_week,
       leads_per_day: g.batch.leads_per_day,
       lead_filters: g.batch.lead_filters,
-      notes: `Herbesteld met één klik${opts.bron ? ` (mail ${opts.bron})` : ''}`,
+      notes: opts.bron === 'decemberactie'
+        ? `Herbesteld via de decemberactie-mail. ${actieNotitie(g.batch.branch, opts.grootte)}`
+        : `Herbesteld met één klik${opts.bron ? ` (mail ${opts.bron})` : ''}`,
       source_batch_id: g.batch.id,
       status: 'pending',
       welcome_discount_applied: bedrag.welkomst,

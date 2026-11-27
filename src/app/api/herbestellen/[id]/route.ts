@@ -4,6 +4,7 @@ import { rateLimitShared, getClientIp } from '@/lib/rateLimit';
 import { controleerHerbestelToken, leesBron } from '@/lib/herbestelToken';
 import { doorloopStatus, zetDoorlopend } from '@/lib/doorlopen';
 import { berekenHerbestelling, geldigeGrootte, grootteKeuzes, laadHerbestelling, startHerbestelling } from '@/lib/herbestelling';
+import { actieGroottes, cadeauLeads, decemberactieLoopt, decemberbonus, DECEMBERACTIE_TOT } from '@/lib/decemberactie';
 
 /**
  * Publieke route achter de herbestellink uit de mail: bekijken en bestellen
@@ -46,7 +47,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   if (!r.ok) return fout(r.reden);
   const g = r.data;
 
-  const keuzes = grootteKeuzes(g.vorigeGrootte);
+  /* Uit de decemberactie-mail: de maten uit de mail, met wat ze opleveren. */
+  const actie = leesBron(q.get('b')) === 'decemberactie' && decemberactieLoopt();
+  const keuzes = actie
+    ? actieGroottes(g.vorigeGrootte, g.brancheMin)
+    : grootteKeuzes(g.vorigeGrootte).filter(n => n >= g.brancheMin);
   const [prijzen, doorloop] = await Promise.all([
     Promise.all(keuzes.map(async n => ({ grootte: n, ...(await berekenHerbestelling(supabase, g, n)) }))),
     doorloopStatus(supabase, g.klant.id).catch(() => null),
@@ -64,7 +69,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     met_filters: g.batch.lead_filters.length > 0,
     al_nabesteld: g.alNabesteld,
     doorlopend: { aan: doorloop?.aan === true, mag_aanzetten: doorloop?.zelf === 'ok' },
-    keuzes: prijzen.map(p => ({ grootte: p.grootte, prijs_per_lead: p.prijsPerLead, totaal_excl: p.totaalExcl, totaal_incl: p.totaalIncl, korting: p.korting, btw: p.btwLabel })),
+    minimum: g.brancheMin,
+    actie: actie ? { tot: DECEMBERACTIE_TOT, branche: g.batch.branch } : null,
+    keuzes: prijzen.map(p => ({
+      ...(actie ? { bonus: decemberbonus(p.grootte), cadeau: cadeauLeads(g.batch.branch, p.grootte) } : {}),
+      grootte: p.grootte, prijs_per_lead: p.prijsPerLead, totaal_excl: p.totaalExcl, totaal_incl: p.totaalIncl, korting: p.korting, btw: p.btwLabel })),
   }, { headers: { 'Cache-Control': 'no-store' } });
 }
 
@@ -82,9 +91,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const supabase = createServerClient();
   const r = await laadHerbestelling(supabase, id);
   if (!r.ok) return fout(r.reden);
+  if (grootte < r.data.brancheMin) return NextResponse.json({ error: `Bestel minimaal ${r.data.brancheMin} leads.` }, { status: 400 });
 
   const basis = process.env.NEXT_PUBLIC_SITE_URL || 'https://warmeleads.eu';
-  const bron = leesBron(body?.b);
+  /* Na 31 december telt de actie niet meer, ook niet via een oude link. */
+  const gelezen = leesBron(body?.b);
+  const bron = gelezen === 'decemberactie' && !decemberactieLoopt() ? null : gelezen;
   try {
     const { checkoutUrl } = await startHerbestelling(supabase, r.data, {
       grootte,

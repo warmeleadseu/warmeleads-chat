@@ -17,8 +17,8 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 export const HERBESTEL_GELDIG_DAGEN = 14;
 
 /** Waar de link vandaan kwam, voor de meting. Geen onderdeel van de handtekening. */
-export type HerbestelBron = '80' | '100' | 'herinnering' | 'verlopen' | 'resultaat';
-const BRONNEN: HerbestelBron[] = ['80', '100', 'herinnering', 'verlopen', 'resultaat'];
+export type HerbestelBron = '80' | '100' | 'herinnering' | 'verlopen' | 'resultaat' | 'decemberactie';
+const BRONNEN: HerbestelBron[] = ['80', '100', 'herinnering', 'verlopen', 'resultaat', 'decemberactie'];
 
 function sleutel(): string {
   const s = process.env.HERBESTEL_TOKEN_SECRET || oudeSleutel();
@@ -84,8 +84,9 @@ export function leesBron(v: unknown): HerbestelBron | null {
   return typeof v === 'string' && (BRONNEN as string[]).includes(v) ? (v as HerbestelBron) : null;
 }
 
-export function herbestelUrl(batchId: string, bron: HerbestelBron, opts?: { siteUrl?: string; nu?: Date }): string {
+/** totDag: eigen vervaldag (dagen sinds 1970), bv. het einde van een actie; anders 14 dagen. */
+export function herbestelUrl(batchId: string, bron: HerbestelBron, opts?: { siteUrl?: string; nu?: Date; totDag?: number }): string {
   const basis = opts?.siteUrl || process.env.NEXT_PUBLIC_SITE_URL || 'https://www.warmeleads.eu';
-  const tot = vervaldag(opts?.nu);
+  const tot = opts?.totDag ?? vervaldag(opts?.nu);
   return `${basis}/herbestellen/${batchId}?v=${tot}&t=${maakHerbestelToken(batchId, tot)}&b=${bron}`;
 }

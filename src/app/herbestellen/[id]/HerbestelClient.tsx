@@ -9,7 +9,7 @@ import { useSearchParams } from 'next/navigation';
  * eromheen; na betaling start de levering vanzelf.
  */
 
-type Keuze = { grootte: number; prijs_per_lead?: number; totaal_excl: number; totaal_incl: number; korting: number; btw: string };
+type Keuze = { grootte: number; bonus?: number; cadeau?: number; prijs_per_lead?: number; totaal_excl: number; totaal_incl: number; korting: number; btw: string };
 type Gegevens = {
   bedrijf: string;
   contactpersoon: string | null;
@@ -23,6 +23,8 @@ type Gegevens = {
   al_nabesteld: boolean;
   /** Doorlopend op factuur: al aan, of mag de klant het hier aanvinken? */
   doorlopend: { aan: boolean; mag_aanzetten: boolean };
+  /** Gezet als de link uit de decemberactie-mail komt en de actie nog loopt. */
+  actie?: { tot: string; branche: string } | null;
   keuzes: Keuze[];
 };
 type OrderStand = { status: string; batch_size: number; actief: boolean };
@@ -46,20 +48,22 @@ export default function HerbestelClient({ id }: { id: string }) {
 
   const laad = useCallback(async () => {
     try {
-      const qs = new URLSearchParams({ v, t });
+      const qs = new URLSearchParams({ v, t, b });
       if (orderId) qs.set('order', orderId);
       const r = await fetch(`/api/herbestellen/${id}?${qs}`, { cache: 'no-store' });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) { setFout(d.error || 'Deze link is niet (meer) geldig.'); return; }
       if (orderId) { setOrder(d.order); return; }
       setData(d);
-      setGekozen(g => g ?? d.vorige_grootte);
+      const keuzes = (d.keuzes ?? []) as Keuze[];
+      const standaard = keuzes.some(k => k.grootte === d.vorige_grootte) ? d.vorige_grootte : keuzes[0]?.grootte ?? null;
+      setGekozen(g => g ?? standaard);
     } catch {
       setFout('Er ging iets mis bij het laden.');
     } finally {
       setLaden(false);
     }
-  }, [id, v, t, orderId]);
+  }, [id, v, t, b, orderId]);
 
   useEffect(() => { void laad(); }, [laad]);
 
@@ -130,9 +134,20 @@ export default function HerbestelClient({ id }: { id: string }) {
 
   return (
     <Omhulsel>
-      <p className="text-xs font-semibold uppercase tracking-widest text-brand-purple">Opnieuw bestellen</p>
+      <p className="text-xs font-semibold uppercase tracking-widest text-brand-purple">{data.actie ? 'Decemberactie' : 'Opnieuw bestellen'}</p>
       <h1 className="mt-1 text-xl font-bold text-slate-900">{data.branche}-leads</h1>
       <p className="text-sm text-slate-500">{data.bedrijf}</p>
+
+      {data.actie && (
+        <div className="mt-4 rounded-xl border border-orange-200 bg-gradient-to-br from-orange-50 to-rose-50 p-4 text-sm text-slate-700">
+          <p className="font-bold text-slate-900">Decemberbonus: elke 3 leads leveren je 1 gratis lead op</p>
+          <p className="mt-1">Voor elke 3 leads die je tot en met 31 december bestelt, krijg je 1 gratis lead bij je volgende bestelling.</p>
+          {data.actie.branche === 'warmtepomp' && (
+            <p className="mt-2"><span className="font-semibold text-slate-900">Plus extra warmtepompleads cadeau</span> bij deze bestelling: 30 → 5, 50 → 10, 75 → 15, 100 → 20.</p>
+          )}
+          <p className="mt-2 text-xs text-slate-500">Je hoeft niet in te loggen. Na betaling start de levering direct in je portaal.</p>
+        </div>
+      )}
 
       <div className="mt-4 space-y-1 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
         <p><strong className="text-slate-900">{euro(keuze?.prijs_per_lead ?? data.prijs_per_lead)}</strong> per lead (excl. btw){data.landelijke_korting ? ` (incl. ${euro(data.landelijke_korting)} korting voor landelijke dekking)` : ''}. Zelfde regio{data.met_filters ? ' en filters' : ''}{tempo ? `, ${tempo}` : ''}.</p>
@@ -155,7 +170,9 @@ export default function HerbestelClient({ id }: { id: string }) {
             }`}
           >
             {k.grootte}
-            {k.grootte === data.vorige_grootte && <span className="block text-[10px] font-normal opacity-80">als vorige keer</span>}
+            {data.actie && k.bonus ? (
+              <span className="block text-[10px] font-normal opacity-80">+{k.bonus}{k.cadeau ? ` +${k.cadeau}` : ''} gratis</span>
+            ) : k.grootte === data.vorige_grootte && <span className="block text-[10px] font-normal opacity-80">als vorige keer</span>}
           </button>
         ))}
       </div>
@@ -164,6 +181,12 @@ export default function HerbestelClient({ id }: { id: string }) {
         <div className="mt-4 space-y-1 border-t border-slate-100 pt-4 text-sm">
           {keuze.korting > 0 && (
             <div className="flex justify-between text-emerald-700"><span>Welkomstkorting</span><span>-{euro(keuze.korting)}</span></div>
+          )}
+          {data.actie && (
+            <div className="mb-2 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+              Je betaalt {keuze.grootte} leads{keuze.cadeau ? ` en krijgt er nu ${keuze.cadeau} cadeau bij` : ''}. Bij je volgende bestelling krijg je er {keuze.bonus ?? 0} gratis bij.
+              <span className="block font-semibold">Totaal {keuze.grootte + (keuze.cadeau ?? 0) + (keuze.bonus ?? 0)} leads.</span>
+            </div>
           )}
           <div className="flex justify-between text-slate-600"><span>Totaal excl. btw</span><span>{euro(keuze.totaal_excl)}</span></div>
           <div className="flex justify-between text-base font-bold text-slate-900"><span>Te betalen</span><span>{euro(keuze.totaal_incl)}</span></div>
